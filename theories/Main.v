@@ -55,7 +55,7 @@ Definition C_of (x:PrimitiveSegment) := snd x.
 
 Parameter Segment : Set.
 
-Parameter Embbed : PrimitiveSegment -> Segment -> Prop.
+Parameter embed : PrimitiveSegment -> Segment -> Prop.
 
 Parameter init : Segment -> R * R.
 
@@ -101,3 +101,22 @@ Definition scurve : Set := { l: list PrimitiveSegment | is_scurve l }.
 (* 単位セグメントをscurveに連結 *)
 Definition connect (s: PrimitiveSegment) (lp: scurve) (A: dc_pseg_hd s (proj1_sig lp)) : scurve :=
 exist _ (s :: (proj1_sig lp)) (IsScurveCons s (proj1_sig lp) (proj2_sig lp) A).
+
+(* scurveの埋め込み．scurveとSegmentのリストの述語．
+lp: scurve にps: PrimitiveSegment をくっつけたものが (s2::ls): list Segment にs1: Segment をくっつけたものとして埋め込まれる関係　*)
+Inductive embed_scurve : scurve -> list Segment -> Prop :=
+| EmbedScurveNil : embed_scurve (exist _ nil IsScurveNil) nil
+| EmbedScurveSigle : forall (ps:PrimitiveSegment) (s:Segment), 
+    embed ps s 
+    -> embed_scurve (connect ps (exist _ nil IsScurveNil) (DcNil ps)) (s::nil)
+| EmbedScurveCons : forall (ps:PrimitiveSegment) (lp: scurve) (A: dc_pseg_hd ps (proj1_sig lp)) (s1 s2: Segment) (ls: list Segment),
+embed ps s1
+    -> embed_scurve lp (s2::ls)
+    -> term s1 = init s2
+    -> embed_scurve (connect ps lp A) (s1:: s2 :: ls).
+
+(* 埋め込んだ曲線を延長する *)
+Parameter extend: list Segment -> list Segment.
+
+(* admissible, 許容可能 *)
+Parameter admissible: scurve -> Prop.
