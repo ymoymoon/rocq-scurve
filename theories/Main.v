@@ -53,6 +53,34 @@ Definition V_of (x:PrimitiveSegment) := fst(fst x).
 Definition H_of (x:PrimitiveSegment) := snd(fst x).
 Definition C_of (x:PrimitiveSegment) := snd x.
 
+
+(*セグメントは[0,1]->R*Rの関数のうち次の条件を満たしたもの
+・[0,1]で微分可能
+・1要素目，2要素目の関数において，[0,1]で勾配の正負が一定．
+・dy/dxが微分可能
+・[0,1]において凸性が変わらない
+    <=> forall t \in [0,1], d2y/dx2 = d/dt(dy/dx) * (dx/dt)の正負が一定
+    <=> forall t \in [0,1], d2y/dx2 = d/dt(dy/dx)の正負が一定*)
+
+(* R*Rの微分 *)
+Definition derivable_pair_pt (f : R -> R * R) (t : R) : Set :=
+  derivable_pt (fun t1 => fst (f t1)) t * derivable_pt (fun t1 => snd (f t1)) t.
+
+Definition derivable_pair (f : R -> R * R) : Set :=
+  forall t : R, derivable_pair_pt f t.
+
+Definition derive_pair_fst (f : R -> R * R) (pr : derivable_pair f) (x : R) : R :=
+  derive_pt (fun t => fst (f t)) x (fst (pr x)).
+Definition derive_pair_snd (f : R -> R * R) (pr : derivable_pair f) (x : R) : R :=
+  derive_pt (fun t => snd (f t)) x (snd (pr x)).
+
+Definition derivable_dydx_pt (f : R -> R * R) (t : R) (pr : derivable_pair f): Set :=
+  derivable_pt (fun t1 => (derive_pair_snd f pr t1) / (derive_pair_fst f pr t1)) t.
+
+Definition derivable_dydx (f : R -> R * R) (pr : derivable_pair f): Set :=
+  forall t: R, derivable_dydx_pt f t pr.
+
+
 Parameter Segment : Set.
 
 Parameter embed : PrimitiveSegment -> Segment -> Prop.
@@ -110,13 +138,25 @@ Inductive embed_scurve : scurve -> list Segment -> Prop :=
     embed ps s 
     -> embed_scurve (connect ps (exist _ nil IsScurveNil) (DcNil ps)) (s::nil)
 | EmbedScurveCons : forall (ps:PrimitiveSegment) (lp: scurve) (A: dc_pseg_hd ps (proj1_sig lp)) (s1 s2: Segment) (ls: list Segment),
-embed ps s1
+    embed ps s1
     -> embed_scurve lp (s2::ls)
     -> term s1 = init s2
-    -> embed_scurve (connect ps lp A) (s1:: s2 :: ls).
+    -> embed_scurve (connect ps lp A) (s1 :: s2 :: ls).
 
 (* 埋め込んだ曲線を延長する *)
 Parameter extend: list Segment -> list Segment.
 
+Parameter crossed: Segment -> Segment -> Prop.
+
+Definition close (ls: list Segment) : Prop :=
+    (exists (s1 s2: Segment), In s1 (extend ls) -> In s2 (extend ls) -> crossed s1 s2).
+
+(* 
+Inductive close : list Segment -> Prop :=
+| Close: forall (ls: list Segment), 
+    (exists (s1 s2: Segment), In s1 (extend ls) -> In s2 (extend ls) -> crossed s1 s2)
+     -> close ls. *)
+
 (* admissible, 許容可能 *)
-Parameter admissible: scurve -> Prop.
+Definition admissible (lp: scurve) : Prop :=
+    (exists ls: list Segment, embed_scurve lp ls -> close ls -> False).
