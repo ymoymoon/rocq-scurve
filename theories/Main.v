@@ -1,6 +1,7 @@
 Require Import Stdlib.Reals.Reals.
 Require Import Stdlib.Lists.List.
 Open Scope R_scope.
+Import ListNotations.
 
 Inductive V : Set :=
 | n : V
@@ -63,7 +64,7 @@ Definition C_of (x:PrimitiveSegment) := snd x.
     <=> forall t \in [0,1], d2y/dx2 = d/dt(dy/dx)の正負が一定*)
 
 (* R*Rの微分 *)
-Definition derivable_pair_pt (f : R -> R * R) (t : R) : Set :=
+(* Definition derivable_pair_pt (f : R -> R * R) (t : R) : Set :=
   derivable_pt (fun t1 => fst (f t1)) t * derivable_pt (fun t1 => snd (f t1)) t.
 
 Definition derivable_pair (f : R -> R * R) : Set :=
@@ -78,7 +79,7 @@ Definition derivable_dydx_pt (f : R -> R * R) (t : R) (pr : derivable_pair f): S
   derivable_pt (fun t1 => (derive_pair_snd f pr t1) / (derive_pair_fst f pr t1)) t.
 
 Definition derivable_dydx (f : R -> R * R) (pr : derivable_pair f): Set :=
-  forall t: R, derivable_dydx_pt f t pr.
+  forall t: R, derivable_dydx_pt f t pr. *)
 
 
 Parameter Segment : Set.
@@ -94,6 +95,26 @@ Parameter onSegment : Segment -> R * R -> Prop.
 Axiom onInit : forall s: Segment, onSegment s (init s).
 
 Axiom onTerm : forall s: Segment, onSegment s (term s).
+
+(* 始点と終点の位置関係を示す公理 *)
+Axiom n_end_relation: forall (s: Segment) (h: H) (c: C),
+    embed (n, h, c) s -> snd (init s) < snd (term s).
+Axiom s_end_relation: forall (s1: Segment) (h: H) (c: C),
+    embed (s, h, c) s1 -> snd (term s1) < snd (init s1).
+Axiom e_end_relation: forall (s: Segment) (v: V) (c: C),
+    embed (v, e, c) s -> fst (init s) < fst (term s).
+Axiom w_end_relation: forall (s: Segment) (v: V) (c: C),
+    embed (v, w, c) s -> fst (term s) < fst (init s).
+
+(* セグメント上にある点と始点終点の位置関係 *)
+Axiom s_onseg_relation: forall (s1: Segment) (h:H) (c:C) (x y: R),
+    embed (s, h, c) s1 -> onSegment s1 (x, y) -> snd (term s1) <= y /\ y <= snd (init s1).
+
+(* 始点と終点の間にあるx座標を取ると，そのx座標の点がセグメント上にあることを示す公理 *)
+Axiom e_exist_y: forall (s:Segment) (v:V) (c:C) (x:R),
+    embed (v, e, c) s -> fst (init s) <= x -> x <= fst (term s) -> exists y:R, onSegment s (x, y).
+Axiom w_exist_y: forall (s:Segment) (v:V) (c:C) (x:R),
+    embed (v, w, c) s -> fst (term s) <= x -> x <= fst (init s) -> exists y:R, onSegment s (x, y).
 
 Inductive ifl: PrimitiveSegment -> PrimitiveSegment -> Prop :=
 | Ifl: forall (v: V) (h: H) (c_x c_y : C), 
@@ -148,15 +169,137 @@ Parameter extend: list Segment -> list Segment.
 
 Parameter crossed: Segment -> Segment -> Prop.
 
+Definition head_seg (ls: list Segment) (default: Segment) : Segment :=
+    match ls with
+    | [] => default
+    | hd :: _ => hd
+    end.
+
+Fixpoint tail_seg (ls: list Segment) (default: Segment): Segment :=
+    match ls with
+    | [] => default
+    | hd :: [] => hd
+    | _ :: res => tail_seg res default
+    end.
+
+
 Definition close (ls: list Segment) : Prop :=
     (exists (s1 s2: Segment), In s1 (extend ls) -> In s2 (extend ls) -> crossed s1 s2).
 
-(* 
-Inductive close : list Segment -> Prop :=
-| Close: forall (ls: list Segment), 
-    (exists (s1 s2: Segment), In s1 (extend ls) -> In s2 (extend ls) -> crossed s1 s2)
-     -> close ls. *)
-
 (* admissible, 許容可能 *)
 Definition admissible (lp: scurve) : Prop :=
-    (exists ls: list Segment, embed_scurve lp ls -> close ls -> False).
+    exists ls: list Segment, (embed_scurve lp ls /\ ~ close ls).
+
+
+Parameter default_segment : Segment.
+Inductive all_same_h: list Segment -> Segment -> H -> Prop :=
+    | AllSameHS : forall (ls: list Segment) (ps: PrimitiveSegment),
+        let s := head_seg ls default_segment in 
+        embed ps s
+        -> all_same_h ls s (H_of ps)
+    | AllSameHNext : forall (ls: list Segment) (s hd: Segment) (ps: PrimitiveSegment),
+        all_same_h ls s (H_of ps)
+        ->  embed ps hd
+        -> all_same_h (hd :: ls) s (H_of ps).
+
+Axiom axiom1:
+    forall (ls: list Segment) (x1 y1 y2: R) (s1: Segment),
+    let hd := head_seg ls default_segment in
+    let tl := tail_seg ls default_segment in
+    y1 <= y2
+    -> embed (n, e, cx) hd
+    -> embed (n, w, cc) tl \/ embed (n, w, cx) tl
+    -> onSegment tl (x1, y1)
+    -> onSegment s1 (x1, y2)
+    -> all_same_h ls s1 e
+    -> close ls.
+Axiom axiom2:
+    forall (ls: list Segment) (x1 y1 y2: R) (s1: Segment),
+    let hd := head_seg ls default_segment in
+    let tl := tail_seg ls default_segment in
+    y2 <= y1
+    -> embed (n, e, cc) hd \/ embed (n, e, cx) hd
+    -> embed (n, w, cc) tl
+    -> onSegment hd (x1, y1)
+    -> onSegment s1 (x1, y2)
+    -> all_same_h (rev ls) s1 w
+    -> close ls.
+
+    
+
+Definition example1: list PrimitiveSegment := [(n,e,cx);(s,e,cx);(s,w,cc);(n,w,cc)].
+
+Lemma lemma1: forall lp: scurve, proj1_sig lp = example1 -> ~ admissible lp.
+Proof.
+    intros lp.
+    destruct lp as [l p].
+    simpl.
+    unfold example1.
+    intros H0.
+    unfold admissible, not.
+    intros H1.
+    destruct H1 as [ls [H2 H3]].
+    destruct ls as [| s0].
+    - inversion H2. rewrite H0 in H4. inversion H4.
+    - destruct ls as [| s1].
+     -- inversion H2. rewrite H0 in H1. inversion H1.
+     -- destruct ls as [| s2].
+      --- inversion H2. inversion H8. rewrite <- H11 in H1. simpl in H1. rewrite H0 in H1. inversion H1.
+      --- destruct ls as [| s3].
+       ---- inversion H2. inversion H8. inversion H15. rewrite <- H13 in H1. simpl in H1. rewrite <- H18 in H1. simpl in H1. rewrite H0 in H1. inversion H1.
+       ---- destruct ls as [| overseg].
+    * inversion H2 as [| |p0 scurve13 H s0' s1' ls Hembed0].
+      inversion H1 as [| |p1 scurve23 Hdcpseg123 s1'' s2' ls' Hembed1].
+      inversion H9 as [| |p2 scurve3 Hdcpseg23 s2'' s3' ls'' Hembed2].
+      inversion H15 as [| p3 s3'' Hembed3| ].
+      apply H3.
+      rewrite <- H11 in H5. simpl in H5.
+      rewrite <- H17 in H5. simpl in H5.
+      rewrite <- H21 in H5. simpl in H5.
+      rewrite H0 in H5.
+      inversion H5.
+      rewrite H24 in Hembed0.
+      rewrite H25 in Hembed1.
+      rewrite H26 in Hembed2.
+      rewrite H27 in Hembed3.
+      destruct (Rle_or_lt (fst (init s1)) (fst (term s2))) as [Hge | Hlt].
+      + set (x1 := fst (init s3)).
+      set (y1 := snd (init s3)).
+      assert (Hxins1:fst (term s2) < fst (term s1)). 
+        {rewrite H10. apply w_end_relation with (s:=s2) (v:=s) (c:=cc). apply Hembed2. }
+      assert (Hyins1: exists y:R, onSegment s1 (x1, y)).
+        {apply e_exist_y with (v:=s) (c:=cx). apply Hembed1. unfold x1. rewrite <- H16. apply Hge. unfold x1. rewrite <- H16.
+        apply Rlt_le. apply Hxins1. }
+      destruct Hyins1 as [y2 HonSeg].
+      apply axiom1 with (ls := (s0::s1::s2::s3::[])) (x1:=x1) (y1:=y1) (y2:= y2) (s1:=s1).
+        ++ apply Rle_trans with (r2 := snd (term s1)). apply Rlt_le. unfold y1. rewrite <- H16. rewrite H10. apply s_end_relation with (s1:=s2) (h:=w) (c:=cc). apply Hembed2.
+            apply s_onseg_relation with (s1:=s1) (h:=e) (c:=cx) (x:=x1) (y:=y2). apply Hembed1. apply HonSeg. 
+        ++ simpl. apply Hembed0.
+        ++ simpl. left. apply Hembed3.
+        ++ simpl. unfold x1, y1. rewrite <- surjective_pairing with (p:=init s3). apply onInit with (s:=s3).
+        ++ apply HonSeg.
+        ++ constructor 2 with (ls:=[s1;s2;s3]) (s:=s1) (hd:=s0) (ps:=(n,e,cx)). constructor 1 with (ls:=[s1;s2;s3]) (ps:=(s,e,cx)). simpl. apply Hembed1. apply Hembed0.
+
+      + set (x1 := fst (init s1)).
+      set (y1 := snd (init s1)).
+      assert (Hxins1:fst (init s1) < fst (init s2)).
+        {rewrite <- H10. apply e_end_relation with (s:=s1) (v:=s) (c:=cx). apply Hembed1. }
+      assert (Hyins1: exists y:R, onSegment s2 (x1, y)).
+        {apply w_exist_y with (v:=s) (c:=cc). apply Hembed2. unfold x1. apply Rlt_le. apply Hlt. unfold x1. apply Rlt_le. apply Hxins1. }
+      destruct Hyins1 as [y2 HonSeg].
+      apply axiom2 with (ls := (s0::s1::s2::s3::[])) (x1:=x1) (y1:=y1) (y2:= y2) (s1:=s2).
+        ++ apply Rle_trans with (r2:= snd (term s1)). unfold y1. rewrite H10. apply s_onseg_relation with (s1:=s2) (h:=w) (c:=cc) (x:= x1) (y:=y2). apply Hembed2. apply HonSeg. 
+            unfold y1. apply Rlt_le. apply s_end_relation with (s1:=s1) (h:=e) (c:=cx). apply Hembed1.
+        ++ simpl. right. apply Hembed0.
+        ++ simpl. apply Hembed3.
+        ++ simpl. unfold x1, y1. rewrite <- surjective_pairing. rewrite <- H4. apply onTerm with (s:=s0).
+        ++ apply HonSeg.
+        ++ simpl. constructor 2 with (ls:=[s2;s1;s0]) (s:=s2) (hd:=s3) (ps:=(n,w,cc)). constructor 1 with (ls:=[s2;s1;s0]) (ps:=(s,w,cc)). simpl. apply Hembed2. apply Hembed3.
+    * inversion H2. inversion H8. inversion H15. inversion H22. rewrite <- H13 in H1. simpl in H1. rewrite <- H20 in H1. simpl in H1. rewrite <- H27 in H1. simpl in H1. inversion H29. 
+     ** rewrite <- H32 in H1. simpl in H1. rewrite H0 in H1. inversion H1.
+     ** rewrite <- H34 in H1. simpl in H1. rewrite H0 in H1. inversion H1.
+Qed. 
+
+
+
+    
