@@ -182,7 +182,7 @@ Fixpoint tail_seg (ls: list Segment) (default: Segment): Segment :=
     | _ :: res => tail_seg res default
     end.
 
-
+(* close, 閉 *)
 Definition close (ls: list Segment) : Prop :=
     (exists (s1 s2: Segment), In s1 (extend ls) -> In s2 (extend ls) -> crossed s1 s2).
 
@@ -192,17 +192,21 @@ Definition admissible (lp: scurve) : Prop :=
 
 
 Parameter default_segment : Segment.
+(* 最初から特定のセグメントsまで同じ水平方向を向いていることを表す命題 *)
 Inductive all_same_h: list Segment -> Segment -> H -> Prop :=
-    | AllSameHS : forall (ls: list Segment) (ps: PrimitiveSegment),
-        let s := head_seg ls default_segment in 
-        embed ps s
-        -> all_same_h ls s (H_of ps)
-    | AllSameHNext : forall (ls: list Segment) (s hd: Segment) (ps: PrimitiveSegment),
-        all_same_h ls s (H_of ps)
-        ->  embed ps hd
-        -> all_same_h (hd :: ls) s (H_of ps).
+| AllSameHS : forall (ls: list Segment) (ps: PrimitiveSegment),
+    let s := head_seg ls default_segment in 
+    embed ps s
+    -> all_same_h ls s (H_of ps)
+| AllSameHNext : forall (ls: list Segment) (s hd: Segment) (ps: PrimitiveSegment),
+    all_same_h ls s (H_of ps)
+    ->  embed ps hd
+    -> all_same_h (hd :: ls) s (H_of ps).
 
-Axiom axiom1:
+(* n,e,cxから始まり，しばらく右に伸びている，(x1, y2)を通る．
+最後のセグメントが左上で，(x1, y1)を通る．
+y1<=y2の時に最後のセグメントはどこかで交わる*)
+Axiom end_cross_term_nw:
     forall (ls: list Segment) (x1 y1 y2: R) (s1: Segment),
     let hd := head_seg ls default_segment in
     let tl := tail_seg ls default_segment in
@@ -213,7 +217,7 @@ Axiom axiom1:
     -> onSegment s1 (x1, y2)
     -> all_same_h ls s1 e
     -> close ls.
-Axiom axiom2:
+Axiom end_cross_init_ne:
     forall (ls: list Segment) (x1 y1 y2: R) (s1: Segment),
     let hd := head_seg ls default_segment in
     let tl := tail_seg ls default_segment in
@@ -225,11 +229,10 @@ Axiom axiom2:
     -> all_same_h (rev ls) s1 w
     -> close ls.
 
-    
 
 Definition example1: list PrimitiveSegment := [(n,e,cx);(s,e,cx);(s,w,cc);(n,w,cc)].
 
-Lemma lemma1: forall lp: scurve, proj1_sig lp = example1 -> ~ admissible lp.
+Lemma example1_is_close: forall lp: scurve, proj1_sig lp = example1 -> ~ admissible lp.
 Proof.
     intros lp.
     destruct lp as [l p].
@@ -248,56 +251,56 @@ Proof.
       --- destruct ls as [| s3].
        ---- inversion H2. inversion H8. inversion H15. rewrite <- H13 in H1. simpl in H1. rewrite <- H18 in H1. simpl in H1. rewrite H0 in H1. inversion H1.
        ---- destruct ls as [| overseg].
-    * inversion H2 as [| |p0 scurve13 H s0' s1' ls Hembed0].
-      inversion H1 as [| |p1 scurve23 Hdcpseg123 s1'' s2' ls' Hembed1].
-      inversion H9 as [| |p2 scurve3 Hdcpseg23 s2'' s3' ls'' Hembed2].
-      inversion H15 as [| p3 s3'' Hembed3| ].
-      apply H3.
-      rewrite <- H11 in H5. simpl in H5.
-      rewrite <- H17 in H5. simpl in H5.
-      rewrite <- H21 in H5. simpl in H5.
-      rewrite H0 in H5.
-      inversion H5.
-      rewrite H24 in Hembed0.
-      rewrite H25 in Hembed1.
-      rewrite H26 in Hembed2.
-      rewrite H27 in Hembed3.
-      destruct (Rle_or_lt (fst (init s1)) (fst (term s2))) as [Hge | Hlt].
-      + set (x1 := fst (init s3)).
-      set (y1 := snd (init s3)).
-      assert (Hxins1:fst (term s2) < fst (term s1)). 
-        {rewrite H10. apply w_end_relation with (s:=s2) (v:=s) (c:=cc). apply Hembed2. }
-      assert (Hyins1: exists y:R, onSegment s1 (x1, y)).
-        {apply e_exist_y with (v:=s) (c:=cx). apply Hembed1. unfold x1. rewrite <- H16. apply Hge. unfold x1. rewrite <- H16.
-        apply Rlt_le. apply Hxins1. }
-      destruct Hyins1 as [y2 HonSeg].
-      apply axiom1 with (ls := (s0::s1::s2::s3::[])) (x1:=x1) (y1:=y1) (y2:= y2) (s1:=s1).
-        ++ apply Rle_trans with (r2 := snd (term s1)). apply Rlt_le. unfold y1. rewrite <- H16. rewrite H10. apply s_end_relation with (s1:=s2) (h:=w) (c:=cc). apply Hembed2.
-            apply s_onseg_relation with (s1:=s1) (h:=e) (c:=cx) (x:=x1) (y:=y2). apply Hembed1. apply HonSeg. 
-        ++ simpl. apply Hembed0.
-        ++ simpl. left. apply Hembed3.
-        ++ simpl. unfold x1, y1. rewrite <- surjective_pairing with (p:=init s3). apply onInit with (s:=s3).
-        ++ apply HonSeg.
-        ++ constructor 2 with (ls:=[s1;s2;s3]) (s:=s1) (hd:=s0) (ps:=(n,e,cx)). constructor 1 with (ls:=[s1;s2;s3]) (ps:=(s,e,cx)). simpl. apply Hembed1. apply Hembed0.
+            * inversion H2 as [| |p0 scurve13 H s0' s1' ls Hembed0].
+              inversion H1 as [| |p1 scurve23 Hdcpseg123 s1'' s2' ls' Hembed1].
+              inversion H9 as [| |p2 scurve3 Hdcpseg23 s2'' s3' ls'' Hembed2].
+              inversion H15 as [| p3 s3'' Hembed3| ].
+              apply H3.
+              rewrite <- H11 in H5. simpl in H5.
+              rewrite <- H17 in H5. simpl in H5.
+              rewrite <- H21 in H5. simpl in H5.
+              rewrite H0 in H5.
+              inversion H5.
+              rewrite H24 in Hembed0.
+              rewrite H25 in Hembed1.
+              rewrite H26 in Hembed2.
+              rewrite H27 in Hembed3.
+              destruct (Rle_or_lt (fst (init s1)) (fst (term s2))) as [Hge | Hlt].
+              + set (x1 := fst (init s3)).
+              set (y1 := snd (init s3)).
+              assert (Hxins1:fst (term s2) < fst (term s1)). 
+                {rewrite H10. apply w_end_relation with (s:=s2) (v:=s) (c:=cc). apply Hembed2. }
+              assert (Hyins1: exists y:R, onSegment s1 (x1, y)).
+                {apply e_exist_y with (v:=s) (c:=cx). apply Hembed1. unfold x1. rewrite <- H16. apply Hge. unfold x1. rewrite <- H16.
+                apply Rlt_le. apply Hxins1. }
+              destruct Hyins1 as [y2 HonSeg].
+              apply end_cross_term_nw with (ls := (s0::s1::s2::s3::[])) (x1:=x1) (y1:=y1) (y2:= y2) (s1:=s1).
+                ++ apply Rle_trans with (r2 := snd (term s1)). apply Rlt_le. unfold y1. rewrite <- H16. rewrite H10. apply s_end_relation with (s1:=s2) (h:=w) (c:=cc). apply Hembed2.
+                    apply s_onseg_relation with (s1:=s1) (h:=e) (c:=cx) (x:=x1) (y:=y2). apply Hembed1. apply HonSeg. 
+                ++ simpl. apply Hembed0.
+                ++ simpl. left. apply Hembed3.
+                ++ simpl. unfold x1, y1. rewrite <- surjective_pairing with (p:=init s3). apply onInit with (s:=s3).
+                ++ apply HonSeg.
+                ++ constructor 2 with (ls:=[s1;s2;s3]) (s:=s1) (hd:=s0) (ps:=(n,e,cx)). constructor 1 with (ls:=[s1;s2;s3]) (ps:=(s,e,cx)). simpl. apply Hembed1. apply Hembed0.
 
-      + set (x1 := fst (init s1)).
-      set (y1 := snd (init s1)).
-      assert (Hxins1:fst (init s1) < fst (init s2)).
-        {rewrite <- H10. apply e_end_relation with (s:=s1) (v:=s) (c:=cx). apply Hembed1. }
-      assert (Hyins1: exists y:R, onSegment s2 (x1, y)).
-        {apply w_exist_y with (v:=s) (c:=cc). apply Hembed2. unfold x1. apply Rlt_le. apply Hlt. unfold x1. apply Rlt_le. apply Hxins1. }
-      destruct Hyins1 as [y2 HonSeg].
-      apply axiom2 with (ls := (s0::s1::s2::s3::[])) (x1:=x1) (y1:=y1) (y2:= y2) (s1:=s2).
-        ++ apply Rle_trans with (r2:= snd (term s1)). unfold y1. rewrite H10. apply s_onseg_relation with (s1:=s2) (h:=w) (c:=cc) (x:= x1) (y:=y2). apply Hembed2. apply HonSeg. 
-            unfold y1. apply Rlt_le. apply s_end_relation with (s1:=s1) (h:=e) (c:=cx). apply Hembed1.
-        ++ simpl. right. apply Hembed0.
-        ++ simpl. apply Hembed3.
-        ++ simpl. unfold x1, y1. rewrite <- surjective_pairing. rewrite <- H4. apply onTerm with (s:=s0).
-        ++ apply HonSeg.
-        ++ simpl. constructor 2 with (ls:=[s2;s1;s0]) (s:=s2) (hd:=s3) (ps:=(n,w,cc)). constructor 1 with (ls:=[s2;s1;s0]) (ps:=(s,w,cc)). simpl. apply Hembed2. apply Hembed3.
-    * inversion H2. inversion H8. inversion H15. inversion H22. rewrite <- H13 in H1. simpl in H1. rewrite <- H20 in H1. simpl in H1. rewrite <- H27 in H1. simpl in H1. inversion H29. 
-     ** rewrite <- H32 in H1. simpl in H1. rewrite H0 in H1. inversion H1.
-     ** rewrite <- H34 in H1. simpl in H1. rewrite H0 in H1. inversion H1.
+              + set (x1 := fst (init s1)).
+              set (y1 := snd (init s1)).
+              assert (Hxins1:fst (init s1) < fst (init s2)).
+                {rewrite <- H10. apply e_end_relation with (s:=s1) (v:=s) (c:=cx). apply Hembed1. }
+              assert (Hyins1: exists y:R, onSegment s2 (x1, y)).
+                {apply w_exist_y with (v:=s) (c:=cc). apply Hembed2. unfold x1. apply Rlt_le. apply Hlt. unfold x1. apply Rlt_le. apply Hxins1. }
+              destruct Hyins1 as [y2 HonSeg].
+              apply end_cross_init_ne with (ls := (s0::s1::s2::s3::[])) (x1:=x1) (y1:=y1) (y2:= y2) (s1:=s2).
+                ++ apply Rle_trans with (r2:= snd (term s1)). unfold y1. rewrite H10. apply s_onseg_relation with (s1:=s2) (h:=w) (c:=cc) (x:= x1) (y:=y2). apply Hembed2. apply HonSeg. 
+                    unfold y1. apply Rlt_le. apply s_end_relation with (s1:=s1) (h:=e) (c:=cx). apply Hembed1.
+                ++ simpl. right. apply Hembed0.
+                ++ simpl. apply Hembed3.
+                ++ simpl. unfold x1, y1. rewrite <- surjective_pairing. rewrite <- H4. apply onTerm with (s:=s0).
+                ++ apply HonSeg.
+                ++ simpl. constructor 2 with (ls:=[s2;s1;s0]) (s:=s2) (hd:=s3) (ps:=(n,w,cc)). constructor 1 with (ls:=[s2;s1;s0]) (ps:=(s,w,cc)). simpl. apply Hembed2. apply Hembed3.
+            * inversion H2. inversion H8. inversion H15. inversion H22. rewrite <- H13 in H1. simpl in H1. rewrite <- H20 in H1. simpl in H1. rewrite <- H27 in H1. simpl in H1. inversion H29. 
+            ** rewrite <- H32 in H1. simpl in H1. rewrite H0 in H1. inversion H1.
+            ** rewrite <- H34 in H1. simpl in H1. rewrite H0 in H1. inversion H1.
 Qed. 
 
 
