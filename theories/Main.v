@@ -405,7 +405,13 @@ Proof.
                 -- simpl in *. unfold tl1 in HonSegtl1. eapply is_on_extended_head. exact HonSegtl1.
                 -- apply Rlt_le. exact H0.
         (* ls1 = s0 :: ls1 のとき*)
-        + unfold tl1 in HonSegtl1. rewrite last_last in HonSegtl1. clear tl1. destruct Hembedtl2 as [Hembedtl2cc| Hembedtl2cx].
+        + unfold tl1 in HonSegtl1. rewrite last_last in HonSegtl1. clear tl1. 
+          assert (Hgexax1: init_x a <= x1).
+          {
+            unfold all_same_h in Hallh. destruct Hallh as [_ Hforall]. rewrite Forall_app in Hforall. destruct Hforall as [_ Hae].
+            inversion Hae. destruct H3 as [v [c Hae']]. eapply e_onseg_relation in Hae'. now apply Hae'. exact HonSegtl1.
+          }
+          destruct Hembedtl2 as [Hembedtl2cc| Hembedtl2cx].
             * destruct (Rlt_or_le (init_y a) y1) as [Hgtyay1 | Hleyay1].
             {
               admit.
@@ -437,7 +443,7 @@ Proof.
                       +++ unfold init_y in Hembedtl2ex. exact Hembedtl2ex.
                       +++ eapply Rgt_minus in Hgt1. eapply Rlt_minus in Hgt. eapply Rmult_pos_neg. exact Hgt1. unfold init_x in Hgt. exact Hgt.
                     (* x1, y2をaとtl2_exが通る *)
-                      --- admit.
+                    --- admit.
                   ** unfold tl2_ex in HonSegtl2. rewrite <- last_extend in HonSegtl2. exact HonSegtl2.
                   ** apply Rlt_le. exact H0.
                 ++ eapply exist_between_x_neg with (x:=init_x a) in HonSegtl2.
@@ -457,13 +463,47 @@ Proof.
                     ** exact Hembedtl2ex.
                     ** exact Hleyay1.
                     ** exact Hle.
-                    ** unfold all_same_h in Hallh. destruct Hallh as [_ Hforall]. rewrite Forall_app in Hforall. destruct Hforall as [_ Hae].
-                        inversion Hae. destruct H3 as [v [c Hae']]. eapply e_onseg_relation in Hae'. now apply Hae'. exact HonSegtl1.
+                    ** exact Hgexax1.
               -- erewrite last_extend. exact HonSegtl2.
               -- exact Hleyay1.
             (* nwcxの場合 *)
             * eapply extended_segment_term_w_ncx with (x1:=x1) (y1:=y1) (x:=init_x a) in Hembedtl2cx as Hext.
-              -- 
+              {
+                destruct Hext as [y3 [HonSegtl2ex Hgtey1y3]]. destruct (Rtotal_order y3 (init_y a)) as [Hgt|[Heq|Hlt]].
+                - rewrite <- app_assoc. eapply IHl.
+                  + rewrite app_assoc. exact Hsc.
+                  + exact Hgt.
+                  + discriminate.
+                  + simpl. simpl in hd1. unfold hd1 in Hembedhd1. exact Hembedhd1.
+                  + right. unfold tl2 in Hembedtl2cx. assert (last ([a]++ls2) default_segment = last ls2 default_segment). simpl. destruct ls2. contradiction. reflexivity. rewrite H1. exact Hembedtl2cx.
+                  + rewrite app_assoc. rewrite <- last_extend. exact HonSegtl2ex.
+                  + rewrite <- app_assoc in Hsc. eapply consist_init_term in Hsc. unfold init_x, init_y. rewrite <- surjective_pairing. simpl in Hsc. rewrite <- Hsc. simpl. now eapply onTerm. discriminate. discriminate.
+                  + unfold all_same_h in Hallh. destruct Hallh as [_ Hforall]. unfold all_same_h. split. discriminate. rewrite Forall_app in Hforall. now apply Hforall.
+                
+                  - admit.
+
+                - eapply x_cross_h with (s1:=nth (length (s0::ls1)) (extend (((s0 :: ls1) ++ [a]) ++ ls2)) default_segment) (s2:=tl2_ex).
+                  * eapply nth_In. rewrite <- len_equal_extended. rewrite length_app. rewrite length_app. rewrite <- Nat.add_assoc. eapply Nat.lt_add_pos_r. simpl. now apply Nat.lt_0_succ.
+                (* In (last (extend l) (extend l)) *)
+                  * eapply exists_last in HnotNil. destruct HnotNil as [ls' alast]. destruct alast as [ls'' e]. subst. unfold tl2_ex.
+                      assert (H_not_0: (length (extend (((s0::ls1) ++ [a]) ++ ls' ++ [ls''])) <> 0)%nat). rewrite <- len_equal_extended. simpl. discriminate. 
+                      rewrite length_zero_iff_nil in H_not_0. eapply exists_last in H_not_0. destruct H_not_0 as [xl [x e]]. rewrite e. rewrite last_last. now eapply in_elt.
+                  * assert (HonSega: onSegment (nth (length (s0 :: ls1)) (((s0 :: ls1) ++ [a]) ++ ls2) default_segment) (x1, y2)).
+                        {
+                          simpl. rewrite <- app_assoc. simpl. rewrite nth_middle. exact HonSegtl1.
+                        }
+                        eapply is_on_extended2. exact HonSega.
+                  * assert (HonSega: onSegment (nth (length (s0 :: ls1)) (((s0 :: ls1) ++ [a]) ++ ls2) default_segment) (init a)).
+                        {
+                          simpl. rewrite <- app_assoc. simpl. rewrite nth_middle. now apply onInit. 
+                        }
+                        eapply is_on_extended2. rewrite surjective_pairing in HonSega. exact HonSega.
+                  * exact HonSegtl2.
+                  * unfold init_x in HonSegtl2ex. unfold tl2_ex. rewrite <- last_extend. exact HonSegtl2ex.
+                  * eapply Rgt_minus in H0. eapply Rlt_minus in Hlt. eapply Rmult_pos_neg. exact H0. unfold init_y in Hlt. exact Hlt.
+              }
+              -- erewrite last_extend. exact HonSegtl2.
+              -- exact Hgexax1.
 
 Admitted.
     
