@@ -366,7 +366,7 @@ Proof.
     intros sc ls1. induction ls1 as [|a ls1 IHl] using rev_ind.
     - intros ls2 x1 y1 y2 _ _ _ _ _ _ _ _ _ _ _ Hcontra. now inversion Hcontra.
     - intros ls2 x1 y1 y2 hd1 tl1 tl2 tl2_ex Hsc H0 HnotNil Hembedhd1 Hembedtl2 HonSegtl2 HonSegtl1 Hallh.
-      destruct ls1.
+      destruct ls1 as [| s0 ls1].
         (* ls1がシングルトンのとき *)
         + destruct Hembedtl2 as [Hembedtl2cc| Hembedtl2cx].
           (* tl2がcc *)
@@ -465,7 +465,7 @@ Proof.
                         + exact Hge1.
                         + discriminate.
                         + simpl. simpl in hd1. unfold hd1 in Hembedhd1. exact Hembedhd1.
-                        + left. unfold tl2 in Hembedtl2cc. assert (last ([a]++ls2) default_segment = last ls2 default_segment). simpl. destruct ls2. contradiction. reflexivity. rewrite H1. now auto.
+                        + left. unfold tl2 in Hembedtl2cc. assert (last ([a]++ls2) default_segment = last ls2 default_segment). simpl. destruct ls2 as [|s1 ls2]. contradiction. reflexivity. rewrite H1. now auto.
                         + rewrite app_assoc. exact HonSegtl2ex.
                         + rewrite <- app_assoc in Hsc. eapply consist_init_term in Hsc. unfold init_x, init_y. rewrite <- surjective_pairing. simpl in Hsc. rewrite <- Hsc. simpl. now eapply onTerm. discriminate. discriminate.
                         + unfold all_same_h in Hallh. destruct Hallh as [_ Hforall]. unfold all_same_h. split. discriminate. rewrite Forall_app in Hforall. now apply Hforall.
@@ -486,7 +486,7 @@ Proof.
                   + exact Hgt.
                   + discriminate.
                   + simpl. simpl in hd1. unfold hd1 in Hembedhd1. exact Hembedhd1.
-                  + right. unfold tl2 in Hembedtl2cx. assert (last ([a]++ls2) default_segment = last ls2 default_segment). simpl. destruct ls2. contradiction. reflexivity. rewrite H1. exact Hembedtl2cx.
+                  + right. unfold tl2 in Hembedtl2cx. assert (last ([a]++ls2) default_segment = last ls2 default_segment). simpl. destruct ls2 as [| s1 ls2]. contradiction. reflexivity. rewrite H1. exact Hembedtl2cx.
                   + rewrite app_assoc. rewrite <- last_extend. exact HonSegtl2ex.
                   + rewrite <- app_assoc in Hsc. eapply consist_init_term in Hsc. unfold init_x, init_y. rewrite <- surjective_pairing. simpl in Hsc. rewrite <- Hsc. simpl. now eapply onTerm. discriminate. discriminate.
                   + unfold all_same_h in Hallh. destruct Hallh as [_ Hforall]. unfold all_same_h. split. discriminate. rewrite Forall_app in Hforall. now apply Hforall.
@@ -548,15 +548,15 @@ Proof.
     unfold admissible, not.
     intros Hclose.
     destruct Hclose as [ls [Hembed_ls Hclose]].
-    destruct ls as [| s0].
+    destruct ls as [| s0 ls].
     - inversion Hembed_ls as [Hnil | |]. rewrite Hl in Hnil. discriminate.
-    - destruct ls as [| s1].
+    - destruct ls as [| s1 ls].
      -- inversion Hembed_ls as [|ps s1 Hembed0 Hcontra Hs10|]. rewrite Hl in Hcontra. discriminate.
-     -- destruct ls as [| s2].
+     -- destruct ls as [| s2 ls].
       --- inversion Hembed_ls as [| | ps0 lp H s2 s3 ls Hembed0 Hembedsc1 Hconsis01 Hps [H1 H2 H3]]. subst. inversion Hembedsc1 as [|ps1 s2 Hembed1 Hconnect1 H1|]. rewrite <- Hconnect1 in Hps. simpl in Hps. discriminate.
-      --- destruct ls as [| s3].
+      --- destruct ls as [| s3 ls].
        ---- inversion Hembed_ls as [| | ps0 lp H s3 s4 ls Hembed0 Hembedsc1 Hconsis01 Hps [H1 H2 H3]]. subst. inversion Hembedsc1 as [| | ps1 lp1 Hdc1 s3 s4 ls1 Hembed1 Hembedsc2 Hconsis12 Hconnect2 [H1 H2 H3]]. subst. inversion Hembedsc2 as [| ps2 s3 Hembed2 Hconnect2 H0|]. subst. simpl in *. discriminate.
-       ---- destruct ls as [| overseg].
+       ---- destruct ls as [| overseg ls].
             * inversion Hembed_ls as [| |p0 scurve13 H s0' s1' ls Hembed0 Hembedsc13 Hconsis01 Hlcons [H1 H2 H3]]. subst.
               inversion Hembedsc13 as [| |p1 scurve23 Hdcpseg123 s1' s2' ls3 Hembed1 Hembedsc23 Hconsis12 Hconnect1 [H1 H2 H3]]. subst.
               inversion Hembedsc23 as [| |p2 scurve3 Hdcpseg23 s2' s3' ls'' Hembed2 Hembedsc3 Hconsis23 Hconnect2 [H1 H2 H3]]. subst.
