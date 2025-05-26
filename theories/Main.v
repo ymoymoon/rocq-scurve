@@ -544,42 +544,42 @@ Proof.
     destruct lp as [l p].
     simpl.
     unfold example1.
-    intros H0.
+    intros Hl.
     unfold admissible, not.
-    intros H1.
-    destruct H1 as [ls [H2 H3]].
+    intros Hclose.
+    destruct Hclose as [ls [Hembed_ls Hclose]].
     destruct ls as [| s0].
-    - inversion H2. rewrite H0 in H4. discriminate.
+    - inversion Hembed_ls as [Hnil | |]. rewrite Hl in Hnil. discriminate.
     - destruct ls as [| s1].
-     -- inversion H2. rewrite H0 in H1. discriminate.
+     -- inversion Hembed_ls as [|ps s1 Hembed0 Hcontra Hs10|]. rewrite Hl in Hcontra. discriminate.
      -- destruct ls as [| s2].
-      --- inversion H2. inversion H8. rewrite <- H11 in H1. simpl in H1. rewrite H0 in H1. discriminate.
+      --- inversion Hembed_ls as [| | ps0 lp H s2 s3 ls Hembed0 Hembedsc1 Hconsis01 Hps [H1 H2 H3]]. subst. inversion Hembedsc1 as [|ps1 s2 Hembed1 Hconnect1 H1|]. rewrite <- Hconnect1 in Hps. simpl in Hps. discriminate.
       --- destruct ls as [| s3].
-       ---- inversion H2. inversion H8. inversion H15. rewrite <- H13 in H1. subst. simpl in H1. discriminate.
+       ---- inversion Hembed_ls as [| | ps0 lp H s3 s4 ls Hembed0 Hembedsc1 Hconsis01 Hps [H1 H2 H3]]. subst. inversion Hembedsc1 as [| | ps1 lp1 Hdc1 s3 s4 ls1 Hembed1 Hembedsc2 Hconsis12 Hconnect2 [H1 H2 H3]]. subst. inversion Hembedsc2 as [| ps2 s3 Hembed2 Hconnect2 H0|]. subst. simpl in *. discriminate.
        ---- destruct ls as [| overseg].
-            * inversion H2 as [| |p0 scurve13 H s0' s1' ls Hembed0].
-              inversion H1 as [| |p1 scurve23 Hdcpseg123 s1'' s2' ls' Hembed1].
-              inversion H9 as [| |p2 scurve3 Hdcpseg23 s2'' s3' ls'' Hembed2].
-              inversion H15 as [| p3 s3'' Hembed3| ].
-              apply H3. subst.
-              inversion H5.
+            * inversion Hembed_ls as [| |p0 scurve13 H s0' s1' ls Hembed0 Hembedsc13 Hconsis01 Hlcons [H1 H2 H3]]. subst.
+              inversion Hembedsc13 as [| |p1 scurve23 Hdcpseg123 s1' s2' ls3 Hembed1 Hembedsc23 Hconsis12 Hconnect1 [H1 H2 H3]]. subst.
+              inversion Hembedsc23 as [| |p2 scurve3 Hdcpseg23 s2' s3' ls'' Hembed2 Hembedsc3 Hconsis23 Hconnect2 [H1 H2 H3]]. subst.
+              inversion Hembedsc3 as [| p3 s3' Hembed3 Hconnect3 H1| ].
+              apply Hclose. subst.
+              inversion Hlcons as [[H0 H1 H2 H3]].
               subst p0 p1 p2 p3.
               destruct (Rle_or_lt (fst (init s1)) (fst (term s2))) as [Hge | Hlt].
               + set (x1 := fst (init s3)).
               set (y1 := snd (init s3)).
               assert (Hxins1:fst (term s2) < fst (term s1)). 
-                {rewrite H10. apply w_end_relation with (s:=s2) (v:=s) (c:=cc). exact Hembed2. }
+                {rewrite Hconsis12. apply w_end_relation with (s:=s2) (v:=s) (c:=cc). exact Hembed2. }
               assert (Hyins1: exists y:R, onSegment s1 (x1, y)).
                 {
                     eapply e_exist_y in Hembed1.
                         + destruct Hembed1 as [yy H']. exists yy. now apply H'.
-                        + unfold x1. rewrite <- H16. apply Hge.
-                        + unfold x1. rewrite <- H16. apply Rlt_le. exact Hxins1. 
+                        + unfold x1. rewrite <- Hconsis23. apply Hge.
+                        + unfold x1. rewrite <- Hconsis23. apply Rlt_le. exact Hxins1. 
                 }
               destruct Hyins1 as [y2 HonSeg].
               eapply end_cross_term_nw with (ls1:=[s0;s1]) (x1:=x1) (y1:=y1).
-                ++ simpl. exact H2. 
-                ++ apply Rlt_le_trans with (r2 := snd (term s1)). unfold y1. rewrite <- H16. rewrite H10. apply s_end_relation with (s1:=s2) (h:=w) (c:=cc). apply Hembed2.
+                ++ simpl. exact Hembed_ls. 
+                ++ apply Rlt_le_trans with (r2 := snd (term s1)). unfold y1. rewrite <- Hconsis23. rewrite Hconsis12. apply s_end_relation with (s1:=s2) (h:=w) (c:=cc). apply Hembed2.
                     apply s_onseg_relation with (s1:=s1) (h:=e) (c:=cx) (x:=x1) (y:=y2). apply Hembed1. exact HonSeg. 
                 ++ unfold not.  intros Hcontra. discriminate.
                 ++ simpl. exact Hembed0.
@@ -591,7 +591,7 @@ Proof.
               + set (x1 := fst (init s1)).
               set (y1 := snd (init s1)).
               assert (Hxins1:fst (init s1) < fst (init s2)).
-                {rewrite <- H10. apply e_end_relation with (s:=s1) (v:=s) (c:=cx). exact Hembed1. }
+                {rewrite <- Hconsis12. apply e_end_relation with (s:=s1) (v:=s) (c:=cx). exact Hembed1. }
               assert (Hyins1: exists y:R, onSegment s2 (x1, y)).
                 {
                     eapply w_exist_y in Hembed2.
@@ -601,16 +601,21 @@ Proof.
                  }
               destruct Hyins1 as [y2 HonSeg].
               eapply end_cross_init_ne with (ls1 := [s0;s1]) (x1:=x1) (y1:=y1).
-                ++ simpl. exact H2. 
-                ++ apply Rle_lt_trans with (r2:= snd (term s1)). unfold y1. rewrite H10. apply s_onseg_relation with (s1:=s2) (h:=w) (c:=cc) (x:= x1) (y:=y2). apply Hembed2. apply HonSeg. 
+                ++ simpl. exact Hembed_ls. 
+                ++ apply Rle_lt_trans with (r2:= snd (term s1)). unfold y1. rewrite Hconsis12. apply s_onseg_relation with (s1:=s2) (h:=w) (c:=cc) (x:= x1) (y:=y2). apply Hembed2. apply HonSeg. 
                     unfold y1. apply s_end_relation with (s1:=s1) (h:=e) (c:=cx). exact Hembed1.
                 ++ discriminate.
                 ++ simpl. right. exact Hembed0.
                 ++ simpl. exact Hembed3.
-                ++ simpl. unfold x1, y1. rewrite <- surjective_pairing. rewrite <- H4. now eapply onTerm.
+                ++ simpl. unfold x1, y1. rewrite <- surjective_pairing. rewrite <- Hconsis01. now eapply onTerm.
                 ++ exact HonSeg.
                 ++ simpl. unfold all_same_h. split. discriminate. econstructor. exists n,cc. exact Hembed3. econstructor. exists s,cc. exact Hembed2. now auto.
-            * inversion H2. inversion H8. inversion H15. inversion H22. rewrite <- H13 in H1. simpl in H1. rewrite <- H20 in H1. simpl in H1. rewrite <- H27 in H1. simpl in H1. inversion H29. 
-            ** rewrite <- H32 in H1. simpl in H1. rewrite H0 in H1. discriminate.
-            ** rewrite <- H34 in H1. simpl in H1. rewrite H0 in H1. discriminate.
+            * inversion Hembed_ls as [| | ps lp H s4 s5 ls0 Hembed0 Hembedsc1 Hconsis01 Hlcons [H1 H2 H3]]. subst. 
+              inversion Hembedsc1 as [| | ps1 scurve2 Hdc1 s1' s2' ls0 Hembed1 Hembedsc2 Hconsis12 Hconnect1 [H1 H2 H3]]. subst. 
+              inversion Hembedsc2 as [| | ps2 scurve3 Hdc2 s2' s3' ls1 Hembed2 Hembedsc3 Hconsis23 Hconnect2 [H1 H2 H3]]. subst. 
+              inversion Hembedsc3 as [| |ps3 scurve4 Hdc3 s3' s4' ls2 Hembed3 Hembedsc4 Hconsis34 Hconnect3 [H1 H2 H3]]. subst. simpl in *. 
+              inversion Hlcons as [[Hps0 Hps1 Hps2 Hps3 Hsc4nil]]. 
+              inversion Hembedsc4 as [| psov sov Hembedov Hconnectov [Hsov Hnil]| psov scov Hdcov sov' s4 ls0 Hembedov Hembedscov Hconsisov Hconnectov [H1 H2]].
+            ** subst. simpl in *. discriminate.
+            ** subst. discriminate.
 Qed.
