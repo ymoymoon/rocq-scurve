@@ -235,12 +235,24 @@ Lemma nth_head: forall (l:list Segment) (d: Segment), nth 0 l d = head_seg l d.
   
 Parameter default_segment : Segment.
 
-Axiom consist_init_term : forall (sc: scurve) (ls1 ls2: list Segment),
+Lemma consist_init_term : forall (sc: scurve) (ls1 ls2: list Segment),
   embed_scurve sc (ls1 ++ ls2)
   -> ls1 <> []
   -> ls2 <> []
-  -> term (last ls1 default_segment) = init (head_seg ls2 default_segment).
-
+  -> term (last ls1 default_segment) = init (List.hd default_segment ls2).
+Proof.
+  intros sc ls1. revert sc. induction ls1 as [|seg ls1']; [now idtac|].
+  intros sc ls2 emb _. inversion emb.
+  - (* EmbedScurveSingleの場合: ls2 <> [] だからありえん *)
+    now apply eq_sym, app_eq_nil in H3.
+  - (* EmbedScurveConsの場合 *)
+    destruct ls1' as [|seg2 ls1''].
+    + (* ls1' = [] のとき *)
+      intros _. simpl in H1. now rewrite <- H1.
+    + (* ls1' = _::_ のとき: 帰納法の仮定IHls1'を使う *)
+      intros nemp_ls2. apply (IHls1' lp); [|now auto|now auto].
+      simpl. injection H1 as _es1 _els. now subst s1 s2 ls.
+Qed.
 
 (* concat_segはセグメントをくっつけて一つの関数として扱ったもの
    extendは最初のセグメントと最後のセグメント以外は同じ，
