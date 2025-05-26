@@ -140,37 +140,37 @@ Axiom exist_between_x_neg: forall (s: Segment) (x1 x2 y1 y2 x: R),
 Lemma e_exist_y: forall (s':Segment) (v:V) (c:C) (x:R),
     embed (v, e, c) s' -> fst (init s') <= x -> x <= fst (term s') -> exists y:R, onSegment s' (x, y) /\ (match v with n => init_y s' <= y <= term_y s' | s => term_y  s' <= y <= init_y s' end).
 Proof.
-    intros. destruct v.
+    intros s' v c x H0 Hge0 Hge1. destruct v.
     - eapply exist_between_x_pos with (x1:=fst (init s')) (y1:= snd (init s')) (x2:=fst (term s')) (y2:= snd (term s')).
         + rewrite <- surjective_pairing. now eapply onInit.
         + rewrite <- surjective_pairing. now eapply onTerm.
         + apply Rlt_le. eapply n_end_relation. now eauto.
-        + exact H1.
-        + exact H2.
+        + exact Hge0.
+        + exact Hge1.
     - eapply exist_between_x_neg with (x1:=fst (init s')) (y1:= snd (init s')) (x2:=fst (term s')) (y2:= snd (term s')).
         + rewrite <- surjective_pairing. now eapply onInit.
         + rewrite <- surjective_pairing. now eapply onTerm.
         + apply Rlt_le. eapply s_end_relation. now eauto.
-        + exact H1.
-        + exact H2.
+        + exact Hge0.
+        + exact Hge1.
 Qed.
 
 Lemma w_exist_y: forall (s':Segment) (v:V) (c:C) (x:R),
     embed (v, w, c) s' -> fst (term s') <= x -> x <= fst (init s') -> exists y:R, onSegment s' (x, y) /\ (match v with n => init_y s' <= y <= term_y s' | s => term_y  s' <= y <= init_y s' end).
 Proof.
-    intros. destruct v.
+    intros s' v c x H0 Hge0 Hge1. destruct v.
     - eapply exist_between_x_neg with (x2:=fst (init s')) (y2:= snd (init s')) (x1:=fst (term s')) (y1:= snd (term s')).
         + rewrite <- surjective_pairing. now eapply onTerm.
         + rewrite <- surjective_pairing. now eapply onInit.
         + apply Rlt_le. eapply n_end_relation. now eauto.
-        + exact H1.
-        + exact H2.
+        + exact Hge0.
+        + exact Hge1.
     - eapply exist_between_x_pos with (x2:=fst (init s')) (y2:= snd (init s')) (x1:=fst (term s')) (y1:= snd (term s')).
         + rewrite <- surjective_pairing. now eapply onTerm.
         + rewrite <- surjective_pairing. now eapply onInit.
         + apply Rlt_le. eapply s_end_relation. now eauto.
-        + exact H1.
-        + exact H2.
+        + exact Hge0.
+        + exact Hge1.
 Qed.
 
 Inductive ifl: PrimitiveSegment -> PrimitiveSegment -> Prop :=
@@ -254,7 +254,6 @@ Parameter concat_seg: list Segment -> Segment.
 Parameter extend: list Segment -> list Segment.
 
 Axiom len_equal_extended: forall (ls: list Segment), length ls = length (extend ls).
-Axiom double_extend: forall (ls: list Segment), extend (extend ls) = extend ls.
 Axiom head_extend: forall (ls1 ls2: list Segment), head (extend ls1) = head (extend (ls1 ++ ls2)).
 Axiom last_extend: forall (ls1 ls2: list Segment), last (extend ls1) = last (extend (ls2 ++ ls1)).
 
@@ -353,7 +352,7 @@ Lemma end_cross_term_nw:
     -> close (ls1 ++ ls2).
 Proof.
     intros sc ls1. induction ls1 as [|a ls1 IHl] using rev_ind.
-    - intros. now inversion H7.
+    - intros ls2 x1 y1 y2 _ _ _ _ _ _ _ _ _ _ _ Hcontra. now inversion Hcontra.
     - intros ls2 x1 y1 y2 hd1 tl1 tl2 tl2_ex Hsc H0 HnotNil Hembedhd1 Hembedtl2 HonSegtl2 HonSegtl1 Hallh.
       destruct ls1.
         (* ls1がシングルトンのとき *)
@@ -480,7 +479,7 @@ Proof.
                   + rewrite <- app_assoc in Hsc. eapply consist_init_term in Hsc. unfold init_x, init_y. rewrite <- surjective_pairing. simpl in Hsc. rewrite <- Hsc. simpl. now eapply onTerm. discriminate. discriminate.
                   + unfold all_same_h in Hallh. destruct Hallh as [_ Hforall]. unfold all_same_h. split. discriminate. rewrite Forall_app in Hforall. now apply Hforall.
                 
-                  - admit.
+                - admit.
 
                 - eapply x_cross_h with (s1:=nth (length (s0::ls1)) (extend (((s0 :: ls1) ++ [a]) ++ ls2)) default_segment) (s2:=tl2_ex).
                   * eapply nth_In. rewrite <- len_equal_extended. rewrite length_app. rewrite length_app. rewrite <- Nat.add_assoc. eapply Nat.lt_add_pos_r. simpl. now apply Nat.lt_0_succ.
