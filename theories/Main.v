@@ -5,6 +5,8 @@ Require Import PrimitiveSegment.
 Open Scope R_scope.
 Import ListNotations.
 
+Definition H := H.  (* TODO: 証明のintros とかで名前付けをサボらない*)
+
 (*セグメントは[0,1]->R*Rの関数
 埋め込み関係は次の条件を満たしたもの
 ・[0,1]で微分可能

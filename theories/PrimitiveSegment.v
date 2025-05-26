@@ -41,7 +41,7 @@ Definition i_c (c: C) : C :=
 match c with
 | cx => cc
 | cc => cx
-end. 
+end.
 
 (* PrimitiveSegment，単位セグメント *)
 Definition PrimitiveSegment := (V * H * C)%type.
