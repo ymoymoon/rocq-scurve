@@ -5,7 +5,11 @@ Require Import PrimitiveSegment.
 Open Scope R_scope.
 Import ListNotations.
 
-Definition H := H.  (* TODO: 証明のintros とかで名前付けをサボらない*)
+(*
+ * 自動で生成される名前がズレてしまうので無意味な定義を入れている。
+ * TODO: 証明のintros とかで名前付けをサボらない
+ *)
+Definition H := H.
 
 (*セグメントは[0,1]->R*Rの関数
 埋め込み関係は次の条件を満たしたもの
