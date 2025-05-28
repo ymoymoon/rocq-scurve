@@ -1,7 +1,6 @@
 Require Import Stdlib.Reals.Reals.
 Require Import Stdlib.Lists.List.
 Require Import Stdlib.Bool.Bool.
-Require Import FunInd.
 Require Import PrimitiveSegment.
 Open Scope R_scope.
 Import ListNotations.
@@ -42,27 +41,36 @@ Fixpoint eq_dirlist (xs ys: list Direction) : bool :=
 (* 向きのリストを単位セグメントに変換 *)
 
 (* 簡約 *)
-Definition r1 (xs: list Direction) : list Direction :=
+Definition r1 (xs: list PrimitiveSegment) : option (list PrimitiveSegment) :=
 match xs with
 | s1 :: s2 :: s3 :: xs' =>
-    if eq_dir s1 s3 && eq_dir s3 (inv s2) then
-      s1 :: xs'
+    if eq_dir (orn s1) (orn s3) && eq_dir (orn s3) (inv (orn s2)) then
+      Some (s1 :: xs')
     else
-      xs
-| _ => xs
+      None
+| _ => None
 end.
 
-Definition r2 (xs: list Direction) : list Direction :=
+Definition r2 (xs: list PrimitiveSegment) : option (list PrimitiveSegment) :=
 match xs with
 | s1 :: s2 :: s3 :: s4 :: xs' =>
-    if eq_dir s1 s2 && eq_dir s2 (inv s3) && eq_dir (inv s3) (inv s4) then
-      s1 :: s4 :: xs'
+    if eq_dir (orn s1) (orn s2) && eq_dir (orn s2) (inv (orn s3)) && eq_dir (inv (orn s3)) (inv (orn s4)) then
+      Some (s1 :: s4 :: xs')
     else
-      xs
-| _ => xs
+      None
+| _ => None
 end.
 
-Definition reductionStep (xs: list Direction) : list Direction :=
-  let xs := r1 xs in
-  let xs := r2 xs in
-  xs.
+Definition reductionStep (xs: list PrimitiveSegment) : list PrimitiveSegment :=
+  match r1 xs with
+  | Some xs' =>
+      match r2 xs' with
+      | Some xs'' => xs''
+      | None => xs'
+      end
+  | None =>
+      match r2 xs with
+      | Some xs' => xs'
+      | None => xs
+      end
+  end.
