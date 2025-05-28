@@ -23,15 +23,31 @@ match x with
 end.
 
 (* 簡約 *)
-Definition reduction (xs: list Direction) : list Direction :=
+Definition r1 (xs: list Direction) : list Direction :=
 match xs with
-| s1 :: s2 :: s3 :: s4 :: xs'  =>
+| s1 :: s2 :: s3 :: xs' =>
     if s1 = s3 and s3 = inv s2 then
-      s1 :: s4 :: xs'
+      s1 :: xs'
     else
+      xs
+| _ => xs
+end.
+
+Definition r2 (xs: list Direction) : list Direction :=
+match xs with
+| s1 :: s2 :: s3 :: s4 :: xs' =>
     if s1 = s2 and s2 = inv s3 and inv s3 = inv s4 then
       s1 :: s4 :: xs'
     else
       xs
 | _ => xs
 end.
+
+Fixpoint reduction (xs: list Direction) : list Direction :=
+  let xs' := xs in
+  let xs := r1 xs in
+  let xs := r2 xs in
+  if xs' = xs then
+    xs
+  else
+    reduction xs.
