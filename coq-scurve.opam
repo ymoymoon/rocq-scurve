@@ -1,0 +1,21 @@
+opam-version: "2.0"
+version: "dev"
+maintainer: "Yoshihiro Imai <y.imai@proof-ninja.co.jp>"
+
+homepage: "https://proof-ninja.co.jp/"
+bug-reports: "https://github.com/proof-ninja/coq-scurve/issues"
+dev-repo: "git+https://github.com/proof-ninja/coq-scurve"
+
+
+depends: [
+  "rocq-prover"
+  "rocq-equations"
+]
+
+authors: [
+  "y-tak6 <azulwrath13.2@gmail.com>"
+  "Yoshihiro Imai <y.imai@proof-ninja.co.jp>"
+  "cedretaber <cedretaber@proof-ninja.co.jp>"
+]
+
+synopsis: "Formalization of Admissibility of Qualitatively Represented Curves using Rocq"

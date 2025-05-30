@@ -19,8 +19,11 @@ jobs:
             rocq-released: https://rocq-prover.org/opam/released
             default: https://github.com/ocaml/opam-repository.git
 
-      - name: Install rocq
-        run: opam install -y rocq-prover
+      - name: Opam lint
+        run: opam lint
+
+      - name: Install dependencies
+        run: opam install -y . --deps-only
 
       - name: Build project
         run: |
