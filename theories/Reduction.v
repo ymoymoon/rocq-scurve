@@ -1,9 +1,8 @@
-Require Import Stdlib.Reals.Reals.
 Require Import Stdlib.Lists.List.
 Require Import Stdlib.Bool.Bool.
 Require Import PrimitiveSegment.
-Open Scope R_scope.
 Import ListNotations.
+From Equations Require Import Equations.
 
 (* 向き *)
 Inductive Direction : Set :=
@@ -74,3 +73,29 @@ Definition reductionStep (xs: list PrimitiveSegment) : list PrimitiveSegment :=
       | None => xs
       end
   end.
+
+(* r1, r2はすでに定義されているものとして、そいつらを使って1回変換する関数 *) 
+Definition rule ps :=
+  match r1 ps, r2 ps with
+  | Some ps', _ => Some ps'
+  | None, Some ps' => Some ps'
+  | None, None => None
+  end.
+
+(* ruleが適用できたらかならずちっさくなる *)
+Lemma rule_length_Some ps ps' :
+  rule ps = Some ps' -> length ps' < length ps.
+Admitted.
+
+Definition inspect {A} (a : A) : {b | a = b} := exist _ a eq_refl.
+Notation "x 'eqn' ':' p" := (exist _ x p) (only parsing, at level 20).
+
+(* 先頭部分についてルールを繰り返し適用する再帰関数 *)
+Equations? reduce_top (ps: list PrimitiveSegment)
+  : list PrimitiveSegment by wf (length ps) :=
+  reduce_top ps with inspect (rule ps) := {
+    | Some ps' eqn:e => reduce_top ps'
+    | None     eqn:e => ps
+    }.
+now apply rule_length_Some.
+Qed.
