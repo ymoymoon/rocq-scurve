@@ -33,7 +33,7 @@ Inductive ReduceDirStep : list Direction -> list Direction -> Prop :=
 
 Inductive ReduceDir : list Direction -> list Direction -> Prop :=
 | RDRefl : forall ds, ReduceDir ds ds
-| RDTrans : forall ds ds' ds'', ReduceDirStep ds ds' ->
+| RDTrans : forall ds ds' ds'', ReduceDirStep ds ds' -> ReduceDirStep ds' ds'' ->
     ReduceDir ds ds''
 .
 
