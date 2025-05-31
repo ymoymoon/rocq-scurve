@@ -1,8 +1,6 @@
 Require Import Stdlib.Lists.List.
-Require Import Stdlib.Bool.Bool.
 Require Import PrimitiveSegment.
 Import ListNotations.
-From Equations Require Import Equations.
 
 (* 向き *)
 Inductive Direction : Set :=
