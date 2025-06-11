@@ -81,6 +81,10 @@ Inductive ReduceDir : list Direction -> list Direction -> Prop :=
 Definition Reduce (p p': list PrimitiveSegment): Prop :=
   ReduceDir (map orn p) (map orn p').
 
+  (**
+    * 簡約の性質2: 回転差保持
+    * 簡約において +, − の個数の差は保持される.
+    *)
 Lemma rotation_difference_preservation:
   forall (ds ds': list Direction), ReduceDir ds ds' -> rotation_difference ds = rotation_difference ds'.
 Proof.
