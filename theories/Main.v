@@ -61,20 +61,20 @@ Definition head_seg (ls: list Segment) (def: Segment):= hd def ls.
 Definition onSegment (seg: Segment) (rr : R * R) := exists (t:R), 0 <= t <= 1 /\ seg t = rr.
 Definition onHeadSegment (seg: Segment) (rr : R * R) := exists (t:R), t <= 1 /\ seg t = rr.
 Definition onLastSegment (seg: Segment) (rr : R * R) := exists (t:R), 0 <= t /\ seg t = rr.
-Inductive onExtendSegment : list Segment -> Segment -> R * R -> Prop := 
-| OnSegHead : forall (hds: Segment) (ls: list Segment) (rr: R*R), 
+Inductive onExtendSegment : list Segment -> Segment -> R * R -> Prop :=
+| OnSegHead : forall (hds: Segment) (ls: list Segment) (rr: R*R),
     onHeadSegment hds rr
     -> onExtendSegment (hds :: ls) hds rr
 | OnSegMid : forall (ls: list Segment) (seg:Segment) (rr: R*R),
     ls <> []
     -> In seg ls
-    -> onSegment seg rr 
+    -> onSegment seg rr
     -> onExtendSegment ls seg rr
-| OnSegLast : forall (ls: list Segment) (rr: R*R), 
-    ls <> [] 
+| OnSegLast : forall (ls: list Segment) (rr: R*R),
+    ls <> []
     -> onLastSegment (last ls default_segment) rr
     -> onExtendSegment ls (last ls default_segment) rr.
-  
+
 Lemma ex_exists : forall (ls: list Segment) (seg: Segment) (rr : R * R), onExtendSegment ls seg rr -> exists (t:R), seg t = rr.
 Proof.
   intros ls seg rr Honex. inversion Honex.
@@ -117,6 +117,9 @@ Axiom n_onseg_relation: forall (s1: Segment) (h:H) (c:C) (x y: R),
 Axiom e_onseg_relation: forall (s1: Segment) (v:V) (c:C) (x y: R),
     embed (v, e, c) s1 -> onSegment s1 (x, y) -> fst (init s1) <= x /\ x <= fst (term s1).
 
+Axiom w_onseg_relation: forall (s1: Segment) (v:V) (c:C) (x y: R),
+    embed (v, w, c) s1 -> onSegment s1 (x, y) -> fst (term s1) <= x /\ x <= fst (init s1).
+
 (* 二点を通る時，その間にあるx座標を取ると，そのx座標の点がセグメント上に存在する（x(t)の連続性と中間値の定理で証明） *)
 (* 二点を通る時，その間にあるx座標を取ると，そのx座標の点がセグメント上に存在する（x(t)の連続性と中間値の定理で証明） *)
 Axiom exist_between_x_pos: forall (ls: list Segment) (seg: Segment) (x1 x2 y1 y2 x: R),
@@ -129,10 +132,10 @@ Axiom exist_between_x_neg: forall (ls: list Segment) (seg: Segment) (x1 x2 y1 y2
 Lemma e_exist_y: forall (ls: list Segment) (s':Segment) (v:V) (c:C) (x:R),
     embed (v, e, c) s' -> In s' ls -> ls <> [] -> fst (init s') <= x -> x <= fst (term s') -> exists y:R, onExtendSegment ls s' (x, y) /\ (match v with n => init_y s' <= y <= term_y s' | s => term_y  s' <= y <= init_y s' end).
 Proof.
-    intros ls s' v c x Hembed Hin Hnotnil Hge0 Hge1. 
+    intros ls s' v c x Hembed Hin Hnotnil Hge0 Hge1.
     assert(HonInitTerm: onExtendSegment ls s' (init_x s', init_y s') /\ onExtendSegment ls s' (term_x s', term_y s')).
     {
-      split. 
+      split.
       - eapply OnSegMid. exact Hnotnil. exact Hin.
         unfold init_x, init_y. rewrite <- surjective_pairing. now eapply onInit.
       - eapply OnSegMid. exact Hnotnil. exact Hin.
@@ -155,10 +158,10 @@ Qed.
 Lemma w_exist_y: forall (ls: list Segment) (s':Segment) (v:V) (c:C) (x:R),
     embed (v, w, c) s' -> In s' ls -> ls <> [] -> fst (term s') <= x -> x <= fst (init s') -> exists y:R, onExtendSegment ls s' (x, y) /\ (match v with n => init_y s' <= y <= term_y s' | s => term_y  s' <= y <= init_y s' end).
 Proof.
-  intros ls s' v c x Hembed Hin Hnotnil Hge0 Hge1. 
+  intros ls s' v c x Hembed Hin Hnotnil Hge0 Hge1.
   assert(HonInitTerm: onExtendSegment ls s' (init_x s', init_y s') /\ onExtendSegment ls s' (term_x s', term_y s')).
   {
-    split. 
+    split.
     - eapply OnSegMid. exact Hnotnil. exact Hin.
       unfold init_x, init_y. rewrite <- surjective_pairing. now eapply onInit.
     - eapply OnSegMid. exact Hnotnil. exact Hin.
@@ -179,7 +182,7 @@ Proof.
 Qed.
 
 Inductive ifl: PrimitiveSegment -> PrimitiveSegment -> Prop :=
-| Ifl: forall (v: V) (h: H) (c_x c_y : C), 
+| Ifl: forall (v: V) (h: H) (c_x c_y : C),
     c_x = i_c c_y -> ifl (v, h, c_x) (v, h, c_y).
 
 Inductive xtrv: PrimitiveSegment -> PrimitiveSegment -> Prop :=
@@ -217,8 +220,8 @@ exist _ (s :: (proj1_sig lp)) (IsScurveCons s (proj1_sig lp) (proj2_sig lp) A).
 lp: scurve にps: PrimitiveSegment をくっつけたものが (s2::ls): list Segment にs1: Segment をくっつけたものとして埋め込まれる関係　*)
 Inductive embed_scurve : scurve -> list Segment -> Prop :=
 | EmbedScurveNil : embed_scurve (exist _ nil IsScurveNil) nil
-| EmbedScurveSigle : forall (ps:PrimitiveSegment) (s:Segment), 
-    embed ps s 
+| EmbedScurveSigle : forall (ps:PrimitiveSegment) (s:Segment),
+    embed ps s
     -> embed_scurve (connect ps (exist _ nil IsScurveNil) (DcNil ps)) (s::nil)
 | EmbedScurveCons : forall (ps:PrimitiveSegment) (lp: scurve) (A: dc_pseg_hd ps (proj1_sig lp)) (s1 s2: Segment) (ls: list Segment),
     embed ps s1
@@ -226,7 +229,7 @@ Inductive embed_scurve : scurve -> list Segment -> Prop :=
     -> term s1 = init s2
     -> embed_scurve (connect ps lp A) (s1 :: s2 :: ls).
 
-  
+
 Lemma nth_head: forall (l:list Segment) (d: Segment), nth 0 l d = head_seg l d.
   Proof.
     intros l d. destruct l. simpl; reflexivity. simpl;reflexivity.
@@ -260,12 +263,12 @@ Proof.
   - intros sc Hembed. inversion Hembed as [ | ps s0 Hembedps Hconnect [_HHH Hnil]| ps sctl Hdc a' s2 lstl Hembedps Hembedsctl _Hconsis [Heqsc Heqa Hls]].
     + reflexivity.
     + subst. simpl. apply IHls in Hembedsctl. rewrite Hembedsctl. reflexivity.
-Qed. 
+Qed.
 
 
 
 
-Parameter extend : list Segment -> (R -> R * R). 
+Parameter extend : list Segment -> (R -> R * R).
 
 Definition close_extended (c: Segment):=
   exists (t1 t2: R), t1 <> t2 /\ c t1 = c t2.
@@ -304,7 +307,7 @@ Axiom extended_segment_term_w_ncx : forall (ls: list Segment) (x x1 y1: R),
 let last_s := last ls default_segment in
 embed (n, w, cx) last_s -> onExtendSegment ls last_s (x1, y1) ->  x <= x1 -> exists (y: R), onExtendSegment ls last_s (x, y) /\ y1 <= y.
 
-Axiom x_cross_h: 
+Axiom x_cross_h:
     forall (ls: list Segment) (s1 s2: Segment) (xa xb y1a y1b y2a y2b: R),
     In s1 ls
     -> In s2 ls
@@ -315,7 +318,7 @@ Axiom x_cross_h:
     -> (y1a - y2a) * (y1b - y2b) < 0
     -> close ls.
 
-Axiom x_cross_v: 
+Axiom x_cross_v:
     forall (ls: list Segment) (s1 s2: Segment) (ya yb x1a x1b x2a x2b: R),
     In s1 ls
     -> In s2 ls
@@ -328,6 +331,24 @@ Axiom x_cross_v:
 
 
 
+
+(* (n,e,cx)から始まり右にいくらか伸びて、真ん中は自由で、最後は左に伸びたあと(n,w,_)で終わる場合
+   右に行く往路と左に行く復路で共通のxに対して y復路<y往路の場合、このセグメントはどこかで交わる *)
+(* s1とs2は往路と復路で共通のxをもつセグメント *)
+Lemma end_nwcx_close: forall sc s_start s_end c x y1 y2 l s1 center s2 r,
+  embed_scurve sc (l ++ [s1] ++ center ++ [s2] ++ r) ->
+  head (l ++ [s1]) = Some s_start ->
+  embed (n, e, cx) s_start ->
+  last ([s2] ++ r) default_segment = s_end ->
+  embed (n, w, c) s_end ->
+  all_same_h (l ++ [s1]) e ->  (*往路は東に伸びる*)
+  all_same_h ([s2] ++ r) w ->  (*復路は西に伸びる*)
+  onSegment s1 (x, y1) ->
+  onSegment s2 (x, y2) ->
+  y2 < y1 ->
+  close (l ++ [s1] ++ center ++ [s2] ++ r).
+Proof.
+Admitted.
 
 (* n,e,cxから始まり，しばらく右に伸びている，(x1, y2)を通る．
 最後のセグメントが左上で，(x1, y1)を通る．
@@ -349,7 +370,7 @@ Axiom end_cross_term_nw:
     -> onExtendSegment (ls1 ++ ls2) tl1 (x1, y2)
     -> all_same_h ls1 e
     -> close (ls1 ++ ls2).
-    
+
 
 Axiom end_cross_init_ne:
     forall (sc: scurve) (ls1 ls2: list Segment) (x1 y1 y2: R),
@@ -367,6 +388,30 @@ Axiom end_cross_init_ne:
     -> close (ls1++ls2).
 
 
+Lemma embed_scurve_inv_Cons sc p1 p2 ps ss:
+  embed_scurve sc ss ->
+  proj1_sig sc = (p1 :: p2 :: ps) ->
+  exists s1 s2 rest sc',
+    ss = s1 :: s2 :: rest /\ proj1_sig sc' = p2 :: ps /\ embed_scurve sc' (s2 :: rest)
+    /\ embed p1 s1 /\ term s1 = init s2.
+Proof.
+  intros emb e_proj1. inversion emb as [esc _e| p1' s1 emb1 esc| p1' sc' A s1 s2 ss_tail emb1 emb' term_init conn e_ss] .
+  - now rewrite <- esc in e_proj1.
+  - now rewrite <- esc in e_proj1.
+  - rewrite <- conn in e_proj1.
+    injection e_proj1 as _p1' e_proj1'. subst p1'.
+    now exists s1, s2, ss_tail, sc'.
+Qed.
+
+Lemma embed_scurve_inv_Single sc p ss:
+  embed_scurve sc ss -> proj1_sig sc = [p] ->
+  exists s, ss = [s] /\ embed p s.
+Proof.
+  intros emb e_proj1. inversion emb as [esc _e|p' s emb1 esc|p' sc' A s1 s2 ss' emb1 emb'].
+  - now rewrite <- esc in e_proj1.
+  - rewrite <- esc in e_proj1. injection e_proj1 as _ep'. subst. now exists s.
+  - subst. simpl in e_proj1. inversion emb'; now subst.
+Qed.
 
 
 Definition example1: list PrimitiveSegment := [(n,e,cx);(s,e,cx);(s,w,cc);(n,w,cc)].
@@ -400,7 +445,7 @@ Proof.
               destruct (Rle_or_lt (fst (init s1)) (fst (term s2))) as [Hge | Hlt].
               + set (x1 := fst (init s3)).
               set (y1 := snd (init s3)).
-              assert (Hxins1:fst (term s2) < fst (term s1)). 
+              assert (Hxins1:fst (term s2) < fst (term s1)).
                 {rewrite Hconsis12. apply w_end_relation with (s:=s2) (v:=s) (c:=cc). exact Hembed2. }
               assert (Hyins1: exists y:R, onSegment s1 (x1, y)).
                 {
@@ -409,13 +454,13 @@ Proof.
                         + right; left; reflexivity.
                         + discriminate.
                         + unfold x1. rewrite <- Hconsis23. apply Hge.
-                        + unfold x1. rewrite <- Hconsis23. apply Rlt_le. exact Hxins1. 
+                        + unfold x1. rewrite <- Hconsis23. apply Rlt_le. exact Hxins1.
                 }
               destruct Hyins1 as [y2 HonSeg].
               eapply end_cross_term_nw with (ls1:=[s0;s1]) (x1:=x1) (y1:=y1).
-                ++ simpl. exact Hembed_ls. 
+                ++ simpl. exact Hembed_ls.
                 ++ apply Rlt_le_trans with (r2 := snd (term s1)). unfold y1. rewrite <- Hconsis23. rewrite Hconsis12. apply s_end_relation with (s1:=s2) (h:=w) (c:=cc). apply Hembed2.
-                    apply s_onseg_relation with (s1:=s1) (h:=e) (c:=cx) (x:=x1) (y:=y2). apply Hembed1. exact HonSeg. 
+                    apply s_onseg_relation with (s1:=s1) (h:=e) (c:=cx) (x:=x1) (y:=y2). apply Hembed1. exact HonSeg.
                 ++ unfold not.  intros Hcontra. discriminate.
                 ++ simpl. exact Hembed0.
                 ++ simpl. left. exact Hembed3.
@@ -433,7 +478,7 @@ Proof.
                     + destruct Hembed2' as [yy H']. exists yy. destruct H' as [HonEx _]. inversion HonEx as [ls' rr _Hnotnil _Hhead _Heq Heqs1 _Hrr| ls s1' rr _Hnotnil _Hin HonSegs1 _Heq1 _Heq2 _Heq3 | ls' rr _Hnotnil _Hlast _Heq Heqs1 _Hrr].
                       - simpl in Heqs1. eapply w_end_relation in Hembed2. eapply e_end_relation in Hembed0. rewrite <- Heqs1 in Hembed2. now lra.
                       - exact HonSegs1.
-                      - simpl in Heqs1. eapply s_end_relation in Hembed2. rewrite Hconsis23 in Hembed2. rewrite Heqs1 in Hembed2. now lra. 
+                      - simpl in Heqs1. eapply s_end_relation in Hembed2. rewrite Hconsis23 in Hembed2. rewrite Heqs1 in Hembed2. now lra.
                     + right; right; left; reflexivity.
                     + discriminate.
                     + unfold x1. apply Rlt_le. apply Hlt.
@@ -441,8 +486,8 @@ Proof.
                  }
               destruct Hyins1 as [y2 HonSeg].
               eapply end_cross_init_ne with (ls1 := [s0;s1]) (x1:=x1) (y1:=y1).
-                ++ simpl. exact Hembed_ls. 
-                ++ apply Rle_lt_trans with (r2:= snd (term s1)). unfold y1. rewrite Hconsis12. apply s_onseg_relation with (s1:=s2) (h:=w) (c:=cc) (x:= x1) (y:=y2). apply Hembed2. apply HonSeg. 
+                ++ simpl. exact Hembed_ls.
+                ++ apply Rle_lt_trans with (r2:= snd (term s1)). unfold y1. rewrite Hconsis12. apply s_onseg_relation with (s1:=s2) (h:=w) (c:=cc) (x:= x1) (y:=y2). apply Hembed2. apply HonSeg.
                     unfold y1. apply s_end_relation with (s1:=s1) (h:=e) (c:=cx). exact Hembed1.
                 ++ discriminate.
                 ++ simpl. right. exact Hembed0.
@@ -450,12 +495,23 @@ Proof.
                 ++ simpl. unfold x1, y1. rewrite <- surjective_pairing. rewrite <- Hconsis01. now eapply onTerm.
                 ++ exact HonSeg.
                 ++ simpl. unfold all_same_h. split. discriminate. econstructor. exists n,cc. exact Hembed3. econstructor. exists s,cc. exact Hembed2. now auto.
-            * inversion Hembed_ls as [| | ps lp H s4 s5 ls0 Hembed0 Hembedsc1 Hconsis01 Hlcons [H1 H2 H3]]. subst. 
-              inversion Hembedsc1 as [| | ps1 scurve2 Hdc1 s1' s2' ls0 Hembed1 Hembedsc2 Hconsis12 Hconnect1 [H1 H2 H3]]. subst. 
-              inversion Hembedsc2 as [| | ps2 scurve3 Hdc2 s2' s3' ls1 Hembed2 Hembedsc3 Hconsis23 Hconnect2 [H1 H2 H3]]. subst. 
-              inversion Hembedsc3 as [| |ps3 scurve4 Hdc3 s3' s4' ls2 Hembed3 Hembedsc4 Hconsis34 Hconnect3 [H1 H2 H3]]. subst. simpl in *. 
-              inversion Hlcons as [[Hps0 Hps1 Hps2 Hps3 Hsc4nil]]. 
+            * inversion Hembed_ls as [| | ps lp H s4 s5 ls0 Hembed0 Hembedsc1 Hconsis01 Hlcons [H1 H2 H3]]. subst.
+              inversion Hembedsc1 as [| | ps1 scurve2 Hdc1 s1' s2' ls0 Hembed1 Hembedsc2 Hconsis12 Hconnect1 [H1 H2 H3]]. subst.
+              inversion Hembedsc2 as [| | ps2 scurve3 Hdc2 s2' s3' ls1 Hembed2 Hembedsc3 Hconsis23 Hconnect2 [H1 H2 H3]]. subst.
+              inversion Hembedsc3 as [| |ps3 scurve4 Hdc3 s3' s4' ls2 Hembed3 Hembedsc4 Hconsis34 Hconnect3 [H1 H2 H3]]. subst. simpl in *.
+              inversion Hlcons as [[Hps0 Hps1 Hps2 Hps3 Hsc4nil]].
               inversion Hembedsc4 as [| psov sov Hembedov Hconnectov [Hsov Hnil]| psov scov Hdcov sov' s4 ls0 Hembedov Hembedscov Hconsisov Hconnectov [H1 H2]].
             ** subst. simpl in *. discriminate.
             ** subst. discriminate.
 Qed.
+
+(* initとtermは異なる点 *)
+Axiom neq_init_term : forall seg, init seg <> term seg.
+
+(*2つの異なる点を共有していたら延長考えなくともclose*)
+Lemma have_two_same_point_close s1 s2 i j p1 p2 l :
+  i <> j -> List.nth_error l i = Some s1 -> List.nth_error l j = Some s2 ->
+  onSegment s1 p1 -> onSegment s1 p2 -> onSegment s2 p1 -> onSegment s2 p2 ->
+  p1 <> p2 ->
+  close l.
+Admitted.
