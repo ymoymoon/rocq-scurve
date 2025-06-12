@@ -4,7 +4,7 @@ Require Import PrimitiveSegment.
 Require Import Main.
 
 Hint Resolve onInit onTerm neq_init_term : core.
-Hint Constructors is_scurve dc_pseg_hd ifl xtrv xtrh: core.
+Hint Constructors is_scurve dc_pseg_hd dc: core.
 
 Lemma exist_between_x_pos' s x1 x2 y1 y2 x:
   onSegment s (x1, y1) -> onSegment s (x2, y2) -> y1 <= y2 -> x1 <= x -> x <= x2 ->
@@ -56,13 +56,7 @@ Qed.
 Definition example3_list: list PrimitiveSegment :=
   [(n,e,cx); (s,e,cx); (s,w,cc); (n,w,cc); (n,w,cx)].
 Lemma example3_scurve : is_scurve example3_list.
-Proof.
-  repeat apply IsScurveCons; constructor.
-  - now left.
-  - now right; left.
-  - now right; right.
-  - now right; left.
-Qed.
+Proof. repeat constructor. Qed.
 
 Definition example3 := exist _ example3_list example3_scurve.
 
