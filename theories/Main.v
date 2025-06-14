@@ -181,23 +181,14 @@ Proof.
     + exact Hge1.
 Qed.
 
-Inductive ifl: PrimitiveSegment -> PrimitiveSegment -> Prop :=
-| Ifl: forall (v: V) (h: H) (c_x c_y : C),
-    c_x = i_c c_y -> ifl (v, h, c_x) (v, h, c_y).
-
-Inductive xtrv: PrimitiveSegment -> PrimitiveSegment -> Prop :=
-| XtrvN: forall h: H, xtrv (n, h, cx) (s, h, cx)
-| XtrvS: forall h: H, xtrv (s, h, cc) (n, h, cc)
-.
-
-Inductive xtrh: PrimitiveSegment -> PrimitiveSegment -> Prop :=
-| XtrhN: forall h: H, xtrh (n, h, cc) (n, i_h h, cx)
-| XtrhS: forall h: H, xtrh (s, h, cx) (s, i_h h, cc)
-.
-
 (* direct connect, 直接連結可能 *)
-Definition dc (x y: PrimitiveSegment) : Prop :=
-ifl x y \/ xtrv x y \/ xtrh x y.
+Inductive dc : PrimitiveSegment -> PrimitiveSegment -> Prop :=
+| DIfl v h c : dc (v, h, c) (v, h, i_c c)
+| DXtrvN h: dc (n, h, cx) (s, h, cx)
+| DXtrvS h: dc (s, h, cc) (n, h, cc)
+| DXtrhN h: dc (n, h, cc) (n, i_h h, cx)
+| DXtrhS h: dc (s, h, cx) (s, i_h h, cc)
+.
 
 (* 単位セグメントが単位セグメントのリストの先頭と連結可能かどうか *)
 Inductive dc_pseg_hd: PrimitiveSegment -> list PrimitiveSegment -> Prop :=
@@ -415,6 +406,8 @@ Qed.
 
 
 Definition example1: list PrimitiveSegment := [(n,e,cx);(s,e,cx);(s,w,cc);(n,w,cc)].
+Lemma example1_is_scurve: is_scurve example1.
+Proof. repeat constructor. Qed.
 
 Lemma example1_is_close: forall lp: scurve, proj1_sig lp = example1 -> ~ admissible lp.
 Proof.
