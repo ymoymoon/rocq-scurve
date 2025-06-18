@@ -280,23 +280,23 @@ Definition all_same_h (ls: list Segment) (h: H) :=
     exist_between_pos/negで証明可能？ *)
 Axiom extended_segment_init_n : forall (ls: list Segment) (h: H) (y x1 y1: R),
 let head := head_seg ls default_segment in
-embed (n, h, cx) head -> onExtendSegment ls head (x1, y1) -> y <= y1 -> exists (x: R), onExtendSegment ls head (x, y) /\ (match h with e => x <= x1 | w => x1 <= x end).
+embed (n, h, cx) head -> onHeadSegment head (x1, y1) -> y <= y1 -> exists (x: R), onHeadSegment (head_seg ls default_segment) (x, y) /\ (match h with e => x <= x1 | w => x1 <= x end).
 
 Axiom extended_segment_init_e_scx : forall (ls: list Segment) (x x1 y1: R),
 let head := head_seg ls default_segment in
-embed (s, e, cx) head -> onExtendSegment ls head (x1, y1) -> x <= x1 -> exists (y: R), onExtendSegment ls head (x, y) /\ y1 <= y.
+embed (s, e, cx) head -> onHeadSegment head (x1, y1) -> x <= x1 -> exists (y: R), onHeadSegment (head_seg ls default_segment) (x, y) /\ y1 <= y.
 
 Axiom extended_segment_init_e_ncc : forall (ls: list Segment) (x x1 y1: R),
 let head := head_seg ls default_segment in
-embed (n, e, cc) head -> onExtendSegment ls head (x1, y1) -> x <= x1 -> exists (y: R), onExtendSegment ls head (x, y) /\ y <= y1.
+embed (n, e, cc) head -> onHeadSegment head (x1, y1) -> x <= x1 -> exists (y: R), onHeadSegment (head_seg ls default_segment) (x, y) /\ y <= y1.
 
 Axiom extended_segment_term_n : forall (ls: list Segment) (h: H) (y x1 y1: R),
 let last_s := last ls default_segment in
-embed (n, h, cc) last_s -> onExtendSegment ls last_s (x1, y1) ->  y1 <= y -> exists (x: R), onExtendSegment ls (last ls default_segment) (x, y) /\ (match h with e => x1 <= x | w => x <= x1 end).
+embed (n, h, cc) last_s -> onLastSegment last_s (x1, y1) ->  y1 <= y -> exists (x: R), onLastSegment (last ls default_segment) (x, y) /\ (match h with e => x1 <= x | w => x <= x1 end).
 
 Axiom extended_segment_term_w_ncx : forall (ls: list Segment) (x x1 y1: R),
 let last_s := last ls default_segment in
-embed (n, w, cx) last_s -> onExtendSegment ls last_s (x1, y1) ->  x <= x1 -> exists (y: R), onExtendSegment ls last_s (x, y) /\ y1 <= y.
+embed (n, w, cx) last_s -> onLastSegment last_s (x1, y1) ->  x <= x1 -> exists (y: R), onLastSegment last_s (x, y) /\ y1 <= y.
 
 Axiom x_cross_h:
     forall (ls: list Segment) (s1 s2: Segment) (xa xb y1a y1b y2a y2b: R),
@@ -499,6 +499,8 @@ Proof.
 Qed.
 
 (* initとtermは異なる点 *)
+Axiom neq_init_term_x : forall seg, init_x seg <> term_x seg.
+Axiom neq_init_term_y : forall seg, init_y seg <> term_y seg.
 Axiom neq_init_term : forall seg, init seg <> term seg.
 
 (*2つの異なる点を共有していたら延長考えなくともclose*)
