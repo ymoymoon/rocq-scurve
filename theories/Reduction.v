@@ -1,4 +1,4 @@
-Require Import Stdlib.Lists.List.
+Require Import ListExt.
 Require Import ZArith.
 Require Import PrimitiveSegment.
 Import ListNotations.
@@ -92,4 +92,60 @@ Proof.
   induction H as [| ds ds']; [now reflexivity |].
   apply rotation_difference_preservation_step in H.
   rewrite H. now apply IHReduceDir.
+Qed.
+
+
+
+Notation have_common_reduce ds1 ds2 := (exists ds', ReduceDir ds1 ds' /\ ReduceDir ds2 ds').
+
+Lemma non_overlap_reduction_confluence l c r ds1 ds2 ds1' ds2':
+  Rule ds1 ds1' -> Rule ds2 ds2' ->
+  have_common_reduce (l ++ ds1' ++ c ++ ds2 ++ r) (l ++ ds1 ++ c ++ ds2' ++ r).
+Admitted.
+
+Lemma Rule_app_inv r1 r2 ds1l ds1r ds1 ds2 ds1' ds2': (* 14パターン列挙 *)
+  ds1r <> [] -> ds1 = ds1l ++ ds1r ->
+  Rule ds1 ds1' ->
+  Rule ds2 ds2' ->
+  ds2 ++ r2 = ds1r ++ r1 ->
+  (ds1l = [] /\ ds1r = ds2)
+  \/ (ds1l = [Plus] /\ ds1r = [Minus; Plus] /\ ds2 = [Minus; Plus; Minus])
+(*  \/ (...)*)
+.
+Admitted.
+
+Lemma eq_have_common_reduce ds1 ds2: ds1 = ds2 -> have_common_reduce ds1 ds2.
+Admitted.
+
+Lemma ReduceDirStep_Reduce_dir ds ds': ReduceDirStep ds ds' -> ReduceDir ds ds'.
+Admitted.
+
+Lemma ReduceDir_local_confluence_aux l1 r1 ds1 ds1' l2 r2 ds2 ds2':
+  Rule ds1 ds1' ->
+  Rule ds2 ds2' ->
+  l2 ++ ds2 ++ r2 = l1 ++ ds1 ++ r1 ->
+  Prefix l1 l2 ->
+  have_common_reduce (l1 ++ ds1' ++ r1) (l2 ++ ds2' ++ r2).
+Admitted.
+
+Lemma exists_iff {A:Type} (P Q : A -> Prop) :
+  (forall x, P x <-> Q x) -> (exists x, P x) <-> (exists x, Q x).
+Proof.
+  intros pq. now split; intros [x p]; exists x; [rewrite <- pq| rewrite pq].
+Qed.
+
+Lemma ReduceDir_local_confluence src dst1 dst2:
+  ReduceDirStep src dst1 ->
+  ReduceDirStep src dst2 ->
+  have_common_reduce dst1 dst2.
+Proof.
+  intros step1 step2.
+  inversion step1 as [l1 r1 ds1 ds1' rule1 e1 e2].
+  inversion step2 as [l2 r2 ds2 ds2' rule2 e12 e22]. subst.
+  destruct (@prefix_brothers_is_prefix _ l1 l2 (l1 ++ (ds1 ++ r1))) as [prefix|prefix].
+  - now auto.
+  - now rewrite <- e12.
+  - now apply (ReduceDir_local_confluence_aux _ _ _ _ _ _ _ _ rule1 rule2).
+  - rewrite (exists_iff _ _ (fun ds => and_comm _ _)).
+    now eapply (ReduceDir_local_confluence_aux _ _ _ _ _ _ _ _ rule2 rule1).
 Qed.
