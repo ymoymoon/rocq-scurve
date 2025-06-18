@@ -1,4 +1,5 @@
 -R theories scurve
+theories/ListExt.v
 theories/PrimitiveSegment.v
 theories/Main.v
 theories/Example3.v
