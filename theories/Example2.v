@@ -5,15 +5,30 @@ Require Import PrimitiveSegment.
 Require Import Main.
 Require Import Lra.
 
-Axiom x_consis: forall s1 s2, term s1 = init s2 -> term_x s1 = init_x s2.
-Axiom y_consis: forall s1 s2, term s1 = init s2 -> term_y s1 = init_y s2.
-Axiom neq_init_term_x : forall seg, init_x seg <> term_x seg.
+Lemma x_consis: forall s1 s2, term s1 = init s2 -> term_x s1 = init_x s2.
+Proof.
+  intros s1 s2 H. unfold init_x, term_x. rewrite H. reflexivity.
+Qed.
 
-Axiom exist_between_x: forall (ls: list Segment) (seg: Segment) (x1 x2 y1 y2 x: R),
-    onExtendSegment ls seg (x1, y1) -> onExtendSegment ls seg (x2, y2) -> x1 <= x -> x <= x2 -> exists y:R, onExtendSegment ls seg (x, y).
+Lemma y_consis: forall s1 s2, term s1 = init s2 -> term_y s1 = init_y s2.
+Proof.
+  intros s1 s2 H. unfold init_y, term_y. rewrite H. reflexivity.
+Qed.
 
-Axiom onTermEx: forall (ls: list Segment) (seg: Segment), onExtendSegment ls seg (term seg).
-Axiom onInitEx: forall (ls: list Segment) (seg: Segment), onExtendSegment ls seg (init seg).
+(* psの場合分けとn_end_relationとs_end_relationでできそう *)
+Lemma neq_init_term_x : forall seg ps, embed ps seg -> init_x seg <> term_x seg.
+Admitted.
+
+(* exsit_betweenシリーズでいけそう *)
+Lemma exist_between_x: forall (ls: list Segment) (seg: Segment) (ps: PrimitiveSegment) (x1 x2 y1 y2 x: R),
+    onExtendSegment ls seg (x1, y1) -> onExtendSegment ls seg (x2, y2) -> embed ps seg -> x1 <= x -> x <= x2 -> exists y:R, onExtendSegment ls seg (x, y).
+Admitted.
+
+(* onExtendedSegmentのinversionでできそう *)
+Lemma onTermEx: forall (ls: list Segment) (seg: Segment), onExtendSegment ls seg (term seg).
+Admitted.
+Lemma onInitEx: forall (ls: list Segment) (seg: Segment), onExtendSegment ls seg (init seg).
+Admitted.
 
 Lemma have_two_same_point_ex_close s1 s2 i j p1 p2 l ls:
   i <> j -> List.nth_error l i = Some s1 -> List.nth_error l j = Some s2 ->
@@ -28,6 +43,7 @@ Lemma have_same_point_app_close s1 s2 s ls1 ls2 p:
   close (ls1 ++ [s] ++ ls2).
 Admitted.
 
+(* under_all_eの弱いバージョン．underはx1, y1を通り，常に右を向いているlseの一番最後尾にx1がないといけない *)
 Axiom under_all_e_aux:
   forall (sc: scurve) (ls1 lse ls2 ls3: list Segment) (under: Segment) (x1 xh y1 yh yl: R),
   let ls := (ls1 ++ lse ++ ls2 ++ (under :: ls3)) in
@@ -39,7 +55,7 @@ Axiom under_all_e_aux:
   -> onExtendSegment ls (last lse default_segment) (x1, yl) /\ y1 < yl
   -> close ls \/ exists (seg:Segment) (y2:R), In seg lse /\ onExtendSegment ls seg (term_x under, y2) /\ term_y under < y2.
 
-
+(* リストに関する一般的な補題，utilなどができたらそちらに移行したい *)
 Lemma in_app_app: forall [A: Type] (ls: list A) (a: A) , In a ls -> exists ls1 ls2, ls = ls1 ++ [a] ++ ls2.
 Proof.
   intros A ls. induction ls as [| a ls IHls].
@@ -48,7 +64,6 @@ Proof.
     + exists [], ls. simpl. rewrite Heqa. reflexivity.
     + apply IHls in Hin. destruct Hin as [ls1' [ls2' Heq]]. exists (a::ls1'), ls2'. rewrite Heq. reflexivity.
 Qed.
-
 Lemma last_app: forall [A:Type] (l r:list A) (d: A), r <> [] -> last r d = last (l ++ r) d.
 Proof.
   intros A l r. revert l. induction r as [| a res IHr].
@@ -62,6 +77,9 @@ Proof.
       rewrite Heq2. apply IHr. discriminate.
 Qed.
 
+(* auxから少し使える範囲を増やした．
+  ただし，underのtermは，x1があるlse上のセグメント(segonx1)のtermの右にいけない．（term_x under < term_x segonx1）
+  特徴としてはunderが西向きの場合は常に使用可能 *)
 Lemma under_all_e_aux_2:
   forall (sc: scurve) (ls1 lse ls2 ls3: list Segment) (under segonx1: Segment) (x1 xh y1 yh yl: R),
   let ls := (ls1 ++ lse ++ ls2 ++ (under :: ls3)) in
@@ -101,6 +119,9 @@ Proof.
   - rewrite last_last. rewrite <- Heqls. unfold ls in Hsegonx1. split. now eapply Hsegonx1. now eapply Hsegonx1. 
 Qed.
 
+(* aux_2から先述の条件を減らしたもの
+  現状，example2の証明で使用しているが，この部分はaux_2で十分なため，この公理は必要ないかもしれない
+  また証明可能かどうかについても少し怪しい *)
 Axiom under_all_e:
   forall (sc: scurve) (ls1 lse ls2 ls3: list Segment) (under segonx1: Segment) (x1 xh y1 yh yl: R),
   let ls := (ls1 ++ lse ++ ls2 ++ (under :: ls3)) in
@@ -112,8 +133,8 @@ Axiom under_all_e:
   In segonx1 lse /\ onExtendSegment ls segonx1 (x1, yl) /\ x1 < term_x segonx1 /\ y1 < yl ->
   close ls \/ exists (seg:Segment) (y2:R), In seg lse /\ onExtendSegment ls seg (term_x under, y2) /\ term_y under < y2 /\ term_x under < term_x seg.
 
-(* example1~3に使いやすい形の補題 *)
-Axiom all_e_swcc:
+(* under_all_eをexample1~3に使いやすい形にした補題，証明は少し難しいかもしれないができると思う *)
+Lemma all_e_swcc:
   forall (sc: scurve) (lse ls2: list Segment) (secx_seg swcc_seg: Segment),
   let ls := (lse ++ [secx_seg; swcc_seg] ++ ls2) in
   embed_scurve sc ls
@@ -121,9 +142,10 @@ Axiom all_e_swcc:
   -> all_same_h (lse ++ [secx_seg]) e
   -> embed (n,e,cc) (head_seg (lse ++ [secx_seg]) default_segment) \/ embed (n,e,cx) (head_seg (lse ++ [secx_seg]) default_segment)
   -> close ls \/ exists (seg:Segment) (y2:R), In seg (lse ++ [secx_seg]) /\ onExtendSegment ls seg (term_x swcc_seg, y2) /\ term_y swcc_seg < y2 /\ term_x swcc_seg < term_x seg.
+Admitted.
 
-
-Axiom end_e_close: forall sc l s1 le secx_seg swcc_seg lw s2 r s3 ler x y1 y2 ymid,
+(* 詳細はweeklyのhack.mdにて，証明は長そう． *)
+Lemma end_e_close: forall sc l s1 le secx_seg swcc_seg lw s2 r s3 ler x y1 y2 ymid,
   let ls := (l ++ [s1] ++ le ++ lw ++ [s2] ++ r ++ ler) in
   embed_scurve sc ls ->
   last ([s1] ++ le) default_segment = secx_seg ->
@@ -139,6 +161,7 @@ Axiom end_e_close: forall sc l s1 le secx_seg swcc_seg lw s2 r s3 ler x y1 y2 ym
   onExtendSegment ls s3 (x, ymid) ->
   y2 < ymid < y1 ->
   close ls.
+Admitted.
 
 Definition example2_list: list PrimitiveSegment :=
   [(n,e,cc);(n,e,cx);(s,e,cx);(s,w,cc);(n,w,cc);(n,e,cx);(n,e,cc)].
@@ -229,19 +252,19 @@ Proof.
     - destruct (Rlt_or_le (term_x s6) (init_x s5)) as [Hmins6 | Hmins5].
        (* 最小値はterm_x s6 *)
       + exists (term_x s6). 
-        eapply e_exist_y with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb6 as emb6';[| repeat ((try (now left)); right) |discriminate |apply Rlt_le;eapply e_end_relation;now eauto | now lra].
+        eapply e_exist_y_ex with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb6 as emb6';[| repeat ((try (now left)); right) |discriminate |apply Rlt_le;eapply e_end_relation;now eauto | now lra].
         destruct emb6' as [ys6 [_onExs6 Hleys6]]. exists ys6.
-        eapply exist_between_x with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) (x:=term_x s6) (x1:=term_x s5) (x2:=term_x overs5) in onseg5; [|unfold term_x; erewrite <- surjective_pairing; eapply onTermEx |unfold term_x; rewrite terminit5; eapply Rlt_le; eapply e_end_relation; exact emb6 |now lra].
+        eapply exist_between_x with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) (x:=term_x s6) (x1:=term_x s5) (x2:=term_x overs5) in onseg5; [|unfold term_x; erewrite <- surjective_pairing; eapply onTermEx | exact overs5_e |unfold term_x; rewrite terminit5; eapply Rlt_le; eapply e_end_relation; exact emb6 |now lra].
         destruct onseg5 as [ys6over _onExovers5]. exists ys6over.
-        eapply w_exist_y with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb5.
-        * destruct emb5 as [y6under [_onExs5 Hley]]. exists y6under. repeat (split; try now eauto). unfold term_y in Hley. rewrite terminit5 in Hley. unfold init_y in Hleys6. now lra.  unfold not. intros Hcontra. apply eq_sym in Hcontra. eapply neq_init_term_x. now eauto.
+        eapply w_exist_y_ex with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb5.
+        * destruct emb5 as [y6under [_onExs5 Hley]]. exists y6under. repeat (split; try now eauto). unfold term_y in Hley. rewrite terminit5 in Hley. unfold init_y in Hleys6. now lra.  unfold not. intros Hcontra. apply eq_sym in Hcontra. eapply neq_init_term_x;[| now eauto]. now eauto.
         * repeat ((try (now left)); right).
         * discriminate.
         * rewrite terminit5. apply Rlt_le. eapply e_end_relation; exact emb6.
         * unfold term_x, init_x in Hmins6. unfold term_x. now lra.
       (* 最小値はinit_x s5 *)
       + exists (init_x s5).
-        eapply e_exist_y with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb6 as emb6';
+        eapply e_exist_y_ex with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb6 as emb6';
           [ |
           repeat ((try (now left)); right) |
           discriminate |
@@ -250,13 +273,14 @@ Proof.
         eapply exist_between_x with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) (x:=init_x s5) (x1:=term_x s5) (x2:=term_x overs5) in onseg5; 
           [ |
           unfold term_x; erewrite <- surjective_pairing; eapply onTermEx |
+          exact overs5_e|
           unfold term_x; rewrite terminit5; eapply Rlt_le; unfold init_x; rewrite <- terminit5; eapply w_end_relation;now eauto |
           now lra].
-        eapply w_exist_y with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb5.
+        eapply w_exist_y_ex with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb5 as emb5'.
         * destruct emb6' as [ys6 [_onExs6 Hleys6]]. exists ys6.
           destruct onseg5 as [ys6over _onExovers5]. exists ys6over.
-          destruct emb5 as [y6under [_onExs5 Hley]]. exists y6under.
-          repeat (split; try now eauto). erewrite y_consis with (s2:= s6) in Hley. now lra. now auto. unfold not. intros Hcontra. apply eq_sym in Hcontra. erewrite <- x_consis in Hcontra. eapply neq_init_term_x. apply eq_sym. now eauto. now auto. 
+          destruct emb5' as [y6under [_onExs5 Hley]]. exists y6under.
+          repeat (split; try now eauto). erewrite y_consis with (s2:= s6) in Hley. now lra. now auto. unfold not. intros Hcontra. apply eq_sym in Hcontra. erewrite <- x_consis in Hcontra. eapply neq_init_term_x;[| apply eq_sym; now eauto]. now eauto. now auto. 
         * repeat ((try (now left)); right).
         * discriminate.
         * apply Rlt_le. unfold init_x. eapply w_end_relation; exact emb5.
@@ -264,14 +288,14 @@ Proof.
     - destruct (Rlt_or_le (term_x overs5) (init_x s5)) as [Hminovers5 | Hmins5].
       (* 最小値はterm_x overs5 *)
       + exists (term_x overs5).
-        eapply e_exist_y with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb6 as emb6';
+        eapply e_exist_y_ex with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb6 as emb6';
         [ |
         repeat ((try (now left)); right) |
         discriminate |
         unfold term_x in Hlts5overs5; rewrite terminit5 in Hlts5overs5; apply Rlt_le; exact Hlts5overs5 |
         unfold term_x in Hltovers5; now auto
         ].
-        eapply w_exist_y with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb5.
+        eapply w_exist_y_ex with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb5.
           * destruct emb6' as [ys6 [_onExs6 Hleys6]]. exists ys6.
             exists (term_y overs5).
             destruct emb5 as [y6under [_onExs5 Hley]]. exists y6under.
@@ -282,7 +306,7 @@ Proof.
           * apply Rlt_le. unfold init_x in Hminovers5. now auto.
       (* 最小値はinit_x s5 *)
       + exists (init_x s5).
-        eapply e_exist_y with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb6 as emb6';
+        eapply e_exist_y_ex with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb6 as emb6';
           [ |
           repeat ((try (now left)); right) |
           discriminate |
@@ -291,13 +315,14 @@ Proof.
         eapply exist_between_x with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) (x:=init_x s5) (x1:=term_x s5) (x2:=term_x overs5) in onseg5; 
           [ |
           unfold term_x; erewrite <- surjective_pairing; eapply onTermEx |
+          exact overs5_e |
           unfold term_x; rewrite terminit5; eapply Rlt_le; unfold init_x; rewrite <- terminit5; eapply w_end_relation;now eauto |
           now lra].
-        eapply w_exist_y with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb5.
+        eapply w_exist_y_ex with (ls := [] ++ [s1; s2; s3] ++ [s4] ++ [s5; s6; s7]) in emb5 as emb5'.
         * destruct emb6' as [ys6 [_onExs6 Hleys6]]. exists ys6.
           destruct onseg5 as [ys6over _onExovers5]. exists ys6over.
-          destruct emb5 as [y6under [_onExs5 Hley]]. exists y6under.
-          repeat (split; try now eauto). erewrite y_consis with (s2:= s6) in Hley. now lra. now auto. unfold not. intros Hcontra. apply eq_sym in Hcontra. erewrite <- x_consis in Hcontra. eapply neq_init_term_x. apply eq_sym. now eauto. now auto. 
+          destruct emb5' as [y6under [_onExs5 Hley]]. exists y6under.
+          repeat (split; try now eauto). erewrite y_consis with (s2:= s6) in Hley. now lra. now auto. unfold not. intros Hcontra. apply eq_sym in Hcontra. erewrite <- x_consis in Hcontra. eapply neq_init_term_x;[|apply eq_sym; now eauto]. now eauto. now auto. 
         * repeat ((try (now left)); right).
         * discriminate.
         * apply Rlt_le. unfold init_x. eapply w_end_relation; exact emb5.
