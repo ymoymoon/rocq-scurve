@@ -26,8 +26,7 @@ Fixpoint all_prefix {A:Set} (xs : list A) : list (list A) :=
   match xs with
   | [] => [[]]
   | x::xs' =>
-      let ps := all_prefix xs' in
-      ps ++ map (fun ys => x :: ys) ps
+      [] :: map (fun ys => x :: ys) (all_prefix xs')
   end.
 
 Fixpoint all_sublists {A:Set} (xs: list A) : list (list A) :=
