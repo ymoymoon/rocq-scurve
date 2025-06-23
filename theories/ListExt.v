@@ -40,7 +40,7 @@ Fixpoint all_sublists {A:Set} (xs: list A) : list (list A) :=
 Inductive sublist {A:Set} : list A -> list A -> Prop:=
 | SL l xs r: sublist xs (l ++ xs ++ r).
 
-Lemma in_app_app: forall [A: Type] (ls: list A) (a: A) , In a ls -> exists ls1 ls2, ls = ls1 ++ [a] ++ ls2.
+Lemma in_app_app: forall {A: Type} (ls: list A) (a: A) , In a ls -> exists ls1 ls2, ls = ls1 ++ [a] ++ ls2.
 Proof.
   intros A ls. induction ls as [| a ls IHls].
   - contradiction.
@@ -49,7 +49,7 @@ Proof.
     + apply IHls in Hin. destruct Hin as [ls1' [ls2' Heq]]. exists (a::ls1'), ls2'. rewrite Heq. reflexivity.
 Qed.
 
-Lemma last_app: forall [A:Type] (l r:list A) (d: A), r <> [] -> last r d = last (l ++ r) d.
+Lemma last_app: forall {A:Type} (l r:list A) (d: A), r <> [] -> last r d = last (l ++ r) d.
 Proof.
   intros A l r. revert l. induction r as [| a res IHr].
   - intros l d Hcontra. contradiction.
