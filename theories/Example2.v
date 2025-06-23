@@ -2,6 +2,7 @@ Require Import Stdlib.Reals.Reals.
 Require Import Stdlib.Lists.List.
 Import ListNotations.
 Require Import PrimitiveSegment.
+Require Import ListExt.
 Require Import Main.
 Require Import Lra.
 
@@ -24,7 +25,8 @@ Lemma exist_between_x: forall (ls: list Segment) (seg: Segment) (ps: PrimitiveSe
     onExtendSegment ls seg (x1, y1) -> onExtendSegment ls seg (x2, y2) -> embed ps seg -> x1 <= x -> x <= x2 -> exists y:R, onExtendSegment ls seg (x, y).
 Admitted.
 
-(* onExtendedSegmentのinversionでできそう *)
+(* onExtendedSegmentのinversionでできそう
+    onSegの述語ならばonExの述語みたいな定理があればより楽か？ *)
 Lemma onTermEx: forall (ls: list Segment) (seg: Segment), onExtendSegment ls seg (term seg).
 Admitted.
 Lemma onInitEx: forall (ls: list Segment) (seg: Segment), onExtendSegment ls seg (init seg).
@@ -54,28 +56,6 @@ Axiom under_all_e_aux:
   -> xh < x1 < term_x (last lse default_segment) /\ xh < term_x under < term_x (last lse default_segment)
   -> onExtendSegment ls (last lse default_segment) (x1, yl) /\ y1 < yl
   -> close ls \/ exists (seg:Segment) (y2:R), In seg lse /\ onExtendSegment ls seg (term_x under, y2) /\ term_y under < y2.
-
-(* リストに関する一般的な補題，utilなどができたらそちらに移行したい *)
-Lemma in_app_app: forall [A: Type] (ls: list A) (a: A) , In a ls -> exists ls1 ls2, ls = ls1 ++ [a] ++ ls2.
-Proof.
-  intros A ls. induction ls as [| a ls IHls].
-  - contradiction.
-  - intros a0 Hin. destruct Hin as [Heqa| Hin].
-    + exists [], ls. simpl. rewrite Heqa. reflexivity.
-    + apply IHls in Hin. destruct Hin as [ls1' [ls2' Heq]]. exists (a::ls1'), ls2'. rewrite Heq. reflexivity.
-Qed.
-Lemma last_app: forall [A:Type] (l r:list A) (d: A), r <> [] -> last r d = last (l ++ r) d.
-Proof.
-  intros A l r. revert l. induction r as [| a res IHr].
-  - intros l d Hcontra. contradiction.
-  - intros l d _. destruct res as [|a' res].
-    + simpl. rewrite last_last. reflexivity.
-    + assert(Heq: (l ++ a :: a' :: res) = ((l ++ [a]) ++ a' :: res )).
-      { rewrite <- app_assoc. simpl. reflexivity. }
-      rewrite Heq.
-      assert(Heq2: last (a :: a' :: res) d = last (a' :: res) d). reflexivity.
-      rewrite Heq2. apply IHr. discriminate.
-Qed.
 
 (* auxから少し使える範囲を増やした．
   ただし，underのtermは，x1があるlse上のセグメント(segonx1)のtermの右にいけない．（term_x under < term_x segonx1）
