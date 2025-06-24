@@ -38,3 +38,23 @@ Fixpoint all_sublists {A:Set} (xs: list A) : list (list A) :=
 
 Inductive sublist {A:Set} : list A -> list A -> Prop:=
 | SL l xs r: sublist xs (l ++ xs ++ r).
+
+Lemma all_prefix_iff {A:Set} (l: list A) :
+  forall sub, (In sub (all_prefix l) <-> Prefix sub l).
+Proof.
+  intros sub. split.
+  - revert sub. induction l as [| a l IHl].
+    + intros sub Hin. unfold all_prefix in Hin. inversion Hin as [Heq|Hcontra]. exists []. rewrite <- Heq. reflexivity. contradiction.
+    + intros sub Hin. destruct Hin as [eq|Hin]. 
+      * subst. exists (a::l). reflexivity.
+      * apply in_map_iff in Hin. destruct Hin as [r [eq Hin]]. apply IHl in Hin. destruct Hin as [lr _eq]. subst. exists lr. reflexivity.
+  - revert sub. induction l.
+    + intros sub HPre. destruct HPre as [lr eq]. apply eq_sym in eq. apply app_eq_nil in eq as [eq _]. subst. simpl. now auto.
+    + intros sub HPre. destruct HPre as [lr eq]. simpl. destruct sub as [|a0 sub];[now left|right].
+      inversion eq as [[eqa eql]].
+      assert(HPresubl: Prefix sub l). now exists lr.
+      apply IHl in HPresubl. subst.
+      apply in_map_iff. exists sub. split.
+      * reflexivity.
+      * now auto.
+Qed.
