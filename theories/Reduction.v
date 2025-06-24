@@ -89,6 +89,26 @@ Inductive ReduceDir : list Direction -> list Direction -> Prop :=
 Definition Reduce (p p': list PrimitiveSegment): Prop :=
   ReduceDir (map orn p) (map orn p').
 
+Definition CanReduceDirStep ds := exists ds', ReduceDirStep ds ds'.
+
+Lemma CanReduceDirStep_or ds: CanReduceDirStep ds \/ ~CanReduceDirStep ds.
+Admitted.
+
+(**
+ * 簡約の性質1: 強正規化性
+ * 簡約は必ず停止する
+ *)
+Lemma termination : forall x, exists y, ReduceDir x y /\ ~ CanReduceDirStep y.
+Proof.
+  apply (Nat.measure_induction _ (@List.length _)).
+  intros x IHx.
+  destruct (CanReduceDirStep_or x) as [canReduce|].
+  - destruct canReduce as [x' step]. destruct IHx with x' as [final [reduce cannnotStep]].
+    + rewrite (ReduceDirStep_length x x'); auto with arith.
+    + exists final. now split; [apply RDTrans with x' |].
+  - exists x. now split; [constructor|].
+Qed.
+
   (**
     * 簡約の性質2: 回転差保持
     * 簡約において +, − の個数の差は保持される.
