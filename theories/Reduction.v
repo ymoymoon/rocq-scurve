@@ -3,12 +3,22 @@ Require Import ZArith.
 Require Import PrimitiveSegment.
 Import ListNotations.
 Open Scope Z_scope.
+Require Import Eq.
 
 (* 向き *)
 Inductive Direction : Set :=
 | Plus : Direction
 | Minus : Direction
 .
+
+Definition Direction_dec: forall (x y: Direction), {x = y} + {x <> y}.
+  refine (fun x y => match x, y with
+                  | Plus, Plus => left _
+                  | Minus, Minus => left _
+                  | _, _ => right _
+                  end); now auto.
+Defined.
+Canonical Direction_eqDec := @Pack _ Direction_dec.
 
 (* 単位セグメントから向きへの変換 *)
 Definition orn (x:PrimitiveSegment) : Direction :=
