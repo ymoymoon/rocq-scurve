@@ -71,7 +71,7 @@ Proof.
   intros sub. split.
   (* -> *)
   - revert sub. induction l as [|a l IHl].
-    + intros sub Hin. simpl in Hin. destruct Hin as [_eq | F];[rewrite <- _eq|contradiction]. now apply (SL [] []).
+    + intros sub Hin. simpl in Hin. destruct Hin as [_eq | Hcontra];[rewrite <- _eq|contradiction]. now apply (SL [] []).
     + intros sub Hin. apply in_app_or in Hin. destruct Hin as [HinPre | Hinsub].
       (* subがaから始まる場合 *)
       * apply in_map_iff in HinPre. destruct HinPre as [lr [eq HinPre]]. apply all_prefix_iff in HinPre. unfold Prefix in HinPre. destruct HinPre as [r eq0].
@@ -91,4 +91,17 @@ Proof.
            apply in_map_iff. exists sub. split;[reflexivity|]. apply all_prefix_iff. now exists r.
       (* 帰納法の仮定を使う *)
       * right. apply IHl. rewrite <- app_comm_cons in eq2. inversion eq2 as [[_eq eql]]. subst _a. clear eq2. now apply (SL ll sub). 
+Qed.
+
+Definition ex_sublists {A:Set} (P: list A -> Prop) (l: list A) : Prop :=
+  exists sub, sublist sub l /\ P sub.
+
+Lemma all_sublists_ex {A:Set} (P: list A -> Prop) (l: list A) :
+  List.Exists P (all_sublists l) <-> ex_sublists P l.
+Proof.
+  split. 
+  - intros HEx. apply Exists_exists in HEx. destruct HEx as [sub [HIn Psub]].
+    exists sub. split;[|exact Psub]. apply all_sublists_iff. exact HIn.
+  - intros Hex. apply Exists_exists. destruct Hex as [sub [Hsub Psub]].
+    exists sub. split;[|exact Psub]. apply all_sublists_iff. exact Hsub.
 Qed.
