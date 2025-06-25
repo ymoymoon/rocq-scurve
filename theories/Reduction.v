@@ -263,12 +263,13 @@ Proof.
       * destruct es as [e1 [e2 e3]]; subst.
         inversion rule1. inversion rule2. subst. inversion e. subst.
         exists (l1 ++ [Minus; Minus] ++ r2). split; apply ReduceDirStep_Reduce_dir.
-        -- cutrewrite (l1 ++ [Minus; Plus] ++ Minus :: Minus :: r2
-                       = (l1 ++ [Minus;Plus;Minus] ++ ([Minus] ++ r2))); [|reflexivity].
+        -- replace (l1 ++ [Minus; Plus] ++ Minus :: Minus :: r2)
+                   with ((l1 ++ [Minus;Plus;Minus] ++ ([Minus] ++ r2))); [|reflexivity].
            now change (l1 ++ [Minus; Minus] ++ r2) with (l1 ++ [Minus] ++ ([Minus] ++ r2)).
-        -- cutrewrite (l1 ++ [Minus; Minus] ++ [Plus; Minus] ++ r2
-                       = (l1 ++ [Minus]) ++ [Minus;Plus; Minus] ++ r2); [|now rewrite <- app_assoc].
-           now cutrewrite (l1 ++ [Minus; Minus] ++ r2 = (l1 ++ [Minus]) ++ [Minus] ++ r2); [|now rewrite <- app_assoc].
+        -- replace (l1 ++ [Minus; Minus] ++ [Plus; Minus] ++ r2)
+                   with ((l1 ++ [Minus]) ++ [Minus;Plus; Minus] ++ r2); [|now rewrite <- app_assoc].
+           now replace (l1 ++ [Minus; Minus] ++ r2) with ((l1 ++ [Minus]) ++ [Minus] ++ r2);
+             [|now rewrite <- app_assoc].
       * destruct es as [e1 [e2 e3]]; subst.
         inversion rule1. inversion rule2. subst. inversion e. subst r1.
         exists (l1 ++ [Plus; Minus] ++ r2); split; apply ReduceDirStep_Reduce_dir.
@@ -280,12 +281,13 @@ Proof.
       * destruct es as [e1 [e2 e3]]; subst.
         inversion rule1. inversion rule2. subst. inversion e. subst r1.
         exists ((l1 ++ [Plus]) ++ [Minus; Plus] ++ r2). split; apply ReduceDirStep_Reduce_dir.
-        -- now cutrewrite (l1 ++ [Plus;Minus] ++ Minus::Plus::Plus::r2 =
-                         (l1 ++ [Plus]) ++ [Minus;Minus;Plus;Plus] ++ r2) ; [|now rewrite <- app_assoc].
+        -- now replace (l1 ++ [Plus;Minus] ++ Minus::Plus::Plus::r2)
+             with ((l1 ++ [Plus]) ++ [Minus;Minus;Plus;Plus] ++ r2);
+             [|now rewrite <- app_assoc].
         -- change (l1 ++ [Plus;Plus;Minus]++[Minus; Plus] ++ r2)
              with (l1 ++ [Plus;Plus;Minus;Minus]++ ([Plus] ++ r2)).
-           now cutrewrite ((l1 ++ [Plus]) ++ [Minus;Plus] ++ r2
-                           = l1 ++ [Plus;Minus] ++ ([Plus] ++ r2)); [|now rewrite <- app_assoc].
+           now replace ((l1 ++ [Plus]) ++ [Minus;Plus] ++ r2)
+             with (l1 ++ [Plus;Minus] ++ ([Plus] ++ r2)); [|now rewrite <- app_assoc].
       * destruct es as [e1 [e2 e3]]; subst.
         inversion rule1. inversion rule2. subst. inversion e; subst r1.
         exists (l1 ++ [Minus; Plus] ++ r2). split; apply ReduceDirStep_Reduce_dir.
@@ -296,11 +298,11 @@ Proof.
       * destruct es as [e1 [e2 e3]]; subst.
         inversion rule1. inversion rule2. subst. inversion e. subst r1.
         exists (l1 ++ [Minus; Plus] ++ ([Minus] ++ r2)). split; apply ReduceDirStep_Reduce_dir.
-        -- cutrewrite (l1 ++ [Minus; Plus] ++ Plus :: Minus:: Minus ::r2
-                       = (l1 ++ [Minus]) ++ [Plus; Plus; Minus; Minus] ++ r2);
+        -- replace (l1 ++ [Minus; Plus] ++ Plus :: Minus:: Minus ::r2)
+                   with ((l1 ++ [Minus]) ++ [Plus; Plus; Minus; Minus] ++ r2);
              [|now rewrite <- app_assoc].
-           now cutrewrite (l1 ++ [Minus;Plus] ++ [Minus] ++ r2
-                           = (l1 ++ [Minus]) ++ [Plus;Minus] ++ r2); [|now rewrite <- app_assoc].
+           now replace (l1 ++ [Minus;Plus] ++ [Minus] ++ r2)
+               with ((l1 ++ [Minus]) ++ [Plus;Minus] ++ r2); [|now rewrite <- app_assoc].
         -- now change ([Minus; Minus; Plus] ++ [Plus; Minus] ++ r2)
              with ([Minus;Minus;Plus;Plus] ++ [Minus]++r2).
 Qed.
