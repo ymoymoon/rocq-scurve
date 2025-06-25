@@ -146,9 +146,37 @@ Lemma Rule_app_inv r1 r2 ds1l ds1r ds1 ds2 ds1' ds2': (* 14パターン列挙 *)
   ds2 ++ r2 = ds1r ++ r1 ->
   (ds1l = [] /\ ds1r = ds2)
   \/ (ds1l = [Plus] /\ ds1r = [Minus; Plus] /\ ds2 = [Minus; Plus; Minus])
-(*  \/ (...)*)
+  \/ (ds1l = [Minus] /\ ds1r = [Plus; Minus] /\ ds2 = [Plus; Minus; Plus])
+  \/ (ds1l = [Plus; Minus] /\ ds1r = [Plus] /\ ds2 = [Plus; Minus; Plus])
+  \/ (ds1l = [Minus; Plus] /\ ds1r = [Minus] /\ ds2 = [Minus; Plus; Minus])
+  \/ (ds1l = [Plus; Minus] /\ ds1r = [Plus] /\ ds2 = [Plus; Plus; Minus; Minus])
+  \/ (ds1l = [Minus; Plus] /\ ds1r = [Minus] /\ ds2 = [Minus; Minus; Plus; Plus])
+  \/ (ds1l = [Plus; Plus] /\ ds1r = [Minus; Minus] /\ ds2 = [Minus; Minus; Plus; Plus])
+  \/ (ds1l = [Minus; Minus] /\ ds1r = [Plus; Plus] /\ ds2 = [Plus; Plus; Minus; Minus])
+  \/ (ds1l = [Plus; Plus; Minus] /\ ds1r = [Minus] /\ ds2 = [Minus; Plus; Minus])
+  \/ (ds1l = [Plus; Plus; Minus] /\ ds1r = [Minus] /\ ds2 = [Minus; Minus; Plus; Plus])
+  \/ (ds1l = [Minus; Minus; Plus] /\ ds1r = [Plus] /\ ds2 = [Plus; Minus; Plus])
+  \/ (ds1l = [Minus; Minus; Plus] /\ ds1r = [Plus] /\ ds2 = [Plus; Plus; Minus; Minus])
 .
-Admitted.
+Proof.
+  intros nonnil eds1 rule1 rule2 prefix_ds2.
+  destruct ds1r as [|d ds1r]; [now auto|].
+  assert (or4: ds1l = []
+               \/ (exists d0, ds1l = [d0])
+               \/ (exists d0 d1, ds1l = [d0; d1])
+               \/ (exists d0 d1 d2, ds1l = [d0; d1; d2])
+         ).
+  + destruct ds1l as [|d0]; [now left|].
+    destruct ds1l as [|d1]; [now right; left; exists d0|].
+    destruct ds1l as [|d2]; [now right; right; left; exists d0, d1|].
+    destruct ds1l as [|d3]; [now right; right; right;  exists d0, d1, d2|].
+    simpl in eds1. rewrite eds1 in rule1.
+    now destruct ds1l; inversion rule1.
+  + destruct or4 as [|[ [d0 e0] |[ [d0 [d1 e]] | [d0 [d1 [d2 e]]]]
+      ]];
+      destruct rule1, rule2; subst; try inversion eds1; subst; try now auto; try tauto.
+Qed.
+
 
 Lemma eq_have_common_reduce ds1 ds2: ds1 = ds2 -> have_common_reduce ds1 ds2.
 Admitted.
