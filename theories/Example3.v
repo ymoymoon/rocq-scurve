@@ -6,53 +6,6 @@ Require Import Main.
 Hint Resolve onInit onTerm neq_init_term : core.
 Hint Constructors is_scurve dc_pseg_hd dc: core.
 
-Lemma exist_between_x_pos' s x1 x2 y1 y2 x:
-  onSegment s (x1, y1) -> onSegment s (x2, y2) -> y1 <= y2 -> x1 <= x -> x <= x2 ->
-  exists y:R, onSegment s (x, y) /\ y1 <= y <= y2.
-Admitted.
-
-Axiom exist_between_x_neg': forall (s: Segment) (x1 x2 y1 y2 x: R),
-  onSegment s (x1, y1) -> onSegment s (x2, y2) -> y2 <= y1 -> x1 <= x -> x <= x2 ->
-  exists y:R, onSegment s (x, y) /\ y2 <= y <= y1.
-
-Lemma e_exist_y' s' v c x:
-  embed (v, e, c) s' -> fst (init s') <= x -> x <= fst (term s') ->
-  exists y:R, onSegment s' (x, y) /\ (match v with n => init_y s' <= y <= term_y s' | s => term_y  s' <= y <= init_y s' end).
-Proof.
-  intros H0 Hge0 Hge1. destruct v.
-  - eapply exist_between_x_pos' with (x1:=fst (init s')) (y1:= snd (init s')) (x2:=fst (term s')) (y2:= snd (term s')).
-    + now rewrite <- surjective_pairing.
-    + now rewrite <- surjective_pairing.
-    + apply Rlt_le. eapply n_end_relation. now eauto.
-    + exact Hge0.
-    + exact Hge1.
-  - eapply exist_between_x_neg' with (x1:=fst (init s')) (y1:= snd (init s')) (x2:=fst (term s')) (y2:= snd (term s')).
-    + now rewrite <- surjective_pairing.
-    + now rewrite <- surjective_pairing.
-    + apply Rlt_le. eapply s_end_relation. now eauto.
-    + exact Hge0.
-    + exact Hge1.
-Qed.
-
-Lemma w_exist_y' s' v c x:
-  embed (v, w, c) s' -> fst (term s') <= x -> x <= fst (init s') ->
-  exists y:R, onSegment s' (x, y) /\ (match v with n => init_y s' <= y <= term_y s' | s => term_y  s' <= y <= init_y s' end).
-Proof.
-  intros H0 Hge0 Hge1. destruct v.
-  - eapply exist_between_x_neg' with (x2:=fst (init s')) (y2:= snd (init s')) (x1:=fst (term s')) (y1:= snd (term s')).
-    + rewrite <- surjective_pairing. now eapply onTerm.
-    + rewrite <- surjective_pairing. now eapply onInit.
-    + apply Rlt_le. eapply n_end_relation. now eauto.
-    + exact Hge0.
-    + exact Hge1.
-  - eapply exist_between_x_pos' with (x2:=fst (init s')) (y2:= snd (init s')) (x1:=fst (term s')) (y1:= snd (term s')).
-    + rewrite <- surjective_pairing. now eapply onTerm.
-    + rewrite <- surjective_pairing. now eapply onInit.
-    + apply Rlt_le. eapply s_end_relation. now eauto.
-    + exact Hge0.
-    + exact Hge1.
-Qed.
-
 Definition example3_list: list PrimitiveSegment :=
   [(n,e,cx); (s,e,cx); (s,w,cc); (n,w,cc); (n,w,cx)].
 Lemma example3_scurve : is_scurve example3_list.
@@ -99,7 +52,7 @@ Proof.
     destruct (w_onseg_relation _ _ _ rx ry emb3) as [le_rx1 le_rx2]; [now rewrite <- e_rxy |].
     destruct (Rle_or_lt ox rx) as [lex|ltx].
     + (* ox <= rx の場合: x=rx, y2=ryとする *)
-      destruct (e_exist_y' _ _ _ rx emb2) as [y1 [onSeg_y1 [le1 le2]]];
+      destruct (e_exist_y _ _ _ rx emb2) as [y1 [onSeg_y1 [le1 le2]]];
        [now rewrite e_oxy|now rewrite terminit2|].
       exists rx, y1, ry. rewrite <- e_rxy. repeat split; [assumption| now auto|].
         assert (eq_makes_close: ry = y1 -> close [s1; s2; s3; s4; s5]). {
@@ -113,7 +66,7 @@ Proof.
         destruct (s_onseg_relation _ _ _ rx ry emb3); [now rewrite <- e_rxy|].
         now rewrite terminit2.
     + (* ox > rx の場合: x=ox, y1=oyとする *)
-      apply Rlt_le in ltx. destruct (w_exist_y' _ _ _ ox emb3) as [y2 [onSeg_y2 [le1 le2]]];
+      apply Rlt_le in ltx. destruct (w_exist_y _ _ _ ox emb3) as [y2 [onSeg_y2 [le1 le2]]];
         [now rewrite e_rxy|now rewrite <- terminit2|].
       exists ox, oy, y2. rewrite <- e_oxy. repeat split; [now auto|assumption |].
       assert (eq_makes_close: y2 = oy -> close [s1; s2; s3; s4; s5]). {
