@@ -60,6 +60,13 @@ Inductive Rule : list Direction -> list Direction -> Prop :=
 | R2Plus : Rule [Plus; Plus; Minus; Minus] [Plus; Minus]
 | R2Minus : Rule [Minus; Minus; Plus; Plus] [Minus; Plus]
 .
+Hint Constructors Rule : core.
+
+Lemma Rule_same_src ds ds1 ds2: Rule ds ds1 -> Rule ds ds2 -> ds1 = ds2.
+Proof.
+  intros rule1 rule2.
+  inversion rule1; inversion rule2; subst; now try discriminate.
+Qed.
 
 Lemma rotation_difference_preservation_rule:
   forall (ds ds': list Direction), Rule ds ds' -> rotation_difference ds = rotation_difference ds'.
@@ -190,7 +197,114 @@ Lemma ReduceDir_local_confluence_aux l1 r1 ds1 ds1' l2 r2 ds2 ds2':
   l2 ++ ds2 ++ r2 = l1 ++ ds1 ++ r1 ->
   Prefix l1 l2 ->
   have_common_reduce (l1 ++ ds1' ++ r1) (l2 ++ ds2' ++ r2).
-Admitted.
+Proof.
+  intros rule1 rule2 e prefix.
+  destruct (prefix) as [l1' prefix_]. subst l2.
+  rewrite <- app_assoc, app_inv_head_iff in e.
+  destruct (ds1 =? l1').
+  - (* ds1 = l1' の場合: rule1,2で重ならない *)
+    rewrite <- app_assoc. subst l1'.
+    rewrite app_inv_head_iff in e. subst r1.
+    now apply (non_overlap_reduction_confluence l1 []).
+  - destruct (@prefix_brothers_is_prefix _ ds1 l1' (ds1 ++ r1)) as[prefix'|prefix'].
+    + now auto.
+    + now rewrite <- e.
+    + (* ds1 < l1' の場合: rule1,2で重ならない *)
+      destruct prefix' as [l1'']. subst l1'.
+      rewrite <- app_assoc, app_inv_head_iff in e. subst r1.
+      repeat rewrite <- app_assoc.
+      now apply non_overlap_reduction_confluence.
+    + (* ds1 > l1' の場合: 重なるパターンを考える *)
+      repeat rewrite <- app_assoc.
+      destruct prefix' as [ds1_r ]. subst ds1.
+      rewrite <- app_assoc, app_inv_head_iff in e.
+      assert (nonnil: ds1_r <> []);
+        [now intros enil; rewrite enil, app_nil_r in n|].
+      destruct (Rule_app_inv r1 r2 l1' ds1_r (l1' ++ ds1_r) ds2 ds1' ds2' nonnil (refl_equal _) rule1 rule2 e) as
+        [es|[es|[es|[es|[es|[es|[es|[es|[es|[es|[es|[es|es]]]] ]]]]]]]].
+      * destruct es as [e1 e2]. subst. simpl in *.
+        rewrite (Rule_same_src _ _ _ rule1 rule2).
+        rewrite (app_inv_head  _ _ _ e).
+        now apply eq_have_common_reduce.
+      * destruct es as [e1 [e2 e3]]; subst.
+        inversion rule1. subst. inversion rule2. subst.
+        apply eq_have_common_reduce.
+        do 2 f_equal. now inversion e.
+      * destruct es as [e1 [e2 e3]]; subst.
+        inversion rule1. inversion rule2. subst.
+        apply eq_have_common_reduce.
+        do 2 f_equal. now inversion e.
+      * destruct es as [e1 [e2 e3]]; subst.
+        inversion rule1. inversion rule2. subst.
+        apply eq_have_common_reduce. now rewrite <- e .
+      * destruct es as [e1 [e2 e3]]; subst.
+        inversion rule1. inversion rule2. subst.
+        apply eq_have_common_reduce. now rewrite <- e .
+      * destruct es as [e1 [e2 e3]]; subst.
+        inversion rule1. inversion rule2. subst.
+        exists (l1 ++ [Plus; Minus] ++r2). rewrite <- e.
+        split; apply ReduceDirStep_Reduce_dir; [now constructor|].
+        change ([Plus; Minus] ++ [Plus; Minus] ++ r2) with ([Plus; Minus; Plus] ++ [Minus] ++ r2).
+        now change ([Plus; Minus] ++ r2) with ([Plus] ++ [Minus] ++ r2).
+      * destruct es as [e1 [e2 e3]]; subst.
+        inversion rule1. inversion rule2. subst.
+        exists (l1 ++ [Minus; Plus] ++ r2). rewrite <- e.
+        split; apply ReduceDirStep_Reduce_dir; [now constructor|].
+        change ([Minus; Plus] ++ [Minus; Plus] ++ r2) with ([Minus; Plus; Minus] ++ [Plus] ++ r2).
+        now change ([Minus; Plus] ++ r2) with ([Minus] ++ [Plus]++r2).
+      * destruct es as [e1 [e2 e3]]; subst.
+        inversion rule1. inversion rule2. subst. inversion e.
+        exists (l1 ++ [Plus] ++ Plus::r2).
+        change ([Plus; Minus] ++ Plus :: Plus :: r2) with ([Plus; Minus; Plus] ++ Plus :: r2).
+        split; apply ReduceDirStep_Reduce_dir; [now repeat constructor|].
+        change ([Plus; Plus] ++ [Minus; Plus] ++ r2) with ([Plus] ++ [Plus; Minus; Plus] ++ r2).
+        change (Plus :: r2) with ([Plus] ++ r2).
+        now do 2 rewrite  (app_assoc l1).
+      * destruct es as [e1 [e2 e3]]; subst.
+        inversion rule1. inversion rule2. subst. inversion e. subst.
+        exists (l1 ++ [Minus; Minus] ++ r2). split; apply ReduceDirStep_Reduce_dir.
+        -- cutrewrite (l1 ++ [Minus; Plus] ++ Minus :: Minus :: r2
+                       = (l1 ++ [Minus;Plus;Minus] ++ ([Minus] ++ r2))); [|reflexivity].
+           now change (l1 ++ [Minus; Minus] ++ r2) with (l1 ++ [Minus] ++ ([Minus] ++ r2)).
+        -- cutrewrite (l1 ++ [Minus; Minus] ++ [Plus; Minus] ++ r2
+                       = (l1 ++ [Minus]) ++ [Minus;Plus; Minus] ++ r2); [|now rewrite <- app_assoc].
+           now cutrewrite (l1 ++ [Minus; Minus] ++ r2 = (l1 ++ [Minus]) ++ [Minus] ++ r2); [|now rewrite <- app_assoc].
+      * destruct es as [e1 [e2 e3]]; subst.
+        inversion rule1. inversion rule2. subst. inversion e. subst r1.
+        exists (l1 ++ [Plus; Minus] ++ r2); split; apply ReduceDirStep_Reduce_dir.
+        -- change (l1 ++ [Plus;Minus] ++ Plus :: Minus :: r2) with
+             (l1 ++ [Plus;Minus;Plus]++([Minus] ++ r2)).
+           now change (l1 ++ [Plus;Minus] ++ r2) with (l1 ++ [Plus] ++ ([Minus] ++ r2)).
+        -- now change ([Plus;Plus;Minus] ++ [Minus] ++ r2) with
+             ([Plus; Plus; Minus; Minus] ++ r2).
+      * destruct es as [e1 [e2 e3]]; subst.
+        inversion rule1. inversion rule2. subst. inversion e. subst r1.
+        exists ((l1 ++ [Plus]) ++ [Minus; Plus] ++ r2). split; apply ReduceDirStep_Reduce_dir.
+        -- now cutrewrite (l1 ++ [Plus;Minus] ++ Minus::Plus::Plus::r2 =
+                         (l1 ++ [Plus]) ++ [Minus;Minus;Plus;Plus] ++ r2) ; [|now rewrite <- app_assoc].
+        -- change (l1 ++ [Plus;Plus;Minus]++[Minus; Plus] ++ r2)
+             with (l1 ++ [Plus;Plus;Minus;Minus]++ ([Plus] ++ r2)).
+           now cutrewrite ((l1 ++ [Plus]) ++ [Minus;Plus] ++ r2
+                           = l1 ++ [Plus;Minus] ++ ([Plus] ++ r2)); [|now rewrite <- app_assoc].
+      * destruct es as [e1 [e2 e3]]; subst.
+        inversion rule1. inversion rule2. subst. inversion e; subst r1.
+        exists (l1 ++ [Minus; Plus] ++ r2). split; apply ReduceDirStep_Reduce_dir.
+        -- change (l1 ++ [Minus; Plus] ++ Minus:: Plus :: r2) with (l1 ++ [Minus; Plus; Minus] ++ ([Plus]++r2)).
+           now change (l1 ++ [Minus; Plus] ++ r2) with (l1 ++ [Minus] ++ ([Plus] ++ r2)).
+        -- now change ([Minus; Minus; Plus] ++ [Plus] ++ r2)
+             with ([Minus; Minus; Plus; Plus] ++ r2).
+      * destruct es as [e1 [e2 e3]]; subst.
+        inversion rule1. inversion rule2. subst. inversion e. subst r1.
+        exists (l1 ++ [Minus; Plus] ++ ([Minus] ++ r2)). split; apply ReduceDirStep_Reduce_dir.
+        -- cutrewrite (l1 ++ [Minus; Plus] ++ Plus :: Minus:: Minus ::r2
+                       = (l1 ++ [Minus]) ++ [Plus; Plus; Minus; Minus] ++ r2);
+             [|now rewrite <- app_assoc].
+           now cutrewrite (l1 ++ [Minus;Plus] ++ [Minus] ++ r2
+                           = (l1 ++ [Minus]) ++ [Plus;Minus] ++ r2); [|now rewrite <- app_assoc].
+        -- now change ([Minus; Minus; Plus] ++ [Plus; Minus] ++ r2)
+             with ([Minus;Minus;Plus;Plus] ++ [Minus]++r2).
+Qed.
+
 
 Lemma exists_iff {A:Type} (P Q : A -> Prop) :
   (forall x, P x <-> Q x) -> (exists x, P x) <-> (exists x, Q x).
