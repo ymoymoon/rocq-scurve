@@ -18,90 +18,96 @@ Section Prefix.
     Prefix p1 p2 \/ Prefix p2 p1.
   Admitted.
 
+  Fixpoint all_prefix (xs : list A) : list (list A) :=
+    match xs with
+    | [] => [[]]
+    | x::xs' =>
+        [] :: map (fun ys => x :: ys) (all_prefix xs')
+    end.
+
+  Lemma all_prefix_iff (l: list A) :
+    forall sub, (In sub (all_prefix l) <-> Prefix sub l).
+  Proof.
+    intros sub. split.
+    - revert sub. induction l as [| a l IHl].
+      + intros sub Hin. unfold all_prefix in Hin. inversion Hin as [Heq|Hcontra]. exists []. rewrite <- Heq. reflexivity. contradiction.
+      + intros sub Hin. destruct Hin as [eq|Hin]. 
+        * subst. exists (a::l). reflexivity.
+        * apply in_map_iff in Hin. destruct Hin as [r [eq Hin]]. apply IHl in Hin. destruct Hin as [lr _eq]. subst. exists lr. reflexivity.
+    - revert sub. induction l as [|a l IHl].
+      + intros sub HPre. destruct HPre as [lr eq]. apply eq_sym in eq. apply app_eq_nil in eq as [eq _]. subst. simpl. now auto.
+      + intros sub HPre. destruct HPre as [lr eq]. simpl. destruct sub as [|a0 sub];[now left|right].
+        inversion eq as [[eqa eql]].
+        assert(HPresubl: Prefix sub l). now exists lr.
+        apply IHl in HPresubl. subst.
+        apply in_map_iff. exists sub. split.
+        * reflexivity.
+        * now auto.
+  Qed.
+
 End Prefix.
 
 Hint Resolve Prefix_app : core.
 
-Fixpoint all_prefix {A:Set} (xs : list A) : list (list A) :=
-  match xs with
-  | [] => [[]]
-  | x::xs' =>
-      [] :: map (fun ys => x :: ys) (all_prefix xs')
-  end.
 
-Fixpoint all_sublists {A:Set} (xs: list A) : list (list A) :=
-  match xs with
-  | [] => [[]]
-  | x::xs' =>
-      map (fun ys => x :: ys) (all_prefix xs') ++ all_sublists xs'
-  end.
+Section Sublists.
+  Variable A: Type.
 
-Inductive sublist {A:Set} : list A -> list A -> Prop:=
-| SL l xs r: sublist xs (l ++ xs ++ r).
+  Fixpoint all_sublists (xs: list A) : list (list A) :=
+    match xs with
+    | [] => [[]]
+    | x::xs' =>
+        map (fun ys => x :: ys) (all_prefix xs') ++ all_sublists xs'
+    end.
 
-Lemma all_prefix_iff {A:Set} (l: list A) :
-  forall sub, (In sub (all_prefix l) <-> Prefix sub l).
-Proof.
-  intros sub. split.
-  - revert sub. induction l as [| a l IHl].
-    + intros sub Hin. unfold all_prefix in Hin. inversion Hin as [Heq|Hcontra]. exists []. rewrite <- Heq. reflexivity. contradiction.
-    + intros sub Hin. destruct Hin as [eq|Hin]. 
-      * subst. exists (a::l). reflexivity.
-      * apply in_map_iff in Hin. destruct Hin as [r [eq Hin]]. apply IHl in Hin. destruct Hin as [lr _eq]. subst. exists lr. reflexivity.
-  - revert sub. induction l as [|a l IHl].
-    + intros sub HPre. destruct HPre as [lr eq]. apply eq_sym in eq. apply app_eq_nil in eq as [eq _]. subst. simpl. now auto.
-    + intros sub HPre. destruct HPre as [lr eq]. simpl. destruct sub as [|a0 sub];[now left|right].
-      inversion eq as [[eqa eql]].
-      assert(HPresubl: Prefix sub l). now exists lr.
-      apply IHl in HPresubl. subst.
-      apply in_map_iff. exists sub. split.
-      * reflexivity.
-      * now auto.
-Qed.
+  Inductive sublist: list A -> list A -> Prop:=
+  | SL l xs r: sublist xs (l ++ xs ++ r).
 
-Lemma nil_in_all_sublists {A:Set} (l: list A) : In [] (all_sublists l).
-  induction l as [|a l IHl].
-  - simpl. now left.
-  - apply in_or_app. right. exact IHl.
-Qed.
+  Lemma nil_in_all_sublists (l: list A) : In [] (all_sublists l).
+    induction l as [|a l IHl].
+    - simpl. now left.
+    - apply in_or_app. right. exact IHl.
+  Qed.
+  
+  Lemma all_sublists_iff (l: list A) :
+    forall sub, (In sub (all_sublists l) <-> sublist sub l).
+  Proof.
+    intros sub. split.
+    (* -> *)
+    - revert sub. induction l as [|a l IHl].
+      + intros sub Hin. simpl in Hin. destruct Hin as [_eq | Hcontra];[rewrite <- _eq|contradiction]. now apply (SL [] []).
+      + intros sub Hin. apply in_app_or in Hin. destruct Hin as [HinPre | Hinsub].
+        (* subがaから始まる場合 *)
+        * apply in_map_iff in HinPre. destruct HinPre as [lr [eq HinPre]]. apply all_prefix_iff in HinPre. unfold Prefix in HinPre. destruct HinPre as [r eq0].
+          subst. now apply (SL [] (a::lr)).
+        (* そうでない場合は機能法の家庭が使える *)
+        * apply IHl in Hinsub. inversion Hinsub as [ll _sub lr _eq _eq2]. subst. now apply (SL (a::ll) sub).
+    (* <- *)
+    - revert sub. induction l as [|a l IHl].
+      + intros sub Hsub. inversion Hsub as [l xs r eq eq2]. rewrite eq2. simpl. apply app_eq_nil in eq2 as [_ eq2]. apply app_eq_nil in eq2 as [eq2 _]. subst. now left.
+      + intros sub Hsub. apply in_or_app. inversion Hsub as [ll xs r eq eq2]. destruct ll as [| _a ll].
+        (* subがaから始まるならleft，それ以外ならright． *)
+        * simpl in eq2. clear eq Hsub. destruct sub as [|_a sub].
+          (* sub = [] *)
+          ++ right. apply nil_in_all_sublists.
+          (* subがaから始まる，all_prefix_iffを使う *)
+          ++ left. rewrite <- app_comm_cons in eq2. inversion eq2 as [[_eq eql]]. subst _a.
+            apply in_map_iff. exists sub. split;[reflexivity|]. apply all_prefix_iff. now exists r.
+        (* 帰納法の仮定を使う *)
+        * right. apply IHl. rewrite <- app_comm_cons in eq2. inversion eq2 as [[_eq eql]]. subst _a. clear eq2. now apply (SL ll sub). 
+  Qed.
 
-Lemma all_sublists_iff {A:Set} (l: list A) :
-  forall sub, (In sub (all_sublists l) <-> sublist sub l).
-Proof.
-  intros sub. split.
-  (* -> *)
-  - revert sub. induction l as [|a l IHl].
-    + intros sub Hin. simpl in Hin. destruct Hin as [_eq | Hcontra];[rewrite <- _eq|contradiction]. now apply (SL [] []).
-    + intros sub Hin. apply in_app_or in Hin. destruct Hin as [HinPre | Hinsub].
-      (* subがaから始まる場合 *)
-      * apply in_map_iff in HinPre. destruct HinPre as [lr [eq HinPre]]. apply all_prefix_iff in HinPre. unfold Prefix in HinPre. destruct HinPre as [r eq0].
-        subst. now apply (SL [] (a::lr)).
-      (* そうでない場合は機能法の家庭が使える *)
-      * apply IHl in Hinsub. inversion Hinsub as [ll _sub lr _eq _eq2]. subst. now apply (SL (a::ll) sub).
-  (* <- *)
-  - revert sub. induction l as [|a l IHl].
-    + intros sub Hsub. inversion Hsub as [l xs r eq eq2]. rewrite eq2. simpl. apply app_eq_nil in eq2 as [_ eq2]. apply app_eq_nil in eq2 as [eq2 _]. subst. now left.
-    + intros sub Hsub. apply in_or_app. inversion Hsub as [ll xs r eq eq2]. destruct ll as [| _a ll].
-      (* subがaから始まるならleft，それ以外ならright． *)
-      * simpl in eq2. clear eq Hsub. destruct sub as [|_a sub].
-        (* sub = [] *)
-        ++ right. apply nil_in_all_sublists.
-        (* subがaから始まる，all_prefix_iffを使う *)
-        ++ left. rewrite <- app_comm_cons in eq2. inversion eq2 as [[_eq eql]]. subst _a.
-           apply in_map_iff. exists sub. split;[reflexivity|]. apply all_prefix_iff. now exists r.
-      (* 帰納法の仮定を使う *)
-      * right. apply IHl. rewrite <- app_comm_cons in eq2. inversion eq2 as [[_eq eql]]. subst _a. clear eq2. now apply (SL ll sub). 
-Qed.
+  Definition ex_sublists (P: list A -> Prop) (l: list A) : Prop :=
+    exists sub, sublist sub l /\ P sub.
 
-Definition ex_sublists {A:Set} (P: list A -> Prop) (l: list A) : Prop :=
-  exists sub, sublist sub l /\ P sub.
+  Lemma all_sublists_ex (P: list A -> Prop) (l: list A) :
+    List.Exists P (all_sublists l) <-> ex_sublists P l.
+  Proof.
+    split. 
+    - intros HEx. apply Exists_exists in HEx. destruct HEx as [sub [HIn Psub]].
+      exists sub. split;[|exact Psub]. apply all_sublists_iff. exact HIn.
+    - intros Hex. apply Exists_exists. destruct Hex as [sub [Hsub Psub]].
+      exists sub. split;[|exact Psub]. apply all_sublists_iff. exact Hsub.
+  Qed.
 
-Lemma all_sublists_ex {A:Set} (P: list A -> Prop) (l: list A) :
-  List.Exists P (all_sublists l) <-> ex_sublists P l.
-Proof.
-  split. 
-  - intros HEx. apply Exists_exists in HEx. destruct HEx as [sub [HIn Psub]].
-    exists sub. split;[|exact Psub]. apply all_sublists_iff. exact HIn.
-  - intros Hex. apply Exists_exists. destruct Hex as [sub [Hsub Psub]].
-    exists sub. split;[|exact Psub]. apply all_sublists_iff. exact Hsub.
-Qed.
+End Sublists.
