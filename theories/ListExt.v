@@ -133,3 +133,49 @@ Proof.
       assert(Heq2: last (a :: a' :: res) d = last (a' :: res) d). reflexivity.
       rewrite Heq2. apply IHr. discriminate.
 Qed.
+
+Fixpoint last_opt {A: Type} (xs: list A) :=
+  match xs with
+  | [] => None
+  | [x] => Some x
+  | _ :: xs => last_opt xs
+  end.
+
+Lemma head_app {A: Type} (xs ys: list A):
+  xs <> [] -> head (xs ++ ys) = head xs.
+Proof.
+  now destruct xs.
+Qed.
+
+Lemma rev_nil_inv {A: Type} (xs: list A):
+  rev xs = [] -> xs = [].
+Proof.
+  induction xs; [reflexivity|].
+  simpl.
+  intros e.
+  destruct (app_eq_nil _ _ e) as [_ H].
+  discriminate H.
+Qed.
+
+Lemma last_head:
+  forall {A: Type} (xs: list A),
+  last_opt xs = head (rev xs).
+Proof.
+  induction xs; [reflexivity|].
+  simpl.
+  destruct xs; [reflexivity|].
+  rewrite IHxs.
+  rewrite head_app; [reflexivity|].
+  intro rev.
+  discriminate (rev_nil_inv _ rev).
+Qed.
+
+Lemma nil_head:
+  forall {A: Type} (xs: list A),
+  head xs = None <-> xs = [].
+Proof.
+  intros A xs.
+  split; intros H.
+  - destruct xs; [reflexivity | discriminate].
+  - rewrite H. reflexivity.
+Qed.
