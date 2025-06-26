@@ -106,10 +106,36 @@ Inductive ReduceDir : list Direction -> list Direction -> Prop :=
 Definition Reduce (p p': list PrimitiveSegment): Prop :=
   ReduceDir (map orn p) (map orn p').
 
+Definition rule_dec ds: {exists ds', Rule ds ds'} + {~ exists ds', Rule ds ds'}.
+  refine (match ds with
+          | [Plus; Minus; Plus] => left (ex_intro _ [Plus] _)
+          | [Minus; Plus; Minus] => left (ex_intro _ [Minus] _)
+          | [Plus; Plus; Minus; Minus] => left (ex_intro _ [Plus; Minus] _)
+          | [Minus; Minus; Plus; Plus] => left (ex_intro _ [Minus; Plus] _)
+          | _ => right _
+          end);try now auto; intros H; destruct H.
+Defined.
+
+Lemma ReduceDirStep_ex_sublist ds :
+  (exists ds', ReduceDirStep ds ds') <-> ex_sublists (fun ds0 => exists ds0', Rule ds0 ds0') ds.
+Proof.
+  split.
+  - intros existsds'. destruct existsds' as [ds' HRDS]. apply all_sublists_ex. apply Exists_exists.
+    inversion HRDS as [l r l0 r0 HRule _eq1 _eq2]. exists l0. split.
+    + apply all_sublists_iff. now apply (SL l l0 r).
+    + now exists r0.
+  - intros Hex_sub. apply all_sublists_ex in Hex_sub. apply Exists_exists in Hex_sub. destruct Hex_sub as [l0 [HIn [r0 HR]]].
+    apply all_sublists_iff in HIn. inversion HIn as [l _l0 r _eq _eq2]. exists (l ++ r0 ++ r). now apply (RDS l r l0 r0).
+Qed.
+
 Definition CanReduceDirStep ds := exists ds', ReduceDirStep ds ds'.
 
 Lemma CanReduceDirStep_or ds: CanReduceDirStep ds \/ ~CanReduceDirStep ds.
-Admitted.
+Proof.
+    destruct (ex_sublists_dec (fun ds0 => exists ds0', Rule ds0 ds0') rule_dec ds).
+    - left. now apply ReduceDirStep_ex_sublist.
+    - right. intros HCRDS. apply n. apply ReduceDirStep_ex_sublist. exact HCRDS.
+Qed.
 
 (**
  * 簡約の性質1: 強正規化性

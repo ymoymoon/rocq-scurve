@@ -1,5 +1,6 @@
 Require Export List.
 Require Import Arith.
+Require Import Dec.
 Import ListNotations.
 
 Set Implicit Arguments.
@@ -21,7 +22,7 @@ Section Prefix.
     match xs with
     | [] => [[]]
     | x::xs' =>
-        [] :: map (fun ys => x :: ys) (all_prefix xs')
+        [] :: List.map (fun ys => x :: ys) (all_prefix xs')
     end.
 
   Lemma all_prefix_iff (l: list A) :
@@ -56,7 +57,7 @@ Section Sublists.
     match xs with
     | [] => [[]]
     | x::xs' =>
-        map (fun ys => x :: ys) (all_prefix xs') ++ all_sublists xs'
+        List.map (fun ys => x :: ys) (all_prefix xs') ++ all_sublists xs'
     end.
 
   Inductive sublist: list A -> list A -> Prop:=
@@ -108,6 +109,12 @@ Section Sublists.
     - intros Hex. apply Exists_exists. destruct Hex as [sub [Hsub Psub]].
       exists sub. split;[|exact Psub]. apply all_sublists_iff. exact Hsub.
   Qed.
+
+  Definition ex_sublists_dec (P : list A -> Prop) (P_dec: forall xs:list A, {P xs}+{~P xs})
+    (l : list A):
+    {ex_sublists P l} + {~ ex_sublists P l}.
+    refine (map (all_sublists_ex P l) _). now refine (Exists_dec _ _ P_dec).
+  Defined.
 
 End Sublists.
 
