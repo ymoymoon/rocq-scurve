@@ -74,6 +74,13 @@ Proof.
   intros ds ds' H. now destruct H.
 Qed.
 
+Lemma Rule_preserve_both_ends: forall ds ds',
+  Rule ds ds' -> head ds = head ds' /\ last_opt ds = last_opt ds'.
+Proof.
+  intros ds ds' H.
+  destruct H; auto.
+Qed.
+
 Inductive ReduceDirStep : list Direction -> list Direction -> Prop :=
 | RDS : forall (l r ds ds': list Direction), Rule ds ds' ->
     ReduceDirStep (l ++ ds ++ r) (l ++ ds' ++ r)
@@ -97,11 +104,43 @@ Proof.
   apply Z.add_cancel_l. apply Z.add_cancel_r. now apply H.
 Qed.
 
+Lemma ReduceDirStep_preserve_both_ends: forall ds ds',
+  ReduceDirStep ds ds' -> head ds = head ds' /\ last_opt ds = last_opt ds'.
+Proof.
+  intros ds ds' H.
+  destruct H as [l r es es' rule].
+  destruct (Rule_preserve_both_ends _ _ rule) as [head last].
+  split.
+  - destruct l; [simpl | now reflexivity].
+    destruct es'; [now rewrite nil_head in head |].
+    destruct es; [now discriminate | simpl].
+    simpl in head. apply head.
+  - repeat rewrite last_head in last.
+    repeat rewrite last_head.
+    repeat rewrite rev_app_distr.
+    destruct (rev r); [simpl | now reflexivity].
+    destruct (rev es').
+    * rewrite nil_head in last.
+      rewrite last.
+      now reflexivity.
+    * destruct (rev es); [now discriminate | now simpl].
+Qed.
+
 Inductive ReduceDir : list Direction -> list Direction -> Prop :=
 | RDRefl : forall ds, ReduceDir ds ds
 | RDTrans : forall ds ds' ds'', ReduceDirStep ds ds' -> ReduceDir ds' ds'' ->
     ReduceDir ds ds''
 .
+
+Lemma ReduceDir_preserve_both_ends: forall ds ds',
+  ReduceDir ds ds' -> head ds = head ds' /\ last_opt ds = last_opt ds'.
+Proof.
+  intros ds ds' H.
+  induction H; [split; reflexivity|].
+  destruct (ReduceDirStep_preserve_both_ends _ _ H) as [head_eq last_eq].
+  destruct IHReduceDir as [head_eq' last_eq'].
+  split; [now rewrite head_eq, head_eq' | now rewrite last_eq, last_eq'].
+Qed.
 
 Definition Reduce (p p': list PrimitiveSegment): Prop :=
   ReduceDir (map orn p) (map orn p').
