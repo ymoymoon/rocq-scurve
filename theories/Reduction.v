@@ -109,45 +109,21 @@ Lemma ReduceDirStep_preserve_both_ends: forall ds ds',
 Proof.
   intros ds ds' H.
   destruct H as [l r es es' rule].
-  apply Rule_preserve_both_ends in rule.
+  destruct (Rule_preserve_both_ends _ _ rule) as [head last].
   split.
-  - destruct rule as [rule _].
-    destruct l.
-    + simpl.
-      destruct es.
-        * rewrite hd_error_nil in rule.
-          symmetry in rule.
-          rewrite nil_head in rule.
-          rewrite rule.
-          reflexivity.
-        * simpl. simpl in rule.
-          destruct es'.
-          -- rewrite hd_error_nil in rule.
-             discriminate rule.
-          -- rewrite rule.
-             reflexivity.
-    + simpl. reflexivity.
-  - destruct rule as [_ rule].
-    repeat rewrite last_head in rule.
+  - destruct l; [simpl | now reflexivity].
+    destruct es'; [now rewrite nil_head in head |].
+    destruct es; [now discriminate | simpl].
+    simpl in head. apply head.
+  - repeat rewrite last_head in last.
     repeat rewrite last_head.
     repeat rewrite rev_app_distr.
-    destruct (rev r).
-    + simpl.
-      destruct (rev es).
-      * simpl.
-        destruct (rev es').
-          -- simpl. reflexivity.
-          -- simpl.
-             rewrite head_nil in rule.
-             discriminate rule.
-      * simpl. simpl in rule.
-        destruct (rev es').
-        -- rewrite head_nil in rule.
-           discriminate rule.
-        -- simpl.
-           simpl in rule.
-           apply rule.
-    + simpl. reflexivity.
+    destruct (rev r); [simpl | now reflexivity].
+    destruct (rev es').
+    * rewrite nil_head in last.
+      rewrite last.
+      now reflexivity.
+    * destruct (rev es); [now discriminate | now simpl].
 Qed.
 
 Inductive ReduceDir : list Direction -> list Direction -> Prop :=
