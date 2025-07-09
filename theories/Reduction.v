@@ -204,6 +204,76 @@ Proof.
   rewrite H. now apply IHReduceDir.
 Qed.
 
+  (**
+    * 簡約の性質3.a: reduced form
+    * educeDirをこれ以上できないまで行った最終形が必ず次のような形をしている:
+    * (一つまたはゼロ個の +) (一つ以上の連続する-の列) (一つまたはゼロ個の +)
+    * またはその +と - を逆にしたもの
+    *)
+Lemma tl_cannot_reduce : forall h tl, ~ CanReduceDirStep (h :: tl) -> ~ CanReduceDirStep tl.
+Admitted.
+
+Lemma ReduceDir_reduced_form_PlusPlus l r:
+  ~ CanReduceDirStep (l ++ [Plus;Plus] ++ r) -> r <> [] ->
+  exists lst (n: nat),  r = (List.repeat Plus n) ++ [lst].
+Admitted.
+
+Lemma ReduceDir_reduced_form_MinusMinus l r:
+  ~ CanReduceDirStep (l ++ [Minus;Minus] ++ r) -> r <> [] ->
+  exists lst (n: nat),  r = (List.repeat Minus n) ++ [lst].
+Admitted.
+
+Lemma ReduceDir_reduced_form_MinusPlusRepeat: forall (n: nat) r,
+  ~ CanReduceDirStep (Minus :: Plus :: (List.repeat Minus n) ++ r)
+  -> n = 0%nat.
+Admitted.
+
+Lemma ReduceDir_reduced_form_PlusMinusRepeat: forall (n: nat) r,
+  ~ CanReduceDirStep (Plus :: Minus :: (List.repeat Plus n) ++ r)
+  -> n = 0%nat.
+Admitted.
+
+Lemma repeat_last_P n lst x: x = repeat Plus n ++ [lst] -> exists n' m', x = repeat Plus n' ++ repeat Minus m'.
+Admitted.
+
+Lemma repeat_last_M n lst x: x = repeat Minus n ++ [lst] -> exists n' m', x = repeat Minus n' ++ repeat Plus m'.
+Admitted.
+
+Open Scope nat_scope.
+Lemma reduced_form : forall (x: list Direction), ~ CanReduceDirStep x
+  ->  exists (l m n:nat), (x = (List.repeat Plus l) ++ (List.repeat Minus m) ++ (List.repeat Plus n) \/ 
+                           x = (List.repeat Minus l) ++ (List.repeat Plus m) ++ (List.repeat Minus n)).
+Proof.
+  intros x. induction x as [|h x IHx];[exists 0, 0, 0;now left|].
+  intros NotReduce. apply tl_cannot_reduce in NotReduce as NotReducex. apply IHx in NotReducex. clear IHx. destruct NotReducex as [l [m [n [PMP | MPM]]]].
+    - destruct h;[exists (1+l), m, n; left; now rewrite PMP|].
+      destruct l;[exists 0, (1+m), n; left; now rewrite PMP|].
+      destruct l.
+      + simpl in PMP. rewrite PMP in NotReduce. eapply ReduceDir_reduced_form_MinusPlusRepeat in NotReduce. subst. simpl. exists 0,1,(1+n). now left.
+      + simpl in PMP. rewrite PMP in NotReduce.
+        destruct ((list_eq_dec Direction_dec) (repeat Plus l ++ repeat Minus m ++ repeat Plus n) (@nil Direction)) as [e|ne]; [exists 0,1,2;left; rewrite PMP; now rewrite e|].
+        change (Minus :: Plus :: Plus :: repeat Plus l ++ repeat Minus m ++ repeat Plus n) with ([Minus] ++ [Plus ; Plus] ++ repeat Plus l ++ repeat Minus m ++ repeat Plus n) in NotReduce. 
+        eapply ReduceDir_reduced_form_PlusPlus in NotReduce;[|exact ne].
+        destruct NotReduce as [lst [n0 eq]]. rewrite eq in PMP.
+        change (Plus :: Plus :: repeat Plus n0 ++ [lst]) with (repeat Plus (2+n0) ++ [lst]) in PMP. apply repeat_last_P in PMP.
+        destruct PMP as [n' [m' _eq]]. exists 1,n',m'. right. now rewrite _eq.
+    - destruct h;[|exists (1+l), m, n; right; now rewrite MPM].
+      destruct l;[exists 0, (1+m), n; right; now rewrite MPM|].
+      destruct l; simpl in MPM; rewrite MPM in NotReduce.
+      + eapply ReduceDir_reduced_form_PlusMinusRepeat in NotReduce. subst. simpl. exists 0,1,(1+n). now right.
+      + 
+        destruct ((list_eq_dec Direction_dec) (repeat Minus l ++ repeat Plus m ++ repeat Minus n) (@nil Direction)) as [e|ne]; [exists 0,1,2;right; rewrite MPM; now rewrite e|].
+        change (Plus :: Minus :: Minus :: repeat Minus l ++ repeat Plus m ++ repeat Minus n) with ([Plus] ++ [Minus ; Minus] ++ repeat Minus l ++ repeat Plus m ++ repeat Minus n) in NotReduce. 
+        eapply ReduceDir_reduced_form_MinusMinus in NotReduce;[|exact ne].
+        destruct NotReduce as [lst [n0 eq]]. rewrite eq in MPM.
+        change (Minus :: Minus :: repeat Minus n0 ++ [lst]) with (repeat Minus (2+n0) ++ [lst]) in MPM. apply repeat_last_M in MPM.
+        destruct MPM as [n' [m' _eq]]. exists 1,n',m'. left. now rewrite _eq.
+Qed.
+      
+Close Scope nat_scope. 
+
+
+
 Notation have_common_reduce ds1 ds2 := (exists ds', ReduceDir ds1 ds' /\ ReduceDir ds2 ds').
 
 Lemma non_overlap_reduction_confluence l c r ds1 ds2 ds1' ds2':
