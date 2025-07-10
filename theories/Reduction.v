@@ -270,12 +270,24 @@ Qed.
 Lemma ReduceDir_reduced_form_MinusPlusRepeat: forall (n: nat) r,
   ~ CanReduceDirStep (Minus :: Plus :: (List.repeat Minus n) ++ r)
   -> n = 0%nat.
-Admitted.
+Proof.
+  intros n r NotReduce. destruct n as [|n].
+  - reflexivity.
+  - contradiction NotReduce. simpl. 
+    change (Minus :: Plus :: Minus :: repeat Minus n ++ r) with ([] ++ [Minus ; Plus; Minus] ++ (repeat Minus n ++ r)).
+    exists ([] ++ [Minus] ++ repeat Minus n ++ r). now auto.
+Qed.
 
 Lemma ReduceDir_reduced_form_PlusMinusRepeat: forall (n: nat) r,
   ~ CanReduceDirStep (Plus :: Minus :: (List.repeat Plus n) ++ r)
   -> n = 0%nat.
-Admitted.
+Proof.
+  intros n r NotReduce. destruct n as [|n].
+  - reflexivity.
+  - contradiction NotReduce. simpl. 
+    change (Plus :: Minus :: Plus :: repeat Plus n ++ r) with ([] ++ [Plus ; Minus; Plus] ++ (repeat Plus n ++ r)).
+    exists ([] ++ [Plus] ++ repeat Plus n ++ r). now auto.
+Qed.
 
 Lemma repeat_last_P n lst x: x = repeat Plus n ++ [lst] -> exists n' m', x = repeat Plus n' ++ repeat Minus m'.
 Admitted.
