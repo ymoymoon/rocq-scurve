@@ -218,7 +218,7 @@ Lemma ReduceDir_reduced_form_PlusPlus l r:
   exists lst (n: nat),  r = (List.repeat Plus n) ++ [lst].
 Proof.
   revert l. induction r as [|d r IHr].
-  - intros. contradiction.
+  - contradiction.
   - intros l NotReduce _Hnil. clear _Hnil. destruct d.
     + destruct r as [|d r'];[now exists Plus, 0%nat|].
       assert (Heq: (l ++ [Plus; Plus] ++ Plus :: d::r') = ((l++[Plus]) ++ [Plus;Plus] ++ d :: r')).
@@ -245,7 +245,7 @@ Lemma ReduceDir_reduced_form_MinusMinus l r:
   exists lst (n: nat),  r = (List.repeat Minus n) ++ [lst].
 Proof.
   revert l. induction r as [|d r IHr].
-  - intros. contradiction.
+  - contradiction.
   - intros l NotReduce _Hnil. clear _Hnil. destruct d.
     + destruct r as [|d r'];[now exists Plus, 0%nat|].
       destruct d.
