@@ -216,22 +216,78 @@ Admitted.
 Lemma ReduceDir_reduced_form_PlusPlus l r:
   ~ CanReduceDirStep (l ++ [Plus;Plus] ++ r) -> r <> [] ->
   exists lst (n: nat),  r = (List.repeat Plus n) ++ [lst].
-Admitted.
+Proof.
+  revert l. induction r as [|d r IHr].
+  - contradiction.
+  - intros l NotReduce _Hnil. clear _Hnil. destruct d.
+    + destruct r as [|d r'];[now exists Plus, 0%nat|].
+      assert (Heq: (l ++ [Plus; Plus] ++ Plus :: d::r') = ((l++[Plus]) ++ [Plus;Plus] ++ d :: r')).
+      {
+        simpl. rewrite <- app_assoc. reflexivity.
+      }
+      rewrite Heq in NotReduce.
+      apply IHr in NotReduce;[|discriminate].
+      destruct NotReduce as [lst [n _eqr]].
+      rewrite _eqr. exists lst, (1+n)%nat. reflexivity.
+    + destruct r as [|d r'];[now exists Minus, 0%nat|].
+      destruct d.
+      * contradict NotReduce. simpl. exists ((l ++ [Plus]) ++ [Plus] ++ r').
+      assert(Heq: (l ++ Plus :: Plus :: Minus :: Plus :: r') = ((l ++ [Plus]) ++ [Plus ; Minus ; Plus] ++ r')).
+      { rewrite <- app_assoc. reflexivity. }
+      rewrite Heq. now auto.
+      * contradict NotReduce. simpl. exists (l ++ [Plus; Minus] ++ r').
+      change (l ++ Plus :: Plus :: Minus :: Minus :: r') with (l ++ [Plus; Plus; Minus; Minus] ++ r').
+      now auto.
+Qed.
 
 Lemma ReduceDir_reduced_form_MinusMinus l r:
   ~ CanReduceDirStep (l ++ [Minus;Minus] ++ r) -> r <> [] ->
   exists lst (n: nat),  r = (List.repeat Minus n) ++ [lst].
-Admitted.
+Proof.
+  revert l. induction r as [|d r IHr].
+  - contradiction.
+  - intros l NotReduce _Hnil. clear _Hnil. destruct d.
+    + destruct r as [|d r'];[now exists Plus, 0%nat|].
+      destruct d.
+      * contradict NotReduce. simpl. exists (l ++ [Minus; Plus] ++ r').
+      change (l ++ Minus :: Minus :: Plus :: Plus :: r') with (l ++ [Minus; Minus; Plus; Plus] ++ r').
+      now auto.
+      * contradict NotReduce. simpl. exists ((l ++ [Minus]) ++ [Minus] ++ r').
+      assert(Heq: (l ++ Minus :: Minus :: Plus :: Minus :: r') = ((l ++ [Minus]) ++ [Minus ; Plus ; Minus] ++ r')).
+      { rewrite <- app_assoc. reflexivity. }
+      rewrite Heq. now auto.
+    + destruct r as [|d r'];[now exists Minus, 0%nat|].
+      assert (Heq: (l ++ [Minus; Minus] ++ Minus :: d::r') = ((l++[Minus]) ++ [Minus;Minus] ++ d :: r')).
+      {
+        simpl. rewrite <- app_assoc. reflexivity.
+      }
+      rewrite Heq in NotReduce.
+      apply IHr in NotReduce;[|discriminate].
+      destruct NotReduce as [lst [n _eqr]].
+      rewrite _eqr. exists lst, (1+n)%nat. reflexivity.
+Qed.
 
 Lemma ReduceDir_reduced_form_MinusPlusRepeat: forall (n: nat) r,
   ~ CanReduceDirStep (Minus :: Plus :: (List.repeat Minus n) ++ r)
   -> n = 0%nat.
-Admitted.
+Proof.
+  intros n r NotReduce. destruct n as [|n].
+  - reflexivity.
+  - contradiction NotReduce. simpl. 
+    change (Minus :: Plus :: Minus :: repeat Minus n ++ r) with ([] ++ [Minus ; Plus; Minus] ++ (repeat Minus n ++ r)).
+    exists ([] ++ [Minus] ++ repeat Minus n ++ r). now auto.
+Qed.
 
 Lemma ReduceDir_reduced_form_PlusMinusRepeat: forall (n: nat) r,
   ~ CanReduceDirStep (Plus :: Minus :: (List.repeat Plus n) ++ r)
   -> n = 0%nat.
-Admitted.
+Proof.
+  intros n r NotReduce. destruct n as [|n].
+  - reflexivity.
+  - contradiction NotReduce. simpl. 
+    change (Plus :: Minus :: Plus :: repeat Plus n ++ r) with ([] ++ [Plus ; Minus; Plus] ++ (repeat Plus n ++ r)).
+    exists ([] ++ [Plus] ++ repeat Plus n ++ r). now auto.
+Qed.
 
 Lemma repeat_last_P n lst x: x = repeat Plus n ++ [lst] -> exists n' m', x = repeat Plus n' ++ repeat Minus m'.
 Admitted.
