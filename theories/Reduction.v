@@ -290,10 +290,20 @@ Proof.
 Qed.
 
 Lemma repeat_last_P n lst x: x = repeat Plus n ++ [lst] -> exists n' m', x = repeat Plus n' ++ repeat Minus m'.
-Admitted.
+Proof.
+  destruct lst; intros ->; [exists (1 + n)%nat, O| exists n, 1%nat].
+  - replace [Plus] with (repeat Plus 1); [|now auto].
+    now rewrite <- repeat_app, Nat.add_comm, app_nil_r.
+  - now simpl.
+Qed.
 
 Lemma repeat_last_M n lst x: x = repeat Minus n ++ [lst] -> exists n' m', x = repeat Minus n' ++ repeat Plus m'.
-Admitted.
+Proof.
+  destruct lst; intros ->; [exists n, 1%nat| exists (1 + n)%nat, O].
+  - now simpl.
+  - replace [Minus] with (repeat Minus 1); [|now auto].
+    now rewrite <- repeat_app, Nat.add_comm, app_nil_r.
+Qed.
 
 Open Scope nat_scope.
 Lemma reduced_form : forall (x: list Direction), ~ CanReduceDirStep x
