@@ -1,4 +1,4 @@
-Require Import Reals List.
+From Stdlib Require Import Reals List.
 Import ListNotations.
 Require Import PrimitiveSegment.
 Require Import Main.

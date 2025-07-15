@@ -2,7 +2,7 @@
 Require Import Stdlib.Reals.Reals.
 Require Import Stdlib.Lists.List.
 Require Import PrimitiveSegment.
-Require Import Lra.
+From Stdlib Require Import Lra.
 Open Scope R_scope.
 Import ListNotations.
 

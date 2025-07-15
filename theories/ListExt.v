@@ -1,5 +1,5 @@
-Require Export List.
-Require Import Arith.
+From Stdlib Require Export List.
+From Stdlib Require Import Arith.
 Require Import Dec.
 Import ListNotations.
 

@@ -1,5 +1,5 @@
 Require Import ListExt.
-Require Import ZArith.
+From Stdlib Require Import ZArith.
 Require Import PrimitiveSegment.
 Import ListNotations.
 Open Scope Z_scope.
