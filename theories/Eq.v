@@ -1,5 +1,5 @@
-Require Import String.
-Require Import Arith.
+From Stdlib Require Import String.
+From Stdlib Require Import Arith.
 Require Import Dec.
 Set Implicit Arguments.
 

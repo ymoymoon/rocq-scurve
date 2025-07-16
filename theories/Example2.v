@@ -4,7 +4,7 @@ Import ListNotations.
 Require Import PrimitiveSegment.
 Require Import ListExt.
 Require Import Main.
-Require Import Lra.
+From Stdlib Require Import Lra.
 
 Lemma x_consis: forall s1 s2, term s1 = init s2 -> term_x s1 = init_x s2.
 Proof.
