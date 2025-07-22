@@ -294,56 +294,62 @@ Proof.
     exists ([] ++ [Plus] ++ repeat Plus n ++ r). now auto.
 Qed.
 
-Lemma repeat_last_P n lst x: x = repeat Plus n ++ [lst] -> exists n' m', x = repeat Plus n' ++ repeat Minus m'.
+Lemma repeat_last_P n lst x: x = repeat Plus n ++ [lst] -> exists n' m', (m' <= 1)%nat /\ x = repeat Plus n' ++ repeat Minus m'.
 Proof.
   destruct lst; intros ->; [exists (1 + n)%nat, O| exists n, 1%nat].
   - replace [Plus] with (repeat Plus 1); [|now auto].
+    split;[now auto|].
     now rewrite <- repeat_app, Nat.add_comm, app_nil_r.
   - now simpl.
 Qed.
 
-Lemma repeat_last_M n lst x: x = repeat Minus n ++ [lst] -> exists n' m', x = repeat Minus n' ++ repeat Plus m'.
+Lemma repeat_last_M n lst x: x = repeat Minus n ++ [lst] -> exists n' m', (m' <= 1)%nat /\ x = repeat Minus n' ++ repeat Plus m'.
 Proof.
   destruct lst; intros ->; [exists n, 1%nat| exists (1 + n)%nat, O].
   - now simpl.
   - replace [Minus] with (repeat Minus 1); [|now auto].
+    split;[now auto|].
     now rewrite <- repeat_app, Nat.add_comm, app_nil_r.
 Qed.
 
 Open Scope nat_scope.
 Lemma reduced_form : forall (x: list Direction), ~ CanReduceDirStep x
-  ->  exists (l m n:nat), (x = (List.repeat Plus l) ++ (List.repeat Minus m) ++ (List.repeat Plus n) \/ 
+  ->  exists (l m n:nat), (l <= 1) /\ (n <= 1) /\
+                          (x = (List.repeat Plus l) ++ (List.repeat Minus m) ++ (List.repeat Plus n) \/ 
                            x = (List.repeat Minus l) ++ (List.repeat Plus m) ++ (List.repeat Minus n)).
 Proof.
-  intros x. induction x as [|h x IHx];[exists 0, 0, 0;now left|].
-  intros NotReduce. apply tl_cannot_reduce in NotReduce as NotReducex. apply IHx in NotReducex. clear IHx. destruct NotReducex as [l [m [n [PMP | MPM]]]].
-    - destruct h;[exists (1+l), m, n; left; now rewrite PMP|].
-      destruct l;[exists 0, (1+m), n; left; now rewrite PMP|].
-      destruct l.
-      + simpl in PMP. rewrite PMP in NotReduce. eapply ReduceDir_reduced_form_MinusPlusRepeat in NotReduce. subst. simpl. exists 0,1,(1+n). now left.
-      + simpl in PMP. rewrite PMP in NotReduce.
-        destruct ((list_eq_dec Direction_dec) (repeat Plus l ++ repeat Minus m ++ repeat Plus n) (@nil Direction)) as [e|ne]; [exists 0,1,2;left; rewrite PMP; now rewrite e|].
-        change (Minus :: Plus :: Plus :: repeat Plus l ++ repeat Minus m ++ repeat Plus n) with ([Minus] ++ [Plus ; Plus] ++ repeat Plus l ++ repeat Minus m ++ repeat Plus n) in NotReduce. 
-        eapply ReduceDir_reduced_form_PlusPlus in NotReduce;[|exact ne].
-        destruct NotReduce as [lst [n0 eq]]. rewrite eq in PMP.
-        change (Plus :: Plus :: repeat Plus n0 ++ [lst]) with (repeat Plus (2+n0) ++ [lst]) in PMP. apply repeat_last_P in PMP.
-        destruct PMP as [n' [m' _eq]]. exists 1,n',m'. right. now rewrite _eq.
-    - destruct h;[|exists (1+l), m, n; right; now rewrite MPM].
-      destruct l;[exists 0, (1+m), n; right; now rewrite MPM|].
-      destruct l; simpl in MPM; rewrite MPM in NotReduce.
-      + eapply ReduceDir_reduced_form_PlusMinusRepeat in NotReduce. subst. simpl. exists 0,1,(1+n). now right.
-      + 
-        destruct ((list_eq_dec Direction_dec) (repeat Minus l ++ repeat Plus m ++ repeat Minus n) (@nil Direction)) as [e|ne]; [exists 0,1,2;right; rewrite MPM; now rewrite e|].
-        change (Plus :: Minus :: Minus :: repeat Minus l ++ repeat Plus m ++ repeat Minus n) with ([Plus] ++ [Minus ; Minus] ++ repeat Minus l ++ repeat Plus m ++ repeat Minus n) in NotReduce. 
-        eapply ReduceDir_reduced_form_MinusMinus in NotReduce;[|exact ne].
-        destruct NotReduce as [lst [n0 eq]]. rewrite eq in MPM.
-        change (Minus :: Minus :: repeat Minus n0 ++ [lst]) with (repeat Minus (2+n0) ++ [lst]) in MPM. apply repeat_last_M in MPM.
-        destruct MPM as [n' [m' _eq]]. exists 1,n',m'. left. now rewrite _eq.
+  intros x. induction x as [|h x IHx];[exists 0, 0, 0; split;try now auto|].
+  intros NotReduce. apply tl_cannot_reduce in NotReduce as NotReducex. apply IHx in NotReducex. clear IHx. destruct NotReducex as [l [m [n [l1 [n1 [PMP | MPM]]]]]].
+    - destruct h. 
+      + destruct l as [|l].
+        * exists 1, m, n. split; try split; try now auto. left. rewrite PMP. reflexivity.
+        * destruct l as [|l];[|apply le_S_n in l1; apply Nat.nle_succ_0 in l1; contradiction].
+          simpl in PMP. destruct m as [|m];[exists 0,(2+n),0; split;[now auto|split;[now auto|right; rewrite PMP;now rewrite app_nil_r]]|].
+          rewrite PMP in NotReduce. change (Plus :: Plus :: repeat Minus (S m) ++ repeat Plus n) with ([] ++ [Plus; Plus] ++ (Minus :: repeat Minus m ++ repeat Plus n)) in NotReduce. apply ReduceDir_reduced_form_PlusPlus in NotReduce;[|now auto].
+          destruct NotReduce as [lst [m' eq]]. simpl in PMP. rewrite eq in PMP. change (Plus :: repeat Plus m' ++ [lst]) with (repeat Plus (1+m') ++ [lst]) in PMP. apply repeat_last_P in PMP.
+          destruct PMP as [m'' [n' [Hle eq']]]. exists 0,(1+m''),n'.
+          split;[now auto | split;[now auto| right]]. rewrite eq'. reflexivity.
+      + destruct l as [|l]; [exists 0, (1+m), n; split; [now auto|]; split; [now auto|]; left; now rewrite PMP |].
+        destruct l as [|l].
+        * simpl in PMP. rewrite PMP in NotReduce. apply ReduceDir_reduced_form_MinusPlusRepeat in NotReduce. subst. simpl.
+            exists 1, (1+n), 0. split;[now auto| split]; [now auto|right]. rewrite app_nil_r. reflexivity.
+        * apply le_S_n in l1. apply Nat.nle_succ_0 in l1; contradiction.
+    - destruct h.
+      + destruct l as [|l]; [exists 0, (1+m), n; split; [now auto|]; split; [now auto|]; right; now rewrite MPM |].
+        destruct l as [|l].
+        * simpl in MPM. rewrite MPM in NotReduce. apply ReduceDir_reduced_form_PlusMinusRepeat in NotReduce. subst. simpl.
+            exists 1, (1+n), 0. split;[now auto| split]; [now auto|left]. rewrite app_nil_r. reflexivity.
+        * apply le_S_n in l1. apply Nat.nle_succ_0 in l1; contradiction.
+      + destruct l as [|l].
+        * exists 1, m, n. split; try split; try now auto. right. rewrite MPM. reflexivity.
+        * destruct l as [|l];[|apply le_S_n in l1; apply Nat.nle_succ_0 in l1; contradiction].
+          simpl in MPM. destruct m as [|m];[exists 0,(2+n),0; split;[now auto|split;[now auto|left; rewrite MPM;now rewrite app_nil_r]]|].
+          rewrite MPM in NotReduce. change (Minus :: Minus :: repeat Plus (S m) ++ repeat Minus n) with ([] ++ [Minus;Minus] ++ (Plus :: repeat Plus m ++ repeat Minus n)) in NotReduce. apply ReduceDir_reduced_form_MinusMinus in NotReduce;[|now auto].
+          destruct NotReduce as [lst [m' eq]]. simpl in MPM. rewrite eq in MPM. change (Minus :: repeat Minus m' ++ [lst]) with (repeat Minus (1+m') ++ [lst]) in MPM. apply repeat_last_M in MPM.
+          destruct MPM as [m'' [n' [Hle eq']]]. exists 0,(1+m''),n'.
+          split;[now auto | split;[now auto| left]]. rewrite eq'. reflexivity.
 Qed.
-      
 Close Scope nat_scope. 
-
-
 
 Notation have_common_reduce ds1 ds2 := (exists ds', ReduceDir ds1 ds' /\ ReduceDir ds2 ds').
 
@@ -393,7 +399,6 @@ Proof.
       ]];
       destruct rule1, rule2; subst; try inversion eds1; subst; try now auto; try tauto.
 Qed.
-
 
 Lemma eq_have_common_reduce ds1 ds2: ds1 = ds2 -> have_common_reduce ds1 ds2.
 Proof.
@@ -522,7 +527,6 @@ Proof.
         -- now change ([Minus; Minus; Plus] ++ [Plus; Minus] ++ r2)
              with ([Minus;Minus;Plus;Plus] ++ [Minus]++r2).
 Qed.
-
 
 Lemma exists_iff {A:Type} (P Q : A -> Prop) :
   (forall x, P x <-> Q x) -> (exists x, P x) <-> (exists x, Q x).
