@@ -61,9 +61,9 @@ Definition reduced ds dsr:= ReduceDir ds dsr /\ ~ CanReduceDirStep dsr.
 Lemma AdmissibleDirs_preserve ds ds': AdmissibleDirs ds -> ReduceDir ds ds' -> AdmissibleDirs ds'.
 Admitted.
 
-Axiom inadmissible_rotation_dif_four: forall ds, rotation_difference ds >= 4 \/ rotation_difference ds <= -4 -> ~ AdmissibleDirs ds.
+Axiom inadmissible_rotation_dif_four: forall ds, Z.abs(rotation_difference ds) >= 4 -> ~ AdmissibleDirs ds.
 
-Lemma rotate_dif_four_len_eight ds dsr: reduced ds dsr -> (length dsr >= 8)%nat -> rotation_difference ds >= 4 \/ rotation_difference ds <= -4 .
+Lemma rotate_dif_four_len_eight ds dsr: reduced ds dsr -> (length dsr >= 8)%nat -> Z.abs(rotation_difference ds) >= 4.
 Admitted.
 
 Lemma repeat_dif_P n: rotation_difference (repeat Plus n) = Z.of_nat n.
