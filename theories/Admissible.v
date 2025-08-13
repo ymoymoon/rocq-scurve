@@ -63,13 +63,27 @@ Admitted.
 
 Axiom inadmissible_rotation_dif_four: forall ds, Z.abs(rotation_difference ds) >= 4 -> ~ AdmissibleDirs ds.
 
-Lemma rotate_dif_four_len_eight ds dsr: reduced ds dsr -> (length dsr >= 8)%nat -> Z.abs(rotation_difference ds) >= 4.
-Admitted.
-
 Lemma repeat_dif_P n: rotation_difference (repeat Plus n) = Z.of_nat n.
 Admitted. 
 Lemma repeat_dif_M n: rotation_difference (repeat Minus n) = - (Z.of_nat n).
 Admitted. 
+
+Lemma rotate_dif_four_len_eight ds dsr: reduced ds dsr -> (length dsr >= 8)%nat -> Z.abs(rotation_difference ds) >= 4.
+Proof.
+  intros [rdc cannotStep] len_eight.
+  rewrite (rotation_difference_preservation ds dsr rdc).
+  eapply reduced_form in cannotStep as form.
+  destruct form as [l [m [n [Hl [Hn [PMP | MPM]]]]]].
+  - rewrite PMP in len_eight. repeat rewrite length_app in len_eight. repeat rewrite repeat_length in len_eight. rewrite <- Nat.add_shuffle3 in len_eight. rewrite Nat.add_comm in len_eight.
+    destruct l as [| [|l]], n as [| [|n]]; try lia; simpl in len_eight.
+    + subst. repeat rewrite rotation_difference_distribution. rewrite repeat_dif_M. repeat rewrite repeat_dif_P. lia.
+    + subst. repeat rewrite rotation_difference_distribution. rewrite repeat_dif_M. repeat rewrite repeat_dif_P. lia.
+    + subst. repeat rewrite rotation_difference_distribution. rewrite repeat_dif_M. repeat rewrite repeat_dif_P. lia.
+    + subst. repeat rewrite rotation_difference_distribution. rewrite repeat_dif_M. repeat rewrite repeat_dif_P. lia.
+  - rewrite MPM in len_eight. repeat rewrite length_app in len_eight. repeat rewrite repeat_length in len_eight. rewrite <- Nat.add_shuffle3 in len_eight. rewrite Nat.add_comm in len_eight.
+    destruct l as [| [|l]], n as [| [|n]]; try lia; simpl in len_eight;
+    subst; repeat rewrite rotation_difference_distribution; rewrite repeat_dif_P; repeat rewrite repeat_dif_M; lia.
+Qed.
 
 Ltac listin := repeat (try (now left);right).
 
