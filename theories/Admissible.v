@@ -75,11 +75,8 @@ Proof.
   eapply reduced_form in cannotStep as form.
   destruct form as [l [m [n [Hl [Hn [PMP | MPM]]]]]].
   - rewrite PMP in len_eight. repeat rewrite length_app in len_eight. repeat rewrite repeat_length in len_eight. rewrite <- Nat.add_shuffle3 in len_eight. rewrite Nat.add_comm in len_eight.
-    destruct l as [| [|l]], n as [| [|n]]; try lia; simpl in len_eight.
-    + subst. repeat rewrite rotation_difference_distribution. rewrite repeat_dif_M. repeat rewrite repeat_dif_P. lia.
-    + subst. repeat rewrite rotation_difference_distribution. rewrite repeat_dif_M. repeat rewrite repeat_dif_P. lia.
-    + subst. repeat rewrite rotation_difference_distribution. rewrite repeat_dif_M. repeat rewrite repeat_dif_P. lia.
-    + subst. repeat rewrite rotation_difference_distribution. rewrite repeat_dif_M. repeat rewrite repeat_dif_P. lia.
+    destruct l as [| [|l]], n as [| [|n]]; try lia; simpl in len_eight;
+    subst; repeat rewrite rotation_difference_distribution; rewrite repeat_dif_M; repeat rewrite repeat_dif_P; lia.
   - rewrite MPM in len_eight. repeat rewrite length_app in len_eight. repeat rewrite repeat_length in len_eight. rewrite <- Nat.add_shuffle3 in len_eight. rewrite Nat.add_comm in len_eight.
     destruct l as [| [|l]], n as [| [|n]]; try lia; simpl in len_eight;
     subst; repeat rewrite rotation_difference_distribution; rewrite repeat_dif_P; repeat rewrite repeat_dif_M; lia.
