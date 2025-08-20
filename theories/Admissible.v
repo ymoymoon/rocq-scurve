@@ -143,7 +143,7 @@ Proof.
     + contradict lcond. lia.
 Qed.
 
-Definition all_admissibles_sim :=
+Definition all_admissibles_quotient :=
 [
   (* + *)
   [Plus];
@@ -169,3 +169,30 @@ Definition all_admissibles_sim :=
   [Minus; Plus; Plus; Plus; Plus; Plus; Minus]
   ].
 
+Definition inv ds := map (fun x => match x with | Plus => Minus | Minus => Plus end) ds.
+
+Inductive rev_inv_sim : list Direction -> list Direction -> Prop :=
+| Equal : forall ds, rev_inv_sim ds ds
+| Rev : forall ds, rev_inv_sim ds (rev ds)
+| Inv : forall ds, rev_inv_sim ds (inv ds)
+| RevInv : forall ds, rev_inv_sim ds (rev (inv ds))
+.
+
+Ltac try_all_list lst :=
+  match eval compute in lst with
+  | nil => fail "not applicable"
+  | cons ?h ?t => first [now (exists h; subst; split;[try constructor| listin]) | try_all_list t ]
+  end.
+
+Lemma consist_quotient: 
+forall ds, In ds all_admissibles -> exists repds, rev_inv_sim ds repds /\ In repds all_admissibles_quotient.
+Proof.
+  intros ds HIn. repeat destruct HIn as [Heq | HIn]
+  ; try_all_list all_admissibles_quotient.
+Qed.
+
+Corollary reduced_admissible_form_quotient:
+forall ds dsr, AdmissibleDirs ds -> reduced ds dsr -> exists repds, rev_inv_sim dsr repds /\ In repds all_admissibles_quotient.
+Proof.
+  intros ds dsr AD Reduced. apply consist_quotient. exact (reduced_admissible_form ds dsr AD Reduced).
+Qed.
