@@ -53,8 +53,18 @@ Parameter AdmissibleDirs : list Direction -> Prop.
 
 Axiom notAdmissibleNil : ~ AdmissibleDirs [].
 
+Lemma nil_RDS ds: ~ ReduceDirStep ds [].
+Proof.
+  intros RDS. inversion RDS as [l r ds0 ds1 HRule eq1 eq2].
+  apply app_eq_nil in eq2. destruct eq2 as [l_nil eq2]. apply app_eq_nil in eq2. destruct eq2 as [ds1_nil r_nil]. subst.
+  inversion HRule.
+Qed.
+
 Lemma nil_reduce ds: ReduceDir ds [] -> ds = [].
-Admitted.
+Proof. 
+  intros RD. remember [] as ds'. induction RD as [ds|ds ds' _nil RDS RD IHRD]; try reflexivity.
+  subst. contradict RDS. rewrite IHRD. exact (nil_RDS ds). reflexivity.
+Qed. 
 
 Definition reduced ds dsr:= ReduceDir ds dsr /\ ~ CanReduceDirStep dsr. 
 
@@ -64,9 +74,17 @@ Admitted.
 Axiom inadmissible_rotation_dif_four: forall ds, Z.abs(rotation_difference ds) >= 4 -> ~ AdmissibleDirs ds.
 
 Lemma repeat_dif_P n: rotation_difference (repeat Plus n) = Z.of_nat n.
-Admitted. 
+Proof.
+  induction n as [| n IHn].
+  - reflexivity.
+  - simpl. change (Plus :: repeat Plus n) with ([Plus] ++ repeat Plus n). rewrite rotation_difference_distribution. rewrite IHn. change (rotation_difference [Plus]) with 1. now auto with zarith.
+Qed.
 Lemma repeat_dif_M n: rotation_difference (repeat Minus n) = - (Z.of_nat n).
-Admitted. 
+Proof.
+  induction n as [| n IHn].
+  - reflexivity.
+  - simpl. change (Minus :: repeat Minus n) with ([Minus] ++ repeat Minus n). rewrite rotation_difference_distribution. rewrite IHn. change (rotation_difference [Minus]) with (-1). now auto with zarith.
+Qed.
 
 Lemma rotate_dif_four_len_eight ds dsr: reduced ds dsr -> (length dsr >= 8)%nat -> Z.abs(rotation_difference ds) >= 4.
 Proof.
@@ -124,3 +142,30 @@ Proof.
     + contradict lcond. lia.
     + contradict lcond. lia.
 Qed.
+
+Definition all_admissibles_sim :=
+[
+  (* + *)
+  [Plus];
+  (* +- *)
+  [Plus; Minus];
+  (* ++ *)
+  [Plus; Plus];
+  (* +++ *)
+  [Plus; Plus; Plus];
+  (* ++- *)
+  [Plus; Plus; Minus];
+  (* +++- *)
+  [Plus; Plus; Plus; Minus];
+  (* -++- *)
+  [Minus; Plus; Plus; Minus];
+  (* ++++- *)
+  [Plus; Plus; Plus; Plus; Minus];
+  (* -+++- *)
+  [Minus; Plus; Plus; Plus; Minus];
+  (* -++++- *)
+  [Minus; Plus; Plus; Plus; Plus; Minus];
+  (* -+++++- *)
+  [Minus; Plus; Plus; Plus; Plus; Plus; Minus]
+  ].
+
