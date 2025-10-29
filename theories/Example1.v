@@ -2,7 +2,6 @@ Require Import Stdlib.Reals.Reals.
 Require Import Stdlib.Lists.List.
 Import ListNotations.
 Require Import PrimitiveSegment.
-Require Import ListExt.
 Require Import Segment.
 Require Import Embed.
 From Stdlib Require Import Lra.
