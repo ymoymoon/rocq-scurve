@@ -2,6 +2,7 @@ From Stdlib Require Export List.
 Require Import Reduction.
 From Stdlib Require Import ZArith.
 Require Import PrimitiveSegment.
+(* Require Import Embed. *)
 Import ListNotations.
 Open Scope Z_scope.
 From Stdlib Require Import Lia.
@@ -50,6 +51,19 @@ Definition all_admissibles :=
   ].
 
 Parameter AdmissibleDirs : list Direction -> Prop.
+(* Definition AdmissibleDirs (ds: list Direction) : Prop :=
+  forall ps, direction_to_scurve ds ps -> admissible ps.
+
+(* scurve での許容可能性と，AdmissibleDirs に写した後の許容可能性は同値 *)
+Lemma admissible_AdissibleDirs_iff :
+  forall ps, admissible ps <-> AdmissibleDirs (scurve_to_direction ps). 
+Proof. intros ps. split.
+  - (* -> *) intros Admps s DtoS. apply DtoS_StoD_inv2 in DtoS.
+    (* 結局，向きに直したときの列が同じならば許容可能性が同じ，ということを示さないといけない *)
+    admit.
+  - (* <- *) intros Admds. unfold AdmissibleDirs in Admds. 
+    specialize Admds with ps. apply Admds. apply DtoS_StoD_inv1.
+Admitted. *)
 
 Axiom notAdmissibleNil : ~ AdmissibleDirs [].
 

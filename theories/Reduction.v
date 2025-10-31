@@ -20,13 +20,6 @@ Definition Direction_dec: forall (x y: Direction), {x = y} + {x <> y}.
 Defined.
 Canonical Direction_eqDec := @Pack _ Direction_dec.
 
-(* 単位セグメントから向きへの変換 *)
-Definition orn (x:PrimitiveSegment) : Direction :=
-match x with
-| (n, e, cx) | (s, e, cx) | (s, w, cc) | (n, w, cc) => Plus
-| (s ,w, cx) | (s, e, cc) | (n, e, cc) | (n, w, cx) => Minus
-end.
-
 Definition rotation_difference (ds: list Direction) : Z :=
   fold_right Z.add 0 (map (fun d =>
                              match d with
@@ -141,9 +134,6 @@ Proof.
   destruct IHReduceDir as [head_eq' last_eq'].
   split; [now rewrite head_eq, head_eq' | now rewrite last_eq, last_eq'].
 Qed.
-
-Definition Reduce (p p': list PrimitiveSegment): Prop :=
-  ReduceDir (map orn p) (map orn p').
 
 Definition rule_dec ds: {exists ds', Rule ds ds'} + {~ exists ds', Rule ds ds'}.
   refine (match ds with
@@ -351,6 +341,12 @@ Proof.
 Qed.
 Close Scope nat_scope. 
 
+  (**
+    * 簡約の性質3.b: 合流性
+    * reduced form は一意
+    * 以下で示す局所合流性と，上で示した強正規化性より
+    * Newman の補題から導ける
+    *)
 Notation have_common_reduce ds1 ds2 := (exists ds', ReduceDir ds1 ds' /\ ReduceDir ds2 ds').
 
 Lemma non_overlap_reduction_confluence l c r ds1 ds2 ds1' ds2':
@@ -549,3 +545,35 @@ Proof.
   - rewrite (exists_iff _ _ (fun ds => and_comm _ _)).
     now eapply (ReduceDir_local_confluence_aux _ _ _ _ _ _ _ _ rule2 rule1).
 Qed.
+
+
+(* scurve と +-列の対応 *)
+Definition orn (x:PrimitiveSegment) : Direction :=
+match x with
+| (n, e, cx) | (s, e, cx) | (s, w, cc) | (n, w, cc) => Plus
+| (s ,w, cx) | (s, e, cc) | (n, e, cc) | (n, w, cx) => Minus
+end.
+
+Definition scurve_to_direction (s: scurve) : list Direction :=
+  map orn (proj1_sig s).
+
+(* 逆向きは partial function *)
+Inductive direction_to_scurve : list Direction -> scurve -> Prop :=
+| DtoSNil : forall s, proj1_sig s = [] -> direction_to_scurve [] s
+| DtoSOne : forall (d: Direction) s, scurve_to_direction s = [d] -> 
+    direction_to_scurve [d] s
+| DtoSCon : forall (d: Direction) (ld: list Direction) (p: PrimitiveSegment) s ps,
+    orn p = d -> 
+    dc_pseg_hd p (proj1_sig s) ->
+    direction_to_scurve ld s ->
+    proj1_sig ps = p :: (proj1_sig s) ->
+    direction_to_scurve (d :: ld) ps.
+
+(* 互いに逆関係になっている *)
+Lemma DtoS_StoD_inv1 : forall s,
+  direction_to_scurve (scurve_to_direction s) s.
+Proof. Admitted.
+  
+Lemma DtoS_StoD_inv2 : forall ld s, 
+  direction_to_scurve ld s -> scurve_to_direction s = ld.
+Proof. Admitted.
