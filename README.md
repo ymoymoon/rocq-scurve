@@ -7,6 +7,28 @@ This repository formalizes and proves the Admissibility condition in Takahashi's
 This project formalizes definitions and corollaries/theorems on Admissibility of trajectories in QRC in Rocq's proof environment.
 This gives a mechanical justification guarantee to the theory of QRC, which is spoken geometrically.
 
+## Correspondence with the Paper
+| Paper (Japanese one) | Rocq Code |
+| ---- | ---- |
+| Def.2 | PrimitiveSegment.dc |
+| Def.4 |  |
+| Def.5 | Embed.embed, Embed.embed_scurve |
+| Def.6 | Segment.close |
+| Def.7 | Embed.admissible (used in examples), Admissible.AdmissibleDirs |
+| Prop.1 |  |
+| Def.8 | (Reduction.orn, Reduction.Reduce) |
+| Def.11 | Admissible.reduced |
+| Prop.2(1) | Reduction.termination |
+| Prop.2(2) | Reduction.rotation_difference_preservation |
+| Prop.2(3) | Reduction.reduced_form |
+| NOT valid (Example.5) | Reduction.ReduceDir_local_confluence |
+| Prop.3 |  |
+| Prop.4 |  |
+| Th.1(->) | Admissible.AdmissibleDirs_preserve |
+| Th.1(<-) |  |
+| Sec.4.1-4.7 | (Admissible.all_admissibles_quotient) |
+| Th.2 |  |
+
 ## Requirement
 
 - [opam](https://opam.ocaml.org/doc/Install.html)
