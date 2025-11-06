@@ -315,7 +315,8 @@ Proof.
         * exists 1, m, n. split; try split; try now auto. left. rewrite PMP. reflexivity.
         * destruct l as [|l];[|apply le_S_n in l1; apply Nat.nle_succ_0 in l1; contradiction].
           simpl in PMP. destruct m as [|m];[exists 0,(2+n),0; split;[now auto|split;[now auto|right; rewrite PMP;now rewrite app_nil_r]]|].
-          rewrite PMP in NotReduce. change (Plus :: Plus :: repeat Minus (S m) ++ repeat Plus n) with ([] ++ [Plus; Plus] ++ (Minus :: repeat Minus m ++ repeat Plus n)) in NotReduce. apply ReduceDir_reduced_form_PlusPlus in NotReduce;[|now auto].
+          rewrite PMP in NotReduce. change (Plus :: Plus :: repeat Minus (S m) ++ repeat Plus n) with ([] ++ [Plus; Plus] ++ (Minus :: repeat Minus m ++ repeat Plus n)) in NotReduce. 
+          apply ReduceDir_reduced_form_PlusPlus in NotReduce;[|now auto].
           destruct NotReduce as [lst [m' eq]]. simpl in PMP. rewrite eq in PMP. change (Plus :: repeat Plus m' ++ [lst]) with (repeat Plus (1+m') ++ [lst]) in PMP. apply repeat_last_P in PMP.
           destruct PMP as [m'' [n' [Hle eq']]]. exists 0,(1+m''),n'.
           split;[now auto | split;[now auto| right]]. rewrite eq'. reflexivity.
@@ -334,7 +335,8 @@ Proof.
         * exists 1, m, n. split; try split; try now auto. right. rewrite MPM. reflexivity.
         * destruct l as [|l];[|apply le_S_n in l1; apply Nat.nle_succ_0 in l1; contradiction].
           simpl in MPM. destruct m as [|m];[exists 0,(2+n),0; split;[now auto|split;[now auto|left; rewrite MPM;now rewrite app_nil_r]]|].
-          rewrite MPM in NotReduce. change (Minus :: Minus :: repeat Plus (S m) ++ repeat Minus n) with ([] ++ [Minus;Minus] ++ (Plus :: repeat Plus m ++ repeat Minus n)) in NotReduce. apply ReduceDir_reduced_form_MinusMinus in NotReduce;[|now auto].
+          rewrite MPM in NotReduce. change (Minus :: Minus :: repeat Plus (S m) ++ repeat Minus n) with ([] ++ [Minus;Minus] ++ (Plus :: repeat Plus m ++ repeat Minus n)) in NotReduce. 
+          apply ReduceDir_reduced_form_MinusMinus in NotReduce;[|now auto].
           destruct NotReduce as [lst [m' eq]]. simpl in MPM. rewrite eq in MPM. change (Minus :: repeat Minus m' ++ [lst]) with (repeat Minus (1+m') ++ [lst]) in MPM. apply repeat_last_M in MPM.
           destruct MPM as [m'' [n' [Hle eq']]]. exists 0,(1+m''),n'.
           split;[now auto | split;[now auto| left]]. rewrite eq'. reflexivity.
@@ -557,22 +559,23 @@ end.
 Definition scurve_to_direction (s: scurve) : list Direction :=
   map orn (proj1_sig s).
 
-(* 逆向きは partial function *)
+(* 逆向きは多価関数 *)
 Inductive direction_to_scurve : list Direction -> scurve -> Prop :=
 | DtoSNil : forall s, proj1_sig s = [] -> direction_to_scurve [] s
-| DtoSOne : forall (d: Direction) s, scurve_to_direction s = [d] -> 
-    direction_to_scurve [d] s
-| DtoSCon : forall (d: Direction) (ld: list Direction) (p: PrimitiveSegment) s ps,
+| DtoSCon : forall (d: Direction) (ld: list Direction) (p: PrimitiveSegment) (s' s: scurve),
+    proj1_sig s = p :: (proj1_sig s') ->
+    dc_pseg_hd p (proj1_sig s') ->
     orn p = d -> 
-    dc_pseg_hd p (proj1_sig s) ->
-    direction_to_scurve ld s ->
-    proj1_sig ps = p :: (proj1_sig s) ->
-    direction_to_scurve (d :: ld) ps.
+    direction_to_scurve ld s' ->
+    direction_to_scurve (d :: ld) s.
 
 (* 互いに逆関係になっている *)
 Lemma DtoS_StoD_inv1 : forall s,
   direction_to_scurve (scurve_to_direction s) s.
-Proof. Admitted.
+Proof.
+  intros s. destruct s as [ps cond]. induction ps as [ | p ps' IHps].
+  - (* s = [] *) apply DtoSNil. reflexivity.
+  - (* s = p:ps' *) Admitted.
   
 Lemma DtoS_StoD_inv2 : forall ld s, 
   direction_to_scurve ld s -> scurve_to_direction s = ld.
