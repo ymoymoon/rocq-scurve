@@ -10,6 +10,8 @@ This gives a mechanical justification guarantee to the theory of QRC, which is s
 ## Correspondence with the Paper
 | Term | Term in Japanese | Paper (Japanese one) | Related Rocq Code |
 | ---- | ---- | ---- | ---- |
+| primitive segment | 単位セグメント | Sec2.1 | PrimitiveSegment.PrimitiveSegment |
+| segment | セグメント | Sec 2.1 | Segment.Segment |
 | directly connectable | 直接連結可能 | Def.2 | PrimitiveSegment.dc |
 | scurve | | (Sec 2.2) | PrimitiveSegment.scurve |
 | embedding | 埋め込み | Def.5 | Embed.embed, Embed.embed_scurve |
