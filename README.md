@@ -7,6 +7,10 @@ This repository formalizes and proves the Admissibility condition in Takahashi's
 This project formalizes definitions and corollaries/theorems on Admissibility of trajectories in QRC in Rocq's proof environment.
 This gives a mechanical justification guarantee to the theory of QRC, which is spoken geometrically.
 
+## Documentation
+
+[HTML rendering of the source code](https://proof-ninja.github.io/rocq-scurve/) (using [`rocqnavi`](https://github.com/affeldt-aist/rocqnavi)).
+
 ## Requirement
 
 - [opam](https://opam.ocaml.org/doc/Install.html)
