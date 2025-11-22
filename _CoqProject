@@ -10,3 +10,4 @@ theories/Example2.v
 theories/Example3.v
 theories/Reduction.v
 theories/Admissible.v
+theories/AdmissibilityPreservation.v
