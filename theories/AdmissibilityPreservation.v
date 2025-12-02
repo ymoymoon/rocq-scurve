@@ -31,16 +31,15 @@ Definition sparse (sub_ls : one_way_embedding) (ls : list Segment) : Prop :=
 
 
 (* 許容可能ならば，疎な開埋め込みが存在する *)
-Lemma embed_sparsely (ds : list Direction) (sub_ds : list Direction) :
-	AdmissibleDirs ds
-	-> sublist sub_ds ds
+Lemma embed_sparsely (dl dr : list Direction) (sub_ds : list Direction) :
+	AdmissibleDirs (dl ++ sub_ds ++ dr)
 	-> one_way_scurve sub_ds
-	-> exists ls sub_ls, 
-		embed_listDir ds ls 
-		/\ ~ close ls
+	-> exists l r sub_ls, 
+		embed_listDir dl l 
+		/\ embed_listDir dr r 
 		/\ embed_listDir sub_ds (proj1_sig sub_ls)
-		/\ sublist (proj1_sig sub_ls) ls
-		/\ sparse sub_ls ls.
+		/\ ~ close (l ++ (proj1_sig sub_ls) ++ r)
+		/\ sparse sub_ls (l ++ (proj1_sig sub_ls) ++ r).
 Proof. Admitted.
 
 (* 矩形の中にピッタリ収まる1つのセグメントが描ける *)
@@ -52,7 +51,7 @@ Lemma embed_in_rectangle : forall (ls : one_way_embedding),
 Proof. Admitted.
 
 (* 端点を含まない sub_ls の周りが疎な開埋め込みにおいて，sub_ls をその領域に収まるセグメントに置き換えても開のまま *)
-Lemma a : forall sub_ls l ls r rs seg,
+Lemma seg_in_rectangle_keep_openness : forall sub_ls l ls r rs seg,
 	~ close ((l :: ls) ++ (proj1_sig sub_ls) ++ (r :: rs))
 	-> sparse sub_ls ((l :: ls) ++ (proj1_sig sub_ls) ++ (r :: rs))
 	-> (forall rr, onSegment seg rr -> in_rect sub_ls rr) 
@@ -67,15 +66,20 @@ Lemma AdmissibleDirs_r1_Plus: forall l r,
 Proof.
 	remember [Plus; Minus; Plus] as PMP eqn: HeqPMP.
 	intros l r admds. destruct l as [ | l'].
-	- admit.
+	- (* 端点を含む簡約 *) admit.
 	- destruct r as [ | r'].
-		+ admit.
+		+ (* 端点を含む簡約 *) admit.
 		+ (* 簡約にかかわった部分の両端に別のセグメントが存在する場合 *)
-		assert (Hsub : sublist PMP ((l' :: l) ++ PMP ++ r' :: r)). {
-			admit.
-		} assert (Honeway : one_way_scurve PMP). {
-			admit.
-		}
-		apply (embed_sparsely _ _ admds Hsub) in Honeway as 
-			[sparse_embedding [PMP_embedding [Hembed [Hopen [Hsub1 [Hsub2 Hsparse]]]]]].
+			assert (Honeway : one_way_scurve PMP). {
+				admit.
+			}
+			apply (embed_sparsely _ _ _ admds) in Honeway as 
+				[ll [lr [sub_ls [Hl [Hr [HPMP [Hopen Hsparse]]]]]]].
+			unfold AdmissibleDirs. intros ps Hps. unfold admissible.
+			destruct (embed_in_rectangle sub_ls) as 
+				[seg [Hin_rect [Hinit Hterm]]].
+			exists (ll ++ [seg] ++ lr). split.
+			* (* 簡約後の向き列の埋め込みになっていること *) admit.
+			* (* その埋め込みが開であること *) admit.
+			(* apply seg_in_rectangle_keep_openness. *)
 Admitted.

@@ -2,6 +2,7 @@ From Stdlib Require Export List.
 Require Import Reduction.
 From Stdlib Require Import ZArith.
 Require Import PrimitiveSegment.
+Require Import Embed.
 Import ListNotations.
 Open Scope Z_scope.
 From Stdlib Require Import Lia.
@@ -49,7 +50,8 @@ Definition all_admissibles :=
   [Plus; Minus; Minus; Minus; Minus; Minus; Plus]
   ].
 
-Parameter AdmissibleDirs : list Direction -> Prop.
+Definition AdmissibleDirs (ds: list Direction) : Prop :=
+  forall ps, scurve_to_direction ps = ds -> admissible ps.
 
 Axiom notAdmissibleNil : ~ AdmissibleDirs [].
 

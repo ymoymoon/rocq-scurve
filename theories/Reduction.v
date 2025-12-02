@@ -27,6 +27,8 @@ match x with
 | (s ,w, cx) | (s, e, cc) | (n, e, cc) | (n, w, cx) => Minus
 end.
 
+Definition scurve_to_direction (s : scurve) := map orn (proj1_sig s).
+
 Definition rotation_difference (ds: list Direction) : Z :=
   fold_right Z.add 0 (map (fun d =>
                              match d with
