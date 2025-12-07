@@ -6,15 +6,22 @@ Require Import PrimitiveSegment.
 Require Import Segment.
 Import ListNotations.
 
-(* 単方向 scurve *)
-Parameter one_way_scurve : list Direction -> Prop.
 
 (* scurve に直してから埋め込む．そうしないなら，連結していない Seg 列を省けるように． *)
-Parameter embed_listDir : list Direction -> list Segment -> Prop.
+Definition embed_listDir (ld: list Direction) (ls: list Segment) : Prop :=
+	exists sc: scurve, scurve_to_direction sc = ld
+	/\ embed_scurve sc ls.
 
 (* TODO: 空リストは含まない．含めるなら，後の定理の必要な部分に not nil 制約を入れる *)
-Parameter is_one_way_embedding : list Segment -> Prop.
+Parameter is_one_way_embedding : list Segment -> Prop
+(* Embed.all_same_h 使えそう *).
 Definition one_way_embedding := {ls : list Segment | is_one_way_embedding ls}.
+
+(* 単方向 scurve *)
+Definition one_way_scurve (sc : scurve) : Prop :=
+	exists ls, embed_scurve sc ls /\ is_one_way_embedding ls.
+Definition one_way_listDir (ld: list Direction) : Prop :=
+	exists ls, embed_listDir ld ls /\ is_one_way_embedding ls.
 
 (* 単方向曲線の始点と終点を結んだ線分を対角線にもつ矩形．部分曲線を含むとは限らない *)
 Parameter rectangular_from_diagonal : R * R -> R * R -> (R * R -> Prop).
@@ -38,8 +45,8 @@ Definition sparse (sub_ls : one_way_embedding) (ls : list Segment) : Prop :=
 					-> ~ rect q) *)
 
 
-Lemma P_is_oneway : one_way_scurve [Plus].
-Proof. (* ここは one_way_scurve の定義さえできれば示せる？ *)
+Lemma P_is_oneway : one_way_listDir [Plus].
+Proof. (* ここは one_way_listDir の定義さえできれば示せる？ *)
 Admitted.
 
 Lemma embedding_P_is_oneway : forall seg, 
@@ -47,14 +54,14 @@ Lemma embedding_P_is_oneway : forall seg,
 Proof.
 Admitted.
 
-Lemma PMP_is_oneway : one_way_scurve [Plus; Minus; Plus].
+Lemma PMP_is_oneway : one_way_listDir [Plus; Minus; Plus].
 Proof.
 Admitted.
 
 (* 許容可能ならば，疎な開埋め込みが存在する *)
 Lemma embed_sparsely (dl dr : list Direction) (sub_ds : list Direction) :
 	AdmissibleDirs (dl ++ sub_ds ++ dr)
-	-> one_way_scurve sub_ds
+	-> one_way_listDir sub_ds
 	-> exists l r sub_ls, 
 		embed_listDir dl l 
 		/\ embed_listDir dr r 
@@ -118,6 +125,9 @@ Lemma P_to_PMP : forall seg : Segment,
 Lemma AdmissibleDirs_r1_Plus_inv: forall l r,
   AdmissibleDirs (l ++ [Plus] ++ r) -> AdmissibleDirs (l ++ [Plus; Minus; Plus] ++ r).
 Proof.
-	intros l r admds. unfold AdmissibleDirs. intros ps Hps. unfold admissible. 
-	(* apply seg_in_rectangle_keep_openness. *)
+	unfold AdmissibleDirs. unfold admissible. intros l r admds sc Hsc.
+	(* admds を， sc と同じ X1 を持ち，簡約部分で２つの PSeg が取れた scurve で具体化する *)
+	(* すると admds から，上の scurve の許容可能性の証拠 ls を得る *)
+	(* この ls の内部に２つの Segment を，P_to_PMP によって追加すれば，欲しい埋め込みが得られる *)
+	(* その埋め込みが開であることは，seg_in_rectangle_keep_openness より *)
 Admitted.
