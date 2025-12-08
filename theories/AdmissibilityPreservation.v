@@ -121,7 +121,7 @@ Proof.
 			(* apply seg_in_rectangle_keep_openness. *)
 Admitted.
 
-(* Plus (の向きを持つ Primitive Segment)の埋め込みを，[Plus; Minus; Plus] の埋め込みとなる３つに矩形内で分割できる
+(* Plus (の向きを持つ Primitive Segment) の埋め込みを，[Plus; Minus; Plus] の埋め込みとなる３つに矩形内で分割できる
 	もっと一般的にしたい *)
 Lemma P_to_PMP : forall seg : Segment,
 	embed_listDir [Plus] [seg]
@@ -137,8 +137,10 @@ Lemma AdmissibleDirs_r1_Plus_inv: forall l r,
   AdmissibleDirs (l ++ [Plus] ++ r) -> AdmissibleDirs (l ++ [Plus; Minus; Plus] ++ r).
 Proof.
 	unfold AdmissibleDirs. unfold admissible. intros l r admds sc Hsc.
-	(* admds を， sc と同じ X1 を持ち，簡約部分で２つの PSeg が取れた scurve で具体化する *)
-	(* すると admds から，上の scurve の許容可能性の証拠 ls を得る *)
-	(* この ls の内部に２つの Segment を，P_to_PMP によって追加すれば，欲しい埋め込みが得られる *)
+	assert (H: exists ps, tl (proj1_sig ps) = tl (proj1_sig sc) /\ scurve_to_direction ps = l ++ [Plus] ++ r). {
+		admit. (* admds を， sc と同じ X1 を持ち，簡約部分で２つの PSeg が取れた scurve で具体化する *)
+	}
+	destruct H as [ps [Htl Hps]]. specialize admds with ps. apply admds in Hps as [ls' [Hps Hopen]].
+	(* この ls' の内部に２つの Segment を，P_to_PMP によって追加すれば，欲しい埋め込みが得られる *)
 	(* その埋め込みが開であることは，seg_in_rectangle_keep_openness より *)
 Admitted.
