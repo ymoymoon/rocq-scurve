@@ -90,7 +90,8 @@ Lemma divide_embedding_listDir : forall ld1 ld2 ls,
 Proof. Admitted.
 
 (* 許容可能ならば，その中の単方向な sub_ds 周りで疎な開埋め込みが存在する．
- 		さらに sub_ls の始点と終点を（sub_ls の向きを考慮した上で）自由に選んでも良い，としたらのちに端点での傾きを保存するために役立つ？ *)
+ 		さらに sub_ls の始点と終点とそれぞれでの傾きを（sub_ls の向きを考慮した上で）自由に選んでも良い，
+		としたらのちに端点での傾きを保存するために役立つ？ *)
 Lemma embed_sparsely (dl dr : list Direction) (sub_ds : list Direction) :
 	AdmissibleDirs (dl ++ sub_ds ++ dr)
 	-> is_one_way_listDir sub_ds
