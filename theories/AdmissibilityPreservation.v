@@ -11,6 +11,9 @@ Parameter default_primitive_segment : PrimitiveSegment.
 Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい？ *)
 Parameter slope_term : Segment -> R.
 
+(* 埋め込み（特に連結性を保証） *)
+Definition embedding := {ls : list Segment | exists sc, embed_scurve sc ls}. 
+
 (* list Segment を使用する際は，embed_scurve によって何かしらの埋め込みであることを確認する．
 		そうでない場合，リスト内の全セグメントが連結していることを確認しなければならない．
 		この先「２次元曲線」のような定義を作成した場合，定義の変更とともにこのコメントは削除する． *)
@@ -110,17 +113,28 @@ Lemma embed_in_rectangle : forall (ls : one_way_embedding) (d: Direction),
 		/\ term seg = term (last (proj1_sig ls) default_segment).
 Proof. Admitted.
 
-(* 端点を含まない sub_ls の周りが疎な開埋め込みにおいて，sub_ls をその領域に収まるセグメント列に置き換えても開のまま *)
-(* TODO: 端点で傾きが保存できていたら，端点を含む場合でも成立するはず *)
-Lemma seg_in_rectangle_keep_openness : forall sub_ls l ls r rs seg,
+(* sub_ls の周りが疎な開埋め込みにおいて，端点で傾きを保ちつつ sub_ls をその領域に収まるセグメント列に置き換えても開のまま *)
+Lemma seg_in_rectangle_keep_openness : forall sub_ls ls rs (segs: embedding), (* segs: list Segment にすると，segs の連結性証明が必要 *)
+	~ close (ls ++ (proj1_sig sub_ls) ++ rs)
+	-> sparse sub_ls (ls ++ (proj1_sig sub_ls) ++ rs)
+	-> (proj1_sig segs) <> []
+	-> slope_init (hd default_segment (proj1_sig sub_ls)) = slope_init (hd default_segment (proj1_sig segs))
+	-> slope_term (last (proj1_sig sub_ls) default_segment) = slope_term (last (proj1_sig segs) default_segment)
+	-> (forall rr, (exists seg, In seg (proj1_sig segs) /\ onSegment seg rr) -> in_rect sub_ls rr) 
+		/\ init (hd default_segment (proj1_sig segs)) = init (hd default_segment (proj1_sig sub_ls)) 
+		/\ term (last (proj1_sig segs) default_segment) = term (last (proj1_sig sub_ls) default_segment)
+	-> ~ close (ls ++ (proj1_sig segs) ++ rs).
+Proof. Admitted.
+
+(* 傾きの条件を無視できる代わりに，端点を含む置き換えには使えない *)
+(* Lemma seg_in_rectangle_keep_openness_old : forall sub_ls l ls r rs seg,
 	~ close ((l :: ls) ++ (proj1_sig sub_ls) ++ (r :: rs))
 	-> sparse sub_ls ((l :: ls) ++ (proj1_sig sub_ls) ++ (r :: rs))
 	-> (forall rr, onSegment seg rr -> in_rect sub_ls rr) 
 		/\ init seg = init (hd default_segment (proj1_sig sub_ls)) 
 		/\ term seg = term (last (proj1_sig sub_ls) default_segment)
 	-> ~ close ((l :: ls) ++ [seg] ++ (r :: rs)).
-Proof. Admitted.
-
+Proof. Admitted. *)
 
 (* [+-+ => +] での簡約で，簡約元が許容可能なら簡約先も許容可能 *)
 Lemma AdmissibleDirs_r1_Plus: forall l r,
@@ -144,14 +158,16 @@ Proof.
 Admitted.
 
 (* Plus (の向きを持つ Primitive Segment) の埋め込みを，[Plus; Minus; Plus] の埋め込みとなる３つに矩形内で分割できる
-	TODO：端点での傾きも保存できること．また，もっと一般的に *)
+	TODO：もっと一般的に *)
 Lemma P_to_PMP : forall (seg : Segment) (H: embed_listDir [Plus] [seg]),
 	exists seg1 seg2 seg3,
 		embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3] (* この内部で seg1-3 が連結していることは示されてほしい *)
 		/\ (forall rr, (onSegment seg1 rr \/ onSegment seg2 rr \/ onSegment seg3 rr)
 				-> in_rect (exist _ [seg] (embedding_P_is_oneway seg H)) rr) (* seg が張る矩形の内部で分割できている *)
 		/\ init seg1 = init seg
-		/\ term seg3 = term seg.
+		/\ term seg3 = term seg
+		/\ slope_init seg = slope_init seg1
+		/\ slope_term seg = slope_term seg3.
 Proof. Admitted.
 
 
@@ -177,6 +193,6 @@ Proof.
 	split.
 	- (* 埋め込みになっていること *) (* 頑張れば行けそう *) admit.
 	- (* その埋め込みが開であること *) 
-	(* 端点を含んでいなければ apply seg_in_rectangle_keep_openness. *)
+	(* apply seg_in_rectangle_keep_openness. *)
 Admitted.
 
