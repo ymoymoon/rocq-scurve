@@ -210,6 +210,20 @@ Lemma P_to_PMP : forall (seg : Segment) (H: embed_listDir [Plus] [seg]),
 		/\ slope_term seg = slope_term seg3.
 Proof. Admitted.
 
+(* 簡約前の scurve 内の Plus (の向きを持つ Primitive Segment) の埋め込みを，[Plus; Minus; Plus] の埋め込みに変えたら，
+		簡約後の scurve の埋め込みである *)
+(* TODO: 向き列を交えずコンパクトにする *)
+Lemma P_to_PMP_embbeding : forall sc1 sc2 l r seg seg1 seg2 seg3 ls1 ls2,
+	embed_scurve sc1 (ls1 ++ [seg] ++ ls2) (* つまり ls1, seg, ls2 は繋がっている *)
+	-> embed_listDir [Plus] [seg]
+	-> embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3]
+	-> init seg1 = init seg
+	-> term seg3 = term seg
+	-> scurve_to_direction sc1 = l ++ [Plus] ++ r
+	-> scurve_to_direction sc2 = l ++ [Plus; Minus; Plus] ++ r
+	-> hd default_primitive_segment (proj1_sig sc1) = hd default_primitive_segment (proj1_sig sc2)
+	-> embed_scurve sc2 (ls1 ++ [seg1; seg2; seg3] ++ ls2).
+Proof. Admitted.
 
 (* [+-+ => +] での簡約で，簡約先が許容可能ならもともと許容可能 *)
 Lemma AdmissibleDirs_r1_Plus_inv: forall l r,
@@ -217,7 +231,8 @@ Lemma AdmissibleDirs_r1_Plus_inv: forall l r,
 Proof.
 	intros l r admds. 
 	(* 疎な開埋め込みをとる *)
-	pose proof (embed_sparsely_listDir _ _ _ admds P_is_oneway) as [ls1 [ls3 [[ls2 Honeway] [Hls2 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]. 
+	pose proof (embed_sparsely_listDir _ _ _ admds P_is_oneway) as [ls1 [ls3 [[ls2 Honeway] [Hls2 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]];
+	simpl in *. 
 	(* AdmissibleDirs_head_fix によって，目的の開埋め込みを作りやすくする *)
 	apply (AdmissibleDirs_head_fix _ (hd default_primitive_segment (proj1_sig sc))).
 	intros sc' Hhead Hdir_sc'. 
@@ -231,7 +246,9 @@ Proof.
 	exists (ls1 ++ [seg1; seg2; seg3] ++ ls3). 
 	unfold admissible. 
 	split.
-	- (* 埋め込みになっていること *) (* 頑張れば行けそう *) admit.
+	- (* 埋め込みになっていること *) 
+		apply (P_to_PMP_embbeding sc sc' l r segP); try assumption.
+		rewrite Hhead. reflexivity.
 	- (* その埋め込みが開であること *) 
 		apply (seg_in_rectangle_keep_openness (exist _ [segP] (embedding_P_is_oneway segP Hls2))).
 		(* 仮定を満たすことはほぼ作業的に示せる *)
@@ -243,5 +260,5 @@ Proof.
 		+ assumption.
 		+ assumption.
 		+ simpl. unfold same_init_and_term. split; assumption.
-Admitted.
+Qed.
 
