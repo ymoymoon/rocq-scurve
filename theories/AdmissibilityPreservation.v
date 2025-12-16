@@ -128,6 +128,13 @@ Proof. Admitted.
 Lemma embedding_is_curve : forall ls, 
 	(exists ds, embed_listDir ds ls) -> is_curve ls.
 Proof.
+	intros ls H. destruct H as [ds [sc [H1 H2]]].
+	induction H2 as [ | | ps lp A s1 s2 ls' Hembed Hconnect IH].
+	- (* ls =[] *) apply IsCurveNil.
+	- (* ls =[s] *) apply IsCurveSingle.
+	- (* ls = s1 :: s2 :: ls' *) apply IsCurveCons.
+		+ apply IH. admit. (* IH が弱い *)
+		+ assumption.
 Admitted.
 
 
@@ -138,10 +145,11 @@ Lemma embed_sparsely_listDir (ds1 ds2 : list Direction) (sub_ds : list Direction
 	AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
 	-> is_one_way_listDir sub_ds
 	-> exists l r sub_ls, 
-		embed_listDir sub_ds (proj1_sig sub_ls)
-		/\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ (proj1_sig sub_ls) ++ r)
-		/\ ~ close (l ++ (proj1_sig sub_ls) ++ r)
-		/\ sparse sub_ls (l ++ (proj1_sig sub_ls) ++ r).
+	let sub_ls' := proj1_sig sub_ls in
+		embed_listDir sub_ds sub_ls'
+		/\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls' ++ r)
+		/\ ~ close (l ++ sub_ls' ++ r)
+		/\ sparse sub_ls (l ++ sub_ls' ++ r).
 Proof. Admitted.
 
 (* 矩形の中にピッタリ収まる1つのセグメントが描ける．端点での傾きは保存されない *)
@@ -154,14 +162,15 @@ Proof. Admitted.
 
 (* sub_ls の周りが疎な開埋め込みにおいて，端点で傾きを保ちつつ sub_ls をその領域に収まるセグメント列に置き換えても開のまま *)
 Lemma seg_in_rectangle_keep_openness : forall sub_ls ls rs (segs: list Segment), (* segs: list Segment にすると，segs の連結性証明が必要 *)
-	~ close (ls ++ (proj1_sig sub_ls) ++ rs)
-	-> sparse sub_ls (ls ++ (proj1_sig sub_ls) ++ rs)
+	let sub_ls' := proj1_sig sub_ls in
+	~ close (ls ++ sub_ls' ++ rs)
+	-> sparse sub_ls (ls ++ sub_ls' ++ rs)
 	-> segs <> []
 	-> is_curve segs (* 必要と思う *)
-	-> slope_init (hd default_segment (proj1_sig sub_ls)) = slope_init (hd default_segment segs)
-	-> slope_term (last (proj1_sig sub_ls) default_segment) = slope_term (last segs default_segment)
+	-> slope_init (hd default_segment sub_ls') = slope_init (hd default_segment segs)
+	-> slope_term (last sub_ls' default_segment) = slope_term (last segs default_segment)
 	-> (forall rr, (exists seg, In seg segs /\ onSegment seg rr) -> in_rect sub_ls rr) 
-	-> same_init_and_term segs (proj1_sig sub_ls) 
+	-> same_init_and_term segs sub_ls' 
 	-> ~ close (ls ++ segs ++ rs).
 Proof. Admitted.
 
@@ -204,8 +213,7 @@ Lemma P_to_PMP : forall (seg : Segment) (H: embed_listDir [Plus] [seg]),
 		embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3] (* この内部で seg1-3 が連結していることは示されてほしい *)
 		/\ (forall rr, (exists seg, In seg [seg1; seg2; seg3] /\ onSegment seg rr)
 				-> in_rect (exist _ [seg] (embedding_P_is_oneway seg H)) rr) (* seg が張る矩形の内部で分割できている *)
-		/\ init seg1 = init seg
-		/\ term seg3 = term seg
+		/\ same_init_and_term [seg1; seg2; seg3] [seg]
 		/\ slope_init seg = slope_init seg1
 		/\ slope_term seg = slope_term seg3.
 Proof. Admitted.
@@ -217,8 +225,7 @@ Lemma P_to_PMP_embbeding : forall sc1 sc2 l r seg seg1 seg2 seg3 ls1 ls2,
 	embed_scurve sc1 (ls1 ++ [seg] ++ ls2) (* つまり ls1, seg, ls2 は繋がっている *)
 	-> embed_listDir [Plus] [seg]
 	-> embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3]
-	-> init seg1 = init seg
-	-> term seg3 = term seg
+	-> same_init_and_term [seg1; seg2; seg3] [seg]
 	-> scurve_to_direction sc1 = l ++ [Plus] ++ r
 	-> scurve_to_direction sc2 = l ++ [Plus; Minus; Plus] ++ r
 	-> hd default_primitive_segment (proj1_sig sc1) = hd default_primitive_segment (proj1_sig sc2)
@@ -241,7 +248,7 @@ Proof.
 	}
 	pose proof (divide_embedding_listDir_mid _ _ _ _ _ _ H Hls2) as [Hls1 Hls3].
 	pose proof (embedding_one_dir Plus ls2 Hls2) as [segP HP]; subst.
-	pose proof (P_to_PMP segP Hls2) as [seg1 [seg2 [seg3 [HPMP [Hin_rect [Hinit [Hterm [Hinit_slope Hterm_slope]]]]]]]].
+	pose proof (P_to_PMP segP Hls2) as [seg1 [seg2 [seg3 [HPMP [Hin_rect [Hinit_term [Hinit_slope Hterm_slope]]]]]]].
 	(* 欲しかった埋め込み *) 
 	exists (ls1 ++ [seg1; seg2; seg3] ++ ls3). 
 	unfold admissible. 
@@ -250,15 +257,9 @@ Proof.
 		apply (P_to_PMP_embbeding sc sc' l r segP); try assumption.
 		rewrite Hhead. reflexivity.
 	- (* その埋め込みが開であること *) 
-		apply (seg_in_rectangle_keep_openness (exist _ [segP] (embedding_P_is_oneway segP Hls2))).
+		apply (seg_in_rectangle_keep_openness (exist _ [segP] (embedding_P_is_oneway segP Hls2))); try assumption.
 		(* 仮定を満たすことはほぼ作業的に示せる *)
-		+ assumption.
-		+ assumption.
 		+ unfold not. intros. discriminate.
 		+ apply embedding_is_curve. exists [Plus; Minus; Plus]. assumption.
-		+ assumption.
-		+ assumption.
-		+ assumption.
-		+ simpl. unfold same_init_and_term. split; assumption.
 Qed.
 
