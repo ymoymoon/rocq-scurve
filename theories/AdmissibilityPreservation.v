@@ -117,7 +117,19 @@ Admitted.
 
 Lemma embedding_one_dir : forall d ls, 
 	embed_listDir [d] ls -> exists seg, ls = [seg].
-Proof. Admitted.
+Proof. 
+	intros d ls H. destruct H as [sc [Hd Hmain]].
+	inversion Hmain as [ | ps s | ps lp A s1 s2 ls' H0 Hlp H1 ]; subst.
+	- (* if ls = [] *) discriminate.
+	- (* if ls = [s], correct *) exists s. reflexivity.
+	- (* if ls = s1 :: s2 :: ls' *) 
+		unfold scurve_to_direction in Hd.
+		unfold connect in Hd. simpl in Hd. 
+		inversion Hd as [[H2 Hcontra]].
+		destruct lp as [lp H3]; destruct lp as [| head tail].
+		+ (* if lp = [] *) simpl in Hlp. inversion Hlp.
+		+ (* if lp = head :: tail *) simpl in Hcontra. discriminate.
+Qed.
 
 Lemma divide_embedding_listDir_mid : forall (ds1 ds2 ds3: list Direction) (ls1 ls2 ls3: list Segment),
 	embed_listDir (ds1 ++ ds2 ++ ds3) (ls1 ++ ls2 ++ ls3)
