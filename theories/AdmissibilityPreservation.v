@@ -275,3 +275,43 @@ Proof.
 		+ apply embedding_is_curve. exists [Plus; Minus; Plus]. assumption.
 Qed.
 
+Lemma AdmissibleDirs_r1_Minus_inv: forall l r,
+  AdmissibleDirs (l ++ [Minus] ++ r) -> AdmissibleDirs (l ++ [Minus; Plus; Minus] ++ r).
+Proof.
+Admitted.
+
+Lemma AdmissibleDirs_r2_Plus_inv: forall l r,
+  AdmissibleDirs (l ++ [Plus; Minus] ++ r) -> AdmissibleDirs (l ++ [Plus; Plus; Minus; Minus] ++ r).
+Proof.
+Admitted.
+
+Lemma AdmissibleDirs_r2_Minus_inv: forall l r,
+  AdmissibleDirs (l ++ [Minus; Plus] ++ r) -> AdmissibleDirs (l ++ [Minus; Minus; Plus; Plus] ++ r).
+Proof.
+Admitted.
+
+Lemma AdmissibleDirs_r1_Minus: forall l r,
+  AdmissibleDirs (l ++ [Minus; Plus; Minus] ++ r) -> AdmissibleDirs (l ++ [Minus] ++ r).
+Proof.
+Admitted.
+
+Lemma AdmissibleDirs_r2_Plus: forall l r,
+  AdmissibleDirs (l ++ [Plus; Plus; Minus; Minus] ++ r) -> AdmissibleDirs (l ++ [Plus; Minus] ++ r).
+Proof.
+Admitted.
+
+Lemma AdmissibleDirs_r2_Minus: forall l r,
+  AdmissibleDirs (l ++ [Minus; Minus; Plus; Plus] ++ r) -> AdmissibleDirs (l ++ [Minus; Plus] ++ r).
+Proof.
+Admitted.
+
+Lemma AdmissibleDirs_preserve_rule : forall l ds ds' r,
+  Rule ds ds' 
+	-> (AdmissibleDirs (l ++ ds ++ r) <-> AdmissibleDirs (l ++ ds' ++ r)).
+Proof.
+	intros l ds ds' r Hrule. inversion Hrule as [ HPMP HP | HMPM HM | HPPMM HPM | HMMPP HMP ]; subst. 
+	- (* +-+ -> + *) split. apply AdmissibleDirs_r1_Plus. apply AdmissibleDirs_r1_Plus_inv.
+	- (* -+- -> - *) split. apply AdmissibleDirs_r1_Minus. apply AdmissibleDirs_r1_Minus_inv.
+	- (* ++-- -> +- *) split. apply AdmissibleDirs_r2_Plus. apply AdmissibleDirs_r2_Plus_inv.
+	- (* --++ -> -+ *) split. apply AdmissibleDirs_r2_Minus. apply AdmissibleDirs_r2_Minus_inv.
+Qed.
