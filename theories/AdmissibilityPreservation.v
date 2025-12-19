@@ -67,7 +67,7 @@ Definition is_one_way_scurve (sc : scurve) : Prop :=
 	exists ls, embed_scurve sc ls /\ is_one_way_embedding ls.
 Definition is_one_way_listDir (ds: list Direction) : Prop :=
 	exists sc: scurve, scurve_to_direction sc = ds /\ is_one_way_scurve sc.
-(* おそらく帰納的に定義することもできる．後者は回転数２以下と同値？
+(* おそらく帰納的に定義することもできる．後者は回転数を使った定義もできる？
 		必要があれば証明 *)
 
 (* 単方向曲線の始点と終点を結んだ線分を対角線にもつ矩形．部分曲線を含むとは限らない *)
@@ -315,3 +315,17 @@ Proof.
 	- (* ++-- -> +- *) split. apply AdmissibleDirs_r2_Plus. apply AdmissibleDirs_r2_Plus_inv.
 	- (* --++ -> -+ *) split. apply AdmissibleDirs_r2_Minus. apply AdmissibleDirs_r2_Minus_inv.
 Qed.
+
+
+(* 以下，上に取って代わって Admissible.v への依存（要するに AdmissibleDirs）をなくすことを目指すためのメモ *)
+(* [+-+ => +] での簡約で，簡約先が許容可能ならもともと許容可能．Hbefore から Hafter は導けるが，それは別の補題で *)
+Lemma admissible_r1_Plus_inv: forall pre p1 p2 p3 post
+	(Hbefore: is_scurve (pre ++ [p1; p2; p3] ++ post)) (Hafter: is_scurve (pre ++ [p1] ++ post)),
+	orn p1 = Plus 
+	-> orn p2 = Minus
+	-> orn p3 = Plus
+  -> admissible (exist _ _ Hafter) 
+	-> admissible (exist _ _ Hbefore).
+Proof.
+	intros pre p1 p2 p3 post Hbefore Hafter Hp1 Hp2 Hp3 Hadm.
+Admitted.
