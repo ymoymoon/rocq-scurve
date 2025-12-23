@@ -356,21 +356,62 @@ Lemma divide_embedding_mid : forall (lp1 lp2 lp3: scurve) (ls1 ls2 ls3: list Seg
 	-> embed_scurve lp1 ls1 /\ embed_scurve lp3 ls3.
 Proof. Admitted.
 
+(* [Plus; Plus; Minus; Minus] -> [Plus; Minus] の簡約で，先頭と末尾の PrimitiveSegment は変化しない *)
 Lemma r2_same_head_and_term_PPMM : forall p1 p2 p3 p4 p4'
 	(Hbefore: is_scurve [p1; p2; p3; p4])
 	(Hafter: is_scurve [p1; p4']),
 	scurve_to_direction (exist _ _ Hbefore) = [Plus; Plus; Minus; Minus]
 	-> scurve_to_direction (exist _ _ Hafter) = [Plus; Minus]
 	-> p4 = p4'.
-Proof. Admitted.
+Proof. 
+	unfold scurve_to_direction. simpl. 
+	intros p1 p2 p3 p4 p4' Hbefore Hafter Hdir1 Hdir2.
+	inversion Hdir1 as [[H1 H2 H3 H4]]; clear Hdir1.
+	rewrite H1 in H2. rewrite H3 in H4.
+	inversion Hdir2 as [[H1' H4']]; clear Hdir2.
+	inversion Hbefore as [ | x xs H234 Hdc1]; subst; clear Hbefore.
+	inversion H234 as [ | x xs H34 Hdc2]; subst; clear H234.
+	inversion H34 as [ | x xs _ Hdc3]; subst; clear H34.
+	inversion Hdc1 as [ | x y l Hdc12]; subst; clear Hdc1.
+	inversion Hdc2 as [ | x y l Hdc23]; subst; clear Hdc2.
+	inversion Hdc3 as [ | x y l Hdc34]; subst; clear Hdc3.
+	inversion Hafter as [ | x xs _ Hdc14']; subst; clear Hafter.
+	inversion Hdc14' as [ | x y l Hdc14]; subst; clear Hdc14'. 
+	(* 直接連結の定義で場合わけあるのみ．所々で場合を潰さないと重くなる *)
+	inversion Hdc12 as [v1 h c1 | h | h | h | h]; subst; destruct h; try discriminate;
+	inversion Hdc23; subst; try discriminate;
+	inversion Hdc34; subst; try discriminate;
+	inversion Hdc14; subst; try discriminate; try reflexivity;
+	destruct c1; try discriminate; try reflexivity.
+Qed.
 
+(* [Minus; Minus; Plus; Plus] -> [Minus; Plus] の簡約で，先頭と末尾の PrimitiveSegment は変化しない *)
 Lemma r2_same_head_and_term_MMPP : forall p1 p2 p3 p4 p4'
 	(Hbefore: is_scurve [p1; p2; p3; p4])
 	(Hafter: is_scurve [p1; p4']),
 	scurve_to_direction (exist _ _ Hbefore) = [ Minus; Minus; Plus; Plus]
 	-> scurve_to_direction (exist _ _ Hafter) = [Minus; Plus]
 	-> p4 = p4'.
-Proof. Admitted.
+Proof. unfold scurve_to_direction. simpl. 
+	intros p1 p2 p3 p4 p4' Hbefore Hafter Hdir1 Hdir2.
+	inversion Hdir1 as [[H1 H2 H3 H4]]; clear Hdir1.
+	rewrite H1 in H2. rewrite H3 in H4.
+	inversion Hdir2 as [[H1' H4']]; clear Hdir2.
+	inversion Hbefore as [ | x xs H234 Hdc1]; subst; clear Hbefore.
+	inversion H234 as [ | x xs H34 Hdc2]; subst; clear H234.
+	inversion H34 as [ | x xs _ Hdc3]; subst; clear H34.
+	inversion Hdc1 as [ | x y l Hdc12]; subst; clear Hdc1.
+	inversion Hdc2 as [ | x y l Hdc23]; subst; clear Hdc2.
+	inversion Hdc3 as [ | x y l Hdc34]; subst; clear Hdc3.
+	inversion Hafter as [ | x xs _ Hdc14']; subst; clear Hafter.
+	inversion Hdc14' as [ | x y l Hdc14]; subst; clear Hdc14'. 
+	(* 直接連結の定義で場合わけあるのみ．所々で場合を潰さないと重くなる *)
+	inversion Hdc12 as [v1 h c1 | h | h | h | h]; subst; destruct h; try discriminate;
+	inversion Hdc23; subst; try discriminate;
+	inversion Hdc34; subst; try discriminate;
+	inversion Hdc14; subst; try discriminate; try reflexivity;
+	destruct c1; try discriminate; try reflexivity.
+Qed.
 
 
 (* 許容可能ならば，その中の単方向な sub_sc 周りで疎な開埋め込みが存在する．
