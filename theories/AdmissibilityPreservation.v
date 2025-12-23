@@ -356,6 +356,23 @@ Lemma divide_embedding_mid : forall (lp1 lp2 lp3: scurve) (ls1 ls2 ls3: list Seg
 	-> embed_scurve lp1 ls1 /\ embed_scurve lp3 ls3.
 Proof. Admitted.
 
+Lemma r2_same_head_and_term_PPMM : forall p1 p2 p3 p4 p4'
+	(Hbefore: is_scurve [p1; p2; p3; p4])
+	(Hafter: is_scurve [p1; p4']),
+	scurve_to_direction (exist _ _ Hbefore) = [Plus; Plus; Minus; Minus]
+	-> scurve_to_direction (exist _ _ Hafter) = [Plus; Minus]
+	-> p4 = p4'.
+Proof. Admitted.
+
+Lemma r2_same_head_and_term_MMPP : forall p1 p2 p3 p4 p4'
+	(Hbefore: is_scurve [p1; p2; p3; p4])
+	(Hafter: is_scurve [p1; p4']),
+	scurve_to_direction (exist _ _ Hbefore) = [ Minus; Minus; Plus; Plus]
+	-> scurve_to_direction (exist _ _ Hafter) = [Minus; Plus]
+	-> p4 = p4'.
+Proof. Admitted.
+
+
 (* 許容可能ならば，その中の単方向な sub_sc 周りで疎な開埋め込みが存在する．
  		さらに sub_ls の始点と終点とそれぞれでの傾きを（sub_ls の向きを考慮した上で）自由に選んでも良い，
 		としたらのちに端点での傾きを保存するために役立つ？ *)
@@ -521,16 +538,25 @@ Proof.
 Admitted.
 
 
-Proposition admissiblity_preservation_Rule : forall (pre sub_sc sub_sc' post: scurve)
+(* Reduction.Reduce をこれで上書きすべき？ おそらく許容可能性的にはどちらでも問題ない．
+	3つの PSeg からなる [(n, e, cx), (n, e, cc), (n, e, cx)] (向きは [Plus; Minus; Plus]) を 
+	[((s, e, cx))] (向きは [Plus]) に簡約する，ということを認めるかどうか *)
+Definition Reduce_scurve (sc sc': scurve) := 
+	ReduceDir (scurve_to_direction sc) (scurve_to_direction sc') 
+	/\ hd default_primitive_segment (proj1_sig sc) = hd default_primitive_segment (proj1_sig sc').
+
+Lemma admissiblity_preservation_Rule : forall (pre sub_sc sub_sc' post: scurve)
 	(Hbefore: is_scurve ((proj1_sig pre) ++ (proj1_sig sub_sc) ++ (proj1_sig post))) 
 	(Hafter: is_scurve ((proj1_sig pre) ++ (proj1_sig sub_sc') ++ (proj1_sig post))),
   Rule (scurve_to_direction sub_sc) (scurve_to_direction sub_sc')
+	-> hd default_primitive_segment (proj1_sig sub_sc) = hd default_primitive_segment (proj1_sig sub_sc')
 	-> (admissible (exist _ _ Hbefore) <-> admissible (exist _ _ Hafter)).
 Proof.
-	intros pre sub_sc sub_sc' post Hbefore Hafter Hrule. 
+	intros pre sub_sc sub_sc' post Hbefore Hafter Hrule Hhead. 
 	inversion Hrule as [ HPMP HP | HMPM HM | HPPMM HPM | HMMPP HMP ]; subst. 
-	- (* +-+ -> + *) split.
+	- (* +-+ -> + *)
 			unfold scurve_to_direction in HPMP. destruct sub_sc as [sc P]; simpl in *. 
+			(* sub_sc = [h1; h2; h3], sub_sc' = [h1] を導く *)
 			destruct sc as [ | h1 tail ]; try discriminate.
 			destruct tail as [ | h2 tail ]; try discriminate.
 			destruct tail as [ | h3 tail ]; try discriminate.
@@ -538,9 +564,64 @@ Proof.
 			unfold scurve_to_direction in HP. destruct sub_sc' as [sc P']; simpl in *. 
 			destruct sc as [ | h1' tail ]; try discriminate.
 			destruct tail as [ | ]; try discriminate.
-			inversion HPMP. inversion HP.
-			(* + apply (admissible_r1_Plus). apply AdmissibleDirs_r1_Plus_inv.
-	- (* -+- -> - *) split. apply AdmissibleDirs_r1_Minus. apply AdmissibleDirs_r1_Minus_inv.
-	- (* ++-- -> +- *) split. apply AdmissibleDirs_r2_Plus. apply AdmissibleDirs_r2_Plus_inv.
-	- --++ -> -+ split. apply AdmissibleDirs_r2_Minus. apply AdmissibleDirs_r2_Minus_inv. *)
-Admitted.
+			inversion HP. simpl in Hhead; subst.
+			split.
+			+ apply admissible_r1_Plus; inversion HPMP; reflexivity.
+			+ apply admissible_r1_Plus_inv; inversion HPMP; reflexivity.
+	- (* -+- -> - *) 
+			unfold scurve_to_direction in HMPM. destruct sub_sc as [sc P]; simpl in *. 
+			(* sub_sc = [h1; h2; h3], sub_sc' = [h1] を導く *)
+			destruct sc as [ | h1 tail ]; try discriminate.
+			destruct tail as [ | h2 tail ]; try discriminate.
+			destruct tail as [ | h3 tail ]; try discriminate.
+			destruct tail as [ | ]; try discriminate.
+			unfold scurve_to_direction in HM. destruct sub_sc' as [sc P']; simpl in *. 
+			destruct sc as [ | h1' tail ]; try discriminate.
+			destruct tail as [ | ]; try discriminate.
+			inversion HM. simpl in Hhead; subst.
+			split.
+			+ apply admissible_r1_Minus; inversion HMPM; reflexivity.
+			+ apply admissible_r1_Minus_inv; inversion HMPM; reflexivity.
+	- (* ++-- -> +- *) 
+			unfold scurve_to_direction in HPPMM. destruct sub_sc as [sc P]; simpl in *. 
+			(* sub_sc = [h1; h2; h3; h4], sub_sc' = [h1; h4] を導く *)
+			destruct sc as [ | h1 tail ]; try discriminate.
+			destruct tail as [ | h2 tail ]; try discriminate.
+			destruct tail as [ | h3 tail ]; try discriminate.
+			destruct tail as [ | h4 tail ]; try discriminate.
+			destruct tail as [ | ]; try discriminate.
+			unfold scurve_to_direction in HPM. destruct sub_sc' as [sc P']; simpl in *. 
+			destruct sc as [ | h1' tail ]; try discriminate.
+			destruct tail as [ | h4' tail ]; try discriminate.
+			destruct tail as [ | ]; try discriminate.
+			inversion HPM. simpl in Hhead; subst.
+			assert (H: h4 = h4'). {
+				apply (r2_same_head_and_term_PPMM _ _ _ _ _ P P'); unfold scurve_to_direction; simpl.
+				+ rewrite HPPMM. reflexivity.
+				+ rewrite HPM. reflexivity.
+			} subst.
+			split.
+			+ apply admissible_r2_Plus; inversion HPPMM; reflexivity.
+			+ apply admissible_r2_Plus_inv; inversion HPPMM; reflexivity.
+	- (* --++ -> -+ *) 
+			unfold scurve_to_direction in HMMPP. destruct sub_sc as [sc P]; simpl in *. 
+			(* sub_sc = [h1; h2; h3; h4], sub_sc' = [h1; h4] を導く *)
+			destruct sc as [ | h1 tail ]; try discriminate.
+			destruct tail as [ | h2 tail ]; try discriminate.
+			destruct tail as [ | h3 tail ]; try discriminate.
+			destruct tail as [ | h4 tail ]; try discriminate.
+			destruct tail as [ | ]; try discriminate.
+			unfold scurve_to_direction in HMP. destruct sub_sc' as [sc P']; simpl in *. 
+			destruct sc as [ | h1' tail ]; try discriminate.
+			destruct tail as [ | h4' tail ]; try discriminate.
+			destruct tail as [ | ]; try discriminate.
+			inversion HMP. simpl in Hhead; subst.
+			assert (H: h4 = h4'). {
+				apply (r2_same_head_and_term_MMPP _ _ _ _ _ P P'); unfold scurve_to_direction; simpl.
+				+ rewrite HMMPP. reflexivity.
+				+ rewrite HMP. reflexivity.
+			} subst.
+			split.
+			+ apply admissible_r2_Minus; inversion HMMPP; reflexivity.
+			+ apply admissible_r2_Minus_inv; inversion HMMPP; reflexivity.
+Qed.

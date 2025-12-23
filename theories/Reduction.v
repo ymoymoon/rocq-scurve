@@ -144,9 +144,6 @@ Proof.
   split; [now rewrite head_eq, head_eq' | now rewrite last_eq, last_eq'].
 Qed.
 
-Definition Reduce (p p': list PrimitiveSegment): Prop :=
-  ReduceDir (map orn p) (map orn p').
-
 Definition rule_dec ds: {exists ds', Rule ds ds'} + {~ exists ds', Rule ds ds'}.
   refine (match ds with
           | [Plus; Minus; Plus] => left (ex_intro _ [Plus] _)
