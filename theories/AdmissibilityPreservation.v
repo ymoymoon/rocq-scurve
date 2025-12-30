@@ -109,6 +109,14 @@ Lemma one_PSeg_is_oneway : forall p, is_one_way_scurve (scurve_from_one p).
 Proof. (* ここは is_one_way_scurve の定義さえできれば示せる？ *)
 Admitted.
 
+Lemma PMP_is_oneway : forall p1 p2 p3 (Hscurve: is_scurve [p1; p2; p3]), 
+	orn p1 = Plus
+	-> orn p2 = Minus
+	-> orn p3 = Plus
+	-> is_one_way_scurve (exist _ _ Hscurve).
+Proof. (* ここは is_one_way_scurve の定義さえできれば示せる？ *)
+Admitted.
+
 Lemma embedding_one : forall p ls, 
 	embed_scurve (scurve_from_one p) ls -> exists seg, ls = [seg].
 Proof. 
@@ -189,8 +197,9 @@ Proof. unfold scurve_to_direction. simpl.
 	destruct c1; try discriminate; try reflexivity.
 Qed.
 
-(* sub_ls の周りが疎な開埋め込みにおいて，端点で傾きを保ちつつ sub_ls をその領域に収まるセグメント列に置き換えても開のまま *)
-Lemma seg_in_rectangle_keep_openness : forall ls rs (sub_ls segs: one_way_embedding), (* segs: list Segment にすると，segs の連結性証明が必要 *)
+(* sub_ls の周りが疎な開埋め込みにおいて，端点で傾きを保ちつつ sub_ls をその領域に収まる単方向な埋め込みに置き換えても開のまま *)
+(* 単方向でない埋め込みに変えるならそこで自己交差しないことの，またsegs: list Segment にすると segs の連結性証明がそれぞれ必要 *)
+Lemma seg_in_rectangle_keep_openness : forall ls rs (sub_ls segs: one_way_embedding), 
 	let sub_ls' := proj1_sig sub_ls in
 	let segs' := proj1_sig segs in
 	~ close (ls ++ sub_ls' ++ rs)
@@ -206,6 +215,7 @@ Proof. Admitted.
 (* 許容可能ならば，その中の単方向な sub_sc 周りで疎な開埋め込みが存在する．
  		さらに sub_ls の始点と終点とそれぞれでの傾きを（sub_ls の向きを考慮した上で）自由に選んでも良い，
 		としたらのちに端点での傾きを保存するために役立つ？ *)
+(* TODO： sub_sc も scurve か one_way_scurve のほうが統一的 *)
 Lemma embed_sparsely sc1 sub_sc sc2
 	(Hall: is_scurve ((proj1_sig sc1) ++ sub_sc ++ (proj1_sig sc2)))
 	(Hsub: is_scurve sub_sc) :
@@ -221,6 +231,26 @@ Lemma embed_sparsely sc1 sub_sc sc2
 		/\ sparse sub_ls (ls1 ++ sub_ls' ++ ls2).
 Proof. Admitted.
 
+(* TODO：some good features を具体化（引数要るだろう）して上の補題に統合する
+		embed_sparsely 上のコメントが有望か *)
+Parameter some_good_features : Prop.
+
+Lemma embed_sparsely_with_good_features sc1 sub_sc sc2
+	(Hall: is_scurve ((proj1_sig sc1) ++ sub_sc ++ (proj1_sig sc2)))
+	(Hsub: is_scurve sub_sc) :
+	admissible (exist _ _ Hall)
+	-> is_one_way_scurve (exist _ _ Hsub)
+	-> exists ls1 ls2 (sub_ls: one_way_embedding), 
+	let sub_ls' := proj1_sig sub_ls in
+		embed_scurve sc1 ls1
+		/\ embed_scurve (exist _ _ Hsub) sub_ls'
+		/\ embed_scurve sc2 ls2
+		/\ embed_scurve (exist _ _ Hall) (ls1 ++ sub_ls' ++ ls2)
+		/\ ~ close (ls1 ++ sub_ls' ++ ls2)
+		/\ sparse sub_ls (ls1 ++ sub_ls' ++ ls2)
+		/\ some_good_features.
+Proof. Admitted.
+
 (* p1 の埋め込みを，[p1; p2; p3] (ただし向きは [Plus; Minus; Plus] ) の埋め込みとなる３つに矩形内で分割できる *)
 Lemma embedding_P_to_PMP_in_rect : forall p1 p2 p3 (seg : Segment) 
 	(Hembed: embed_scurve (scurve_from_one p1) [seg])
@@ -230,6 +260,23 @@ Lemma embedding_P_to_PMP_in_rect : forall p1 p2 p3 (seg : Segment)
 			embed_scurve (exist _ _ Hscurve) [seg1; seg2; seg3] (* この内部で seg1-3 が連結していることは示されてほしい *)
 			/\ (forall rr, (exists seg, In seg [seg1; seg2; seg3] /\ onSegment seg rr)
 					-> in_rect (exist _ [seg] (embedding_one_is_oneway p1 seg Hembed)) rr) (* seg が張る矩形の内部で分割できている *)
+			/\ same_init_and_term [seg1; seg2; seg3] [seg]
+			/\ slope_init seg = slope_init seg1
+			/\ slope_term seg = slope_term seg3.
+Proof. Admitted.
+
+(* good features があれば，[p1; p2; p3] (ただし向きは [Plus; Minus; Plus] ) の埋め込みを，p1 の埋め込みに矩形内で変更できる *)
+(* TODO：傾きも保存できるような good features を見つけて具体化 *)
+Lemma embedding_PMP_to_P_in_rect : forall p1 p2 p3 (seg1 seg2 seg3 : Segment) 
+	(Hscurve: is_scurve [p1; p2; p3])
+	(Hembed: embed_scurve (exist _ _ Hscurve) [seg1; seg2; seg3])
+	(Hp1: orn p1 = Plus) (Hp2: orn p2 = Minus) (Hp3: orn p3 = Plus),
+	some_good_features
+	-> scurve_to_direction (exist _ _ Hscurve) = [Plus; Minus; Plus]
+	-> exists seg,
+			embed_scurve (scurve_from_one p1) [seg]
+			/\ (forall rr, onSegment seg rr
+					-> in_rect (exist _ [seg1; seg2; seg3] (embedding_PMP_is_oneway _ _ _ _ _ _ _ Hembed Hp1 Hp2 Hp3)) rr)
 			/\ same_init_and_term [seg1; seg2; seg3] [seg]
 			/\ slope_init seg = slope_init seg1
 			/\ slope_term seg = slope_term seg3.
@@ -333,6 +380,16 @@ Lemma admissible_r1_Plus: forall (p1 p2 p3: PrimitiveSegment) (pre post: scurve)
   -> admissible (exist _ _ Hbefore) 
 	-> admissible (exist _ _ Hafter).
 Proof.
+	intros p1 p2 p3 pre post Hbefore Hafter Hp1 Hp2 Hp3 Hadm.
+	(* [p1; p2; p3] が scurve である証拠を抽出 *)
+	pose proof (divide_scurve _ _ Hbefore) as [_ H].
+	apply (divide_scurve [p1; p2; p3] _) in H as [H123 _].
+	(* 疎な開埋め込みをとる *)
+	pose proof (embed_sparsely_with_good_features _ _ _ Hbefore H123 Hadm (PMP_is_oneway _ _ _ H123 Hp1 Hp2 Hp3)) 
+		as [ls1 [ls3 [[ls2 Honeway] [Hls1 [Hls2 [Hls3 [Hembed [Hopen [Hsparse Hgood]]]]]]]]];
+	simpl in *. 
+	(* pose proof (embedding_PMP_to_P_in_rect _ _ _ _ _ _ H123 Hls2 H123 Hgood HPMP) 
+		as [seg1 [seg2 [seg3 [Hseg123 [Hin_rect [Hinit_term [Hinit_slope Hterm_slope]]]]]]]. *)
 Admitted.
 
 Lemma admissible_r1_Minus: forall (p1 p2 p3: PrimitiveSegment) (pre post: scurve)
