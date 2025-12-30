@@ -11,13 +11,13 @@ Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め�
 Parameter slope_term : Segment -> R.
 
 (* 2次元曲線（連結性を保証）．embed_scurve を使う際はその中で連結性の保証がされるので使用しなくて良い *)
-Inductive is_curve : list Segment -> Prop := 
+(* Inductive is_curve : list Segment -> Prop := 
 | IsCurveNil : is_curve nil
 | IsCurveSingle : forall seg, is_curve [seg]
 | IsCurveCons : forall seg1 seg2 segs,
 		is_curve (seg2 :: segs)
 		-> term seg1 = init seg2
-		-> is_curve (seg1 :: seg2 :: segs).
+		-> is_curve (seg1 :: seg2 :: segs). *)
 
 (* Definition curve := {ls : list Segment | is_curve ls}.  *)
 
@@ -123,15 +123,14 @@ Lemma embedding_one_is_oneway : forall p seg,
 Proof.
 Admitted.
 
-Lemma embedding_is_curve : forall ls, 
-	(exists sc, embed_scurve sc ls) -> is_curve ls.
+Lemma embedding_PMP_is_oneway : forall seg1 seg2 seg3 p1 p2 p3 (Hscurve: is_scurve [p1; p2; p3]), 
+	embed_scurve (exist _ _ Hscurve) [seg1; seg2; seg3] 
+	-> orn p1 = Plus
+	-> orn p2 = Minus
+	-> orn p3 = Plus
+	-> is_one_way_embedding [seg1; seg2; seg3].
 Proof.
-	intros ls H. destruct H as [sc H].
-	induction H as [ | | ps lp A s1 s2 ls' Hembed Hconnect IH].
-	- (* ls =[] *) apply IsCurveNil.
-	- (* ls =[s] *) apply IsCurveSingle.
-	- (* ls = s1 :: s2 :: ls' *) apply IsCurveCons; assumption.
-Qed.
+Admitted.
 
 (* [Plus; Plus; Minus; Minus] -> [Plus; Minus] の簡約で，先頭と末尾の PrimitiveSegment は変化しない *)
 Lemma r2_same_head_and_term_PPMM : forall p1 p2 p3 p4 p4'
@@ -191,17 +190,17 @@ Proof. unfold scurve_to_direction. simpl.
 Qed.
 
 (* sub_ls の周りが疎な開埋め込みにおいて，端点で傾きを保ちつつ sub_ls をその領域に収まるセグメント列に置き換えても開のまま *)
-Lemma seg_in_rectangle_keep_openness : forall sub_ls ls rs (segs: list Segment), (* segs: list Segment にすると，segs の連結性証明が必要 *)
+Lemma seg_in_rectangle_keep_openness : forall ls rs (sub_ls segs: one_way_embedding), (* segs: list Segment にすると，segs の連結性証明が必要 *)
 	let sub_ls' := proj1_sig sub_ls in
+	let segs' := proj1_sig segs in
 	~ close (ls ++ sub_ls' ++ rs)
 	-> sparse sub_ls (ls ++ sub_ls' ++ rs)
-	-> segs <> []
-	-> is_curve segs (* 必要と思う *)
-	-> slope_init (hd default_segment sub_ls') = slope_init (hd default_segment segs)
-	-> slope_term (last sub_ls' default_segment) = slope_term (last segs default_segment)
-	-> (forall rr, (exists seg, In seg segs /\ onSegment seg rr) -> in_rect sub_ls rr) 
-	-> same_init_and_term segs sub_ls' 
-	-> ~ close (ls ++ segs ++ rs).
+	-> segs' <> []
+	-> slope_init (hd default_segment sub_ls') = slope_init (hd default_segment segs')
+	-> slope_term (last sub_ls' default_segment) = slope_term (last segs' default_segment)
+	-> (forall rr, (exists seg, In seg segs' /\ onSegment seg rr) -> in_rect sub_ls rr) 
+	-> same_init_and_term segs' sub_ls' 
+	-> ~ close (ls ++ segs' ++ rs).
 Proof. Admitted.
 
 (* 許容可能ならば，その中の単方向な sub_sc 周りで疎な開埋め込みが存在する．
@@ -281,11 +280,12 @@ Proof.
 		apply (embedding_inner_P_to_PMP _ _ _ _ _ seg2' seg1 seg2 seg3 ls1 ls3 Hafter Hbefore H123); 
 		try assumption.
 	- (* その埋め込みが開であること *) 
-		apply (seg_in_rectangle_keep_openness (exist _ [seg2'] (embedding_one_is_oneway _ _ Hls2))); 
+		apply (seg_in_rectangle_keep_openness _ _ 
+			(exist _ [seg2'] (embedding_one_is_oneway _ _ Hls2))
+			(exist _ _ (embedding_PMP_is_oneway _ _ _ _ _ _ _ Hseg123 Hp1 Hp2 Hp3))); 
 		try assumption.
 		(* 仮定を満たすことはほぼ作業的に示せる *)
 		+ unfold not. intros. discriminate.
-		+ apply embedding_is_curve. exists (exist _ _ H123). assumption.
 Qed.
 
 
@@ -371,9 +371,17 @@ Proof.
 Admitted.
 
 
-(* Reduction.Reduce をこれで上書きすべき？ おそらく許容可能性的にはどちらでも問題ない．
+(* Reduction.Reduce は下の Reduce_scurve にすべき？ おそらく許容可能性的にはどちらでも問題ない．
 	3つの PSeg からなる [(n, e, cx), (n, e, cc), (n, e, cx)] (向きは [Plus; Minus; Plus]) を 
 	[((s, e, cx))] (向きは [Plus]) に簡約する，ということを認めるかどうか *)
+Definition ReduceRule (sc sc': scurve) := 
+	Rule (scurve_to_direction sc) (scurve_to_direction sc') 
+	/\ hd default_primitive_segment (proj1_sig sc) = hd default_primitive_segment (proj1_sig sc').
+
+Definition ReduceStep (sc sc': scurve) := 
+	ReduceDirStep (scurve_to_direction sc) (scurve_to_direction sc') 
+	/\ hd default_primitive_segment (proj1_sig sc) = hd default_primitive_segment (proj1_sig sc').
+
 Definition Reduce_scurve (sc sc': scurve) := 
 	ReduceDir (scurve_to_direction sc) (scurve_to_direction sc') 
 	/\ hd default_primitive_segment (proj1_sig sc) = hd default_primitive_segment (proj1_sig sc').
@@ -381,11 +389,10 @@ Definition Reduce_scurve (sc sc': scurve) :=
 Lemma admissiblity_preservation_Rule : forall (pre sub_sc sub_sc' post: scurve)
 	(Hbefore: is_scurve ((proj1_sig pre) ++ (proj1_sig sub_sc) ++ (proj1_sig post))) 
 	(Hafter: is_scurve ((proj1_sig pre) ++ (proj1_sig sub_sc') ++ (proj1_sig post))),
-  Rule (scurve_to_direction sub_sc) (scurve_to_direction sub_sc')
-	-> hd default_primitive_segment (proj1_sig sub_sc) = hd default_primitive_segment (proj1_sig sub_sc')
+  ReduceRule sub_sc sub_sc'
 	-> (admissible (exist _ _ Hbefore) <-> admissible (exist _ _ Hafter)).
 Proof.
-	intros pre sub_sc sub_sc' post Hbefore Hafter Hrule Hhead. 
+	intros pre sub_sc sub_sc' post Hbefore Hafter [Hrule Hhead]. 
 	inversion Hrule as [ HPMP HP | HMPM HM | HPPMM HPM | HMMPP HMP ]; subst. 
 	- (* +-+ -> + *)
 			unfold scurve_to_direction in HPMP. destruct sub_sc as [sc P]; simpl in *. 
@@ -458,3 +465,18 @@ Proof.
 			+ apply admissible_r2_Minus; inversion HMMPP; reflexivity.
 			+ apply admissible_r2_Minus_inv; inversion HMMPP; reflexivity.
 Qed.
+
+Lemma admissiblity_preservation_step : forall (sc sc': scurve),
+  ReduceStep sc sc'
+	-> (admissible sc <-> admissible sc').
+Proof.
+	intros sc sc' [Hreduce Hhead].
+	inversion Hreduce as [l r ds ds' Hrule Hbefore Hafter].
+Admitted.
+
+Theorem admissiblity_preservation : forall (sc sc': scurve),
+  Reduce_scurve sc sc'
+	-> (admissible sc <-> admissible sc').
+Proof.
+	intros sc sc' [Hreduce Hhead].
+Admitted.
