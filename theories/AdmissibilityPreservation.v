@@ -8,8 +8,36 @@ Import ListNotations.
 
 Parameter default_primitive_segment : PrimitiveSegment.
 
+Lemma one_pseg_is_scurve : forall (p: PrimitiveSegment), 
+	is_scurve [p].
+Proof. 
+	intros p. apply IsScurveCons.
+	- apply IsScurveNil.
+	- apply DcNil.
+Qed.
+	
+Definition scurve_from_one p := exist _ _ (one_pseg_is_scurve p).
+
+Lemma Direction_to_PrimitiveSegment : forall d, exists p, orn p = d.
+Proof.
+	intros d.
+	destruct d.
+	- (* d = Plus *) exists (n, e, cx). reflexivity.
+	- (* d = Minus *) exists (n, e, cc). reflexivity.
+Qed.
+
+(* 向きの列と先頭の PrimitiveSegment の組に対し，対応する scurve が1つ定まる *)
+Lemma direction_scurve_correspondence : forall ds p,
+	exists sc, scurve_to_direction sc = orn p :: ds.
+Proof.
+	intros ds p.
+	induction ds as [ | d tail IH].
+	- (* ds = [] *) exists (scurve_from_one p). reflexivity.
+	- (* ds = d :: tail *) 
+Admitted.
+
 (* １つの scurve で許容可能性が言えたら，同じ向き列を持つ他の scurve ４つの許容可能性もわかる．証明難しそう *)
-Lemma scurve_Direction_correspondence : forall sc ds,
+Lemma admissible_AdmissibleDirs_correspondence : forall sc ds,
 	scurve_to_direction sc = ds
 	-> admissible sc <-> AdmissibleDirs ds.
 Proof. 
@@ -21,6 +49,23 @@ Proof.
 	- intros admds. apply admds. assumption. 
 Admitted.
 
+(* 向きが ds の許容可能な scurve を見つけることと，向きが ds である任意の scurve が許容可能であることは同値 *)
+Lemma AdmissibleDirs_exist : forall ds,
+	AdmissibleDirs ds <-> exists sc, scurve_to_direction sc = ds /\ admissible sc.
+Proof.
+	intros ds. split.
+	- (* -> *) intros H.
+		destruct ds as [ | d tail].
+		+ (* ds = [] *) exists (exist _ _ IsScurveNil). auto.
+		+ (* ds = d :: tail *) 
+			pose proof (Direction_to_PrimitiveSegment d) as [p H0].
+			pose proof (direction_scurve_correspondence tail p) as [sc H1].
+			exists sc. split; try apply H; subst; assumption.
+	- (* <- *) intros [sc [Hdir Hadm]].
+			apply (admissible_AdmissibleDirs_correspondence _ _ Hdir).
+			assumption.
+Qed.
+
 (* X1 は適当に固定していい *)
 Lemma AdmissibleDirs_head_fix : forall (ds: list Direction) (p: PrimitiveSegment),
 	AdmissibleDirs ds <-> 
@@ -31,9 +76,12 @@ Lemma AdmissibleDirs_head_fix : forall (ds: list Direction) (p: PrimitiveSegment
 Proof.
 	intros ds p. split.
 	- unfold AdmissibleDirs. intros H sc _ H1. apply H. apply H1. 
-	- intros H. admit. (* 他の X1 ３通りについては，開埋め込みを９０度ずつ回転すれば証拠になる *)
+	- intros H. admit. (* 他の X1 ３通りについては，開埋め込みを９０度ずつ回転すれば証拠になる
+		もしくは AdmissibleDirs_exist を使ってもいけそう *)
 Admitted.
 
+(* ここまでは AdmissibleDirs の成り立ってほしい性質をまとめたもの
+		以下は許容可能性保持の証明に向けた定義と補題群 *)
 
 Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい？ *)
 Parameter slope_term : Segment -> R.
