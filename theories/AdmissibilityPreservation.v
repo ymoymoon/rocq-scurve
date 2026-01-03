@@ -6,7 +6,24 @@ Require Import PrimitiveSegment.
 Require Import Segment.
 Import ListNotations.
 
+
+(* 単なるリストに関する補題 *)
+
+Lemma list_head_tail : forall {A} (dummy: A) (l: list A),
+	l <> nil -> (hd dummy l) :: (tl l) = l.
+Proof. 
+Admitted.
+
+Lemma list_map_head : forall {A B} (dummy: A) (x: B) (l: list A) (l': list B) f,
+	map f l = x :: l' -> f (hd dummy l) = x.
+Proof. 
+Admitted.
+
+
+(* AdmissibleDirs について成り立ってほしい性質と，それに必要な補題 *)
+
 Parameter default_primitive_segment : PrimitiveSegment.
+Definition hd_scurve (sc: scurve) := hd default_primitive_segment (proj1_sig sc).
 
 Lemma one_pseg_is_scurve : forall (p: PrimitiveSegment), 
 	is_scurve [p].
@@ -26,27 +43,27 @@ Proof.
 	- (* d = Minus *) exists (n, e, cc). reflexivity.
 Qed.
 
-(* 向きの列と先頭の PrimitiveSegment の組に対し，対応する scurve が1つ定まる *)
+(* 向きの列と先頭の PrimitiveSegment の組に対し，対応する scurve が(1つ)定まる *)
 Lemma direction_scurve_correspondence : forall ds p,
-	exists sc, scurve_to_direction sc = orn p :: ds.
+	exists sc, hd_scurve sc = p /\ scurve_to_direction sc = orn p :: ds.
 Proof.
 	intros ds p.
 	induction ds as [ | d tail IH].
-	- (* ds = [] *) exists (scurve_from_one p). reflexivity.
+	- (* ds = [] *) exists (scurve_from_one p). split; reflexivity.
 	- (* ds = d :: tail *) 
 Admitted.
 
-(* １つの scurve で許容可能性が言えたら，同じ向き列を持つ他の scurve ４つの許容可能性もわかる．証明難しそう *)
-Lemma admissible_AdmissibleDirs_correspondence : forall sc ds,
-	scurve_to_direction sc = ds
-	-> admissible sc <-> AdmissibleDirs ds.
+(* 向き列の許容可能性を調べることで，scurve の許容可能性はわかる．
+	(１つの scurve で許容可能性が言えたら，同じ向き列を持つ他の scurve ４つの許容可能性もわかる．) *)
+Lemma admissible_AdmissibleDirs_correspondence : forall sc,
+	admissible sc <-> AdmissibleDirs (scurve_to_direction sc).
 Proof. 
-	intros sc ds H. split.
-	- intros adms. intros ps Hps.
+	intros sc. split.
+	- intros adms ps Hps.
 	  (* ps が空なら自明，そうでなければ先頭の Primitive Segment の向きとして４通り考えられ，
 			内１つは ps = sc を導く．それ以外の場合は，sc の開埋め込みを90度ずつ回転させることで ps の開埋め込みとなる． *)
 	  admit.
-	- intros admds. apply admds. assumption. 
+	- auto. 
 Admitted.
 
 (* 向きが ds の許容可能な scurve を見つけることと，向きが ds である任意の scurve が許容可能であることは同値 *)
@@ -59,29 +76,35 @@ Proof.
 		+ (* ds = [] *) exists (exist _ _ IsScurveNil). auto.
 		+ (* ds = d :: tail *) 
 			pose proof (Direction_to_PrimitiveSegment d) as [p H0].
-			pose proof (direction_scurve_correspondence tail p) as [sc H1].
+			pose proof (direction_scurve_correspondence tail p) as [sc [H1 H2]].
 			exists sc. split; try apply H; subst; assumption.
 	- (* <- *) intros [sc [Hdir Hadm]].
-			apply (admissible_AdmissibleDirs_correspondence _ _ Hdir).
+			rewrite <- Hdir.
+			apply admissible_AdmissibleDirs_correspondence.
 			assumption.
 Qed.
 
-(* X1 は適当に固定していい *)
+(* 許容可能性を考えるうえで X1 は適当に固定していい *)
 Lemma AdmissibleDirs_head_fix : forall (ds: list Direction) (p: PrimitiveSegment),
-	AdmissibleDirs ds <-> 
-	(forall sc, 
-		hd default_primitive_segment (proj1_sig sc) = p 
-		-> scurve_to_direction sc = ds
+	AdmissibleDirs ((orn p) :: ds) <-> 
+		(forall sc, 
+		hd_scurve sc = p 
+		-> scurve_to_direction sc = (orn p) :: ds
 		-> admissible sc).
 Proof.
 	intros ds p. split.
-	- unfold AdmissibleDirs. intros H sc _ H1. apply H. apply H1. 
-	- intros H. admit. (* 他の X1 ３通りについては，開埋め込みを９０度ずつ回転すれば証拠になる
-		もしくは AdmissibleDirs_exist を使ってもいけそう *)
-Admitted.
+	- auto.
+	- intros H.
+		(* 1つでも許容可能な scurve を作ればいい *)
+		apply AdmissibleDirs_exist.
+		pose proof (direction_scurve_correspondence ds p) as [sc [H1 Hsc]].
+		exists sc. split.
+		+ (* 向き *) rewrite Hsc. reflexivity.
+		+ (* 許容可能 *) apply H; try assumption.
+Qed.
 
-(* ここまでは AdmissibleDirs の成り立ってほしい性質をまとめたもの
-		以下は許容可能性保持の証明に向けた定義と補題群 *)
+
+(* 許容可能性保持の証明に向けた定義と補題群 *)
 
 Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい？ *)
 Parameter slope_term : Segment -> R.
@@ -199,7 +222,7 @@ Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
 	-> is_one_way_listDir sub_ds
 	-> exists l r sub_ls, 
-	let sub_ls' := proj1_sig sub_ls in
+		let sub_ls' := proj1_sig sub_ls in
 		embed_listDir ds1 l
 		/\ embed_listDir sub_ds sub_ls'
 		/\ embed_listDir ds2 r
@@ -284,7 +307,7 @@ Lemma P_to_PMP_embbeding : forall sc1 sc2 l r seg seg1 seg2 seg3 ls1 ls2,
 	-> same_init_and_term [seg1; seg2; seg3] [seg]
 	-> scurve_to_direction sc1 = l ++ [Plus] ++ r
 	-> scurve_to_direction sc2 = l ++ [Plus; Minus; Plus] ++ r
-	-> hd default_primitive_segment (proj1_sig sc1) = hd default_primitive_segment (proj1_sig sc2)
+	-> hd_scurve sc1 = hd_scurve sc2
 	-> embed_scurve sc2 (ls1 ++ [seg1; seg2; seg3] ++ ls2).
 Proof. Admitted.
 
@@ -295,27 +318,38 @@ Proof.
 	intros l r admds. 
 	(* 疎な開埋め込みをとる *)
 	pose proof (embed_sparsely_listDir _ _ _ admds P_is_oneway) as [ls1 [ls3 [[ls2 Honeway] [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]];
-	simpl in *. 
-	(* AdmissibleDirs_head_fix によって，目的の開埋め込みを作りやすくする *)
-	apply (AdmissibleDirs_head_fix _ (hd default_primitive_segment (proj1_sig sc))).
-	intros sc' Hhead Hdir_sc'. 
-	assert (H: embed_listDir (l ++ [Plus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
-		unfold embed_listDir. exists sc. split; assumption.
-	}
-	pose proof (embedding_one_dir Plus ls2 Hls2) as [segP HP]; subst.
-	pose proof (P_to_PMP segP Hls2) as [seg1 [seg2 [seg3 [HPMP [Hin_rect [Hinit_term [Hinit_slope Hterm_slope]]]]]]].
-	(* 欲しかった埋め込み *) 
-	exists (ls1 ++ [seg1; seg2; seg3] ++ ls3). 
-	unfold admissible. 
-	split.
-	- (* 埋め込みになっていること *) 
-		apply (P_to_PMP_embbeding sc sc' l r segP); try assumption.
-		rewrite Hhead. reflexivity.
-	- (* その埋め込みが開であること *) 
-		apply (seg_in_rectangle_keep_openness (exist _ [segP] (embedding_P_is_oneway segP Hls2))); try assumption.
-		(* 仮定を満たすことはほぼ作業的に示せる *)
-		+ unfold not. intros. discriminate.
-		+ apply embedding_is_curve_listDir. exists [Plus; Minus; Plus]. assumption.
+	simpl in *.
+	assert (Hdir: hd Plus (l ++ Plus :: Minus :: Plus :: r) = orn (hd_scurve sc)). {
+		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
+		destruct l; simpl in *;
+		symmetry; eapply list_map_head; apply Hdir_sc.
+	}	
+	(* AdmissibleDirs ds の証明では，向きが ds であり許容可能な scurve を1つつくればよい *)
+	apply AdmissibleDirs_exist.
+	pose proof (direction_scurve_correspondence (tl (l ++ Plus :: Minus :: Plus :: r)) (hd_scurve sc))
+		as [sc' [Hhead Hdir_sc']].
+	exists sc'. split.
+	- (* 向きが l ++ [Plus; Minus; Plus] ++ r であること *)
+		rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
+	- (* 許容可能であること *)
+		assert (H: embed_listDir (l ++ [Plus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
+			unfold embed_listDir. exists sc. split; assumption.
+		}
+		pose proof (embedding_one_dir Plus ls2 Hls2) as [segP HP]; subst.
+		pose proof (P_to_PMP segP Hls2) as [seg1 [seg2 [seg3 [HPMP [Hin_rect [Hinit_term [Hinit_slope Hterm_slope]]]]]]].
+		(* 欲しかった埋め込み *) 
+		exists (ls1 ++ [seg1; seg2; seg3] ++ ls3). 
+		unfold admissible. 
+		split.
+		+ (* 埋め込みになっていること *) 
+			apply (P_to_PMP_embbeding sc sc' l r segP); try assumption.
+			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
+			* symmetry. assumption.
+		+ (* その埋め込みが開であること *) 
+			apply (seg_in_rectangle_keep_openness (exist _ [segP] (embedding_P_is_oneway segP Hls2))); try assumption.
+			(* 仮定を満たすことはほぼ作業的に示せる *)
+			* unfold not. intros. discriminate.
+			* apply embedding_is_curve_listDir. exists [Plus; Minus; Plus]. assumption.
 Qed.
 
 Lemma AdmissibleDirs_r1_Minus_inv: forall l r,
