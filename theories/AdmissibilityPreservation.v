@@ -12,12 +12,20 @@ Import ListNotations.
 Lemma list_head_tail : forall {A} (dummy: A) (l: list A),
 	l <> nil -> (hd dummy l) :: (tl l) = l.
 Proof. 
-Admitted.
+	intros A dummy l H. 
+	induction l.
+	- contradiction.
+	- reflexivity. 
+Qed.
 
 Lemma list_map_head : forall {A B} (dummy: A) (x: B) (l: list A) (l': list B) f,
 	map f l = x :: l' -> f (hd dummy l) = x.
 Proof. 
-Admitted.
+	intros A B dummy x l l' f H.
+	induction l.
+	- discriminate.
+	- simpl in *. congruence. 
+Qed.
 
 
 (* AdmissibleDirs について成り立ってほしい性質と，それに必要な補題 *)
@@ -35,22 +43,26 @@ Qed.
 	
 Definition scurve_from_one p := exist _ _ (one_pseg_is_scurve p).
 
-Lemma Direction_to_PrimitiveSegment : forall d, exists p, orn p = d.
+Lemma Direction_to_PrimitiveSegment : forall d p, exists p', orn p' = d /\ dc p p'.
 Proof.
-	intros d.
-	destruct d.
-	- (* d = Plus *) exists (n, e, cx). reflexivity.
-	- (* d = Minus *) exists (n, e, cc). reflexivity.
-Qed.
+	intros d p.
+	destruct d; destruct p as [[v h] c];
+	destruct v; destruct h; destruct c; eexists.
+Admitted.
 
 (* 向きの列と先頭の PrimitiveSegment の組に対し，対応する scurve が(1つ)定まる *)
 Lemma direction_scurve_correspondence : forall ds p,
 	exists sc, hd_scurve sc = p /\ scurve_to_direction sc = orn p :: ds.
 Proof.
-	intros ds p.
-	induction ds as [ | d tail IH].
+	intros ds.
+	induction ds as [ | d ds' IH]; intros p.
 	- (* ds = [] *) exists (scurve_from_one p). split; reflexivity.
-	- (* ds = d :: tail *) 
+	- (* ds = d :: ds' *) 
+		(* 向き d を持ち，p と直接連結可能な PrimitiveSegment p' をとる *)
+		pose proof (Direction_to_PrimitiveSegment d p) as [p' [Horn_p' Hdc]].
+		(* IH より，先頭 p' で向き prn p' :: ds' の scurve がとれる *)
+		destruct (IH p') as [sc [Hhead Hdir]].
+		(* exists (connect p sc (DcCons _ _ _ Hdc)). split. *)
 Admitted.
 
 (* 向き列の許容可能性を調べることで，scurve の許容可能性はわかる．
@@ -75,7 +87,7 @@ Proof.
 		destruct ds as [ | d tail].
 		+ (* ds = [] *) exists (exist _ _ IsScurveNil). auto.
 		+ (* ds = d :: tail *) 
-			pose proof (Direction_to_PrimitiveSegment d) as [p H0].
+			pose proof (Direction_to_PrimitiveSegment d default_primitive_segment) as [p [H0 _]].
 			pose proof (direction_scurve_correspondence tail p) as [sc [H1 H2]].
 			exists sc. split; try apply H; subst; assumption.
 	- (* <- *) intros [sc [Hdir Hadm]].
