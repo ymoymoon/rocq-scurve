@@ -47,8 +47,14 @@ Lemma Direction_to_PrimitiveSegment : forall d p, exists p', orn p' = d /\ dc p 
 Proof.
 	intros d p.
 	destruct d; destruct p as [[v h] c];
-	destruct v; destruct h; destruct c; eexists.
-Admitted.
+	destruct v; destruct h; destruct c; eexists;
+	(* split; try apply DXtrvN. reflexivity. *)
+	try solve [split; try apply DIfl; reflexivity];
+	try solve [split; try apply DXtrvN; reflexivity];
+	try solve [split; try apply DXtrvS; reflexivity];
+	try solve [split; try apply DXtrhN; reflexivity];
+	try solve [split; try apply DXtrhS; reflexivity].
+Qed.
 
 (* 向きの列と先頭の PrimitiveSegment の組に対し，対応する scurve が(1つ)定まる *)
 Lemma direction_scurve_correspondence : forall ds p,
@@ -60,10 +66,24 @@ Proof.
 	- (* ds = d :: ds' *) 
 		(* 向き d を持ち，p と直接連結可能な PrimitiveSegment p' をとる *)
 		pose proof (Direction_to_PrimitiveSegment d p) as [p' [Horn_p' Hdc]].
-		(* IH より，先頭 p' で向き prn p' :: ds' の scurve がとれる *)
+		(* IH より，先頭 p' で向き orn p' :: ds' の scurve がとれる *)
 		destruct (IH p') as [sc [Hhead Hdir]].
-		(* exists (connect p sc (DcCons _ _ _ Hdc)). split. *)
-Admitted.
+		assert (H0: exists l, proj1_sig sc = p' :: l). {
+			unfold scurve_to_direction in Hdir. 
+			unfold hd_scurve in Hhead. 
+			destruct (proj1_sig sc) as [| p0 l0].
+			- discriminate.
+			- simpl in Hhead; subst. exists l0. reflexivity.
+		}
+		destruct H0 as [l H0].
+		pose (DcCons _ _ l Hdc) as H1.
+		rewrite <- H0 in H1.
+		(* p :: (proj1_sig sc) が求める scurve *)
+		exists (connect p sc H1). split.
+		+ (* 先頭の条件 *) auto.
+		+ (* 向きの条件 *) unfold scurve_to_direction. simpl.
+			unfold scurve_to_direction in Hdir. rewrite Hdir. rewrite Horn_p'. reflexivity.
+Qed.
 
 (* 向き列の許容可能性を調べることで，scurve の許容可能性はわかる．
 	(１つの scurve で許容可能性が言えたら，同じ向き列を持つ他の scurve ４つの許容可能性もわかる．) *)
