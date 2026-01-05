@@ -204,12 +204,20 @@ Definition is_sparse_embedding_listDir (ds: list Direction) (sub_ls ls : list Se
 
 
 Lemma P_is_oneway : is_one_way_listDir [Plus].
-Proof. (* ここは one_way_listDir の定義さえできれば示せる？ *)
+Proof. 
+	pose proof (Direction_to_PrimitiveSegment Plus default_primitive_segment) as [p [H _]].
+	exists (scurve_from_one p). split.
+	- unfold scurve_to_direction. simpl. rewrite H. reflexivity.
+	-
 Admitted.
 
 Lemma embedding_P_is_oneway : forall seg, 
 	embed_listDir [Plus] [seg] -> is_one_way_embedding [seg].
 Proof.
+	intros seg H. destruct H as [sc [Hdir Hembed]].
+	exists sc. split.
+	- assumption.
+	-
 Admitted.
 
 Lemma PMP_is_oneway : is_one_way_listDir [Plus; Minus; Plus].
