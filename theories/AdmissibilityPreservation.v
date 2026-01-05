@@ -160,14 +160,12 @@ Definition embed_listDir (ds: list Direction) (ls: list Segment) : Prop :=
 	exists sc: scurve, scurve_to_direction sc = ds
 	/\ embed_scurve sc ls.
 
-(* TODO: 空リストは含まない．（含めるなら，後の定理の必要な部分に not nil 制約を入れる．）繋がっていることも保証． *)
-Parameter is_one_way_embedding : list Segment -> Prop
-(* Embed.all_same_h 使えそう *).
-Definition one_way_embedding := {ls : list Segment | is_one_way_embedding ls}.
-
 (* 単方向 scurve *)
-Definition is_one_way_scurve (sc : scurve) : Prop :=
-	exists ls, embed_scurve sc ls /\ is_one_way_embedding ls.
+(* TODO: 空リストは含まない．（含めるなら，後の定理の必要な部分に not nil 制約を入れる．）繋がっていることも保証． *)
+Parameter is_one_way_scurve : scurve -> Prop.
+
+Definition is_one_way_embedding (ls : list Segment) : Prop :=
+	exists sc, embed_scurve sc ls /\ is_one_way_scurve sc.
 Definition is_one_way_listDir (ds: list Direction) : Prop :=
 	exists sc: scurve, scurve_to_direction sc = ds /\ is_one_way_scurve sc.
 (* おそらく帰納的に定義することもできる．後者は回転数を使った定義もできる？
@@ -176,15 +174,15 @@ Definition is_one_way_listDir (ds: list Direction) : Prop :=
 (* 単方向曲線の始点と終点を結んだ線分を対角線にもつ矩形．部分曲線を含むとは限らない *)
 Parameter rectangular_from_diagonal : R * R -> R * R -> (R * R -> Prop).
 Definition in_rect_from_diagonal a b rr := rectangular_from_diagonal a b rr.
-Definition in_rect (ls: one_way_embedding) rr := 
-	in_rect_from_diagonal (init (hd default_segment (proj1_sig ls))) (term (last (proj1_sig ls) default_segment)) rr.
+Definition in_rect (ls: list Segment) (rr: R * R) (H: is_one_way_embedding ls) := 
+	in_rect_from_diagonal (init (hd default_segment ls)) (term (last ls default_segment)) rr.
 
-(* 疎：単方向曲線 sub_ls の周囲に全然関係ないセグメントが侵入してこない *)
-Definition is_sparse_embedding (sc : scurve) (sub_ls : one_way_embedding) (ls : list Segment) : Prop :=
-	exists l r, ls = l ++ (proj1_sig sub_ls) ++ r
+(* scurve の埋め込みが sub_ls 周りで疎 := 単方向曲線 sub_ls の周囲に全然関係ないセグメントが侵入してこない *)
+Definition is_sparse_embedding (sc : scurve) (sub_ls ls : list Segment) (H: is_one_way_embedding sub_ls) : Prop :=
+	exists l r, ls = l ++ sub_ls ++ r
 	/\ embed_scurve sc ls
 	/\ forall rr, 
-		(exists seg, onExtendSegment ls seg rr) -> ~ in_rect sub_ls rr.
+		(exists seg, onExtendSegment ls seg rr) -> ~ in_rect sub_ls rr H.
 		(* 下のコメントは，その後曲線を移動させて矩形の縦長横長を操る（ことで端点が絡んでも簡約して端の傾きを保存できるようにする）ことが想定されている．
 				人工的かつそのあと曲線の移動が挟まるはずなので，ここで定義を複雑にするより，他の Lemma でうまいことしたい． *)
 		(* /\ (l = [] -> (* sub_ls が端点を含む場合，延長線上にも関係ないセグメントが近づかないことを要請 *)
@@ -197,12 +195,12 @@ Definition is_sparse_embedding (sc : scurve) (sub_ls : one_way_embedding) (ls : 
 					(exists seg, onExtendSegment ls seg q /\ ~ onHeadSegment X1 q) 
 					-> ~ rect q) *)
 
-Definition sparse (sub_ls : one_way_embedding) (ls : list Segment) : Prop :=
-	exists sc, is_sparse_embedding sc sub_ls ls.
+Definition sparse (sub_ls ls : list Segment) (H: is_one_way_embedding sub_ls) : Prop :=
+	exists sc, is_sparse_embedding sc sub_ls ls H.
 
-Definition is_sparse_embedding_listDir (ds: list Direction) (sub_ls : one_way_embedding) (ls : list Segment) : Prop :=
+Definition is_sparse_embedding_listDir (ds: list Direction) (sub_ls ls : list Segment) (H: is_one_way_embedding sub_ls) : Prop :=
 	exists sc, scurve_to_direction sc = ds
-	/\ is_sparse_embedding sc sub_ls ls.
+	/\ is_sparse_embedding sc sub_ls ls H.
 
 
 Lemma P_is_oneway : is_one_way_listDir [Plus].
@@ -264,14 +262,13 @@ Admitted.
 Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
 	-> is_one_way_listDir sub_ds
-	-> exists l r sub_ls, 
-		let sub_ls' := proj1_sig sub_ls in
+	-> exists l r sub_ls (H: is_one_way_embedding sub_ls), 
 		embed_listDir ds1 l
-		/\ embed_listDir sub_ds sub_ls'
+		/\ embed_listDir sub_ds sub_ls
 		/\ embed_listDir ds2 r
-		/\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls' ++ r)
-		/\ ~ close (l ++ sub_ls' ++ r)
-		/\ sparse sub_ls (l ++ sub_ls' ++ r).
+		/\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r)
+		/\ ~ close (l ++ sub_ls ++ r)
+		/\ sparse sub_ls (l ++ sub_ls ++ r) H.
 Proof. Admitted.
 
 (* TODO：some good features を具体化（引数要るだろう）して上の補題に統合する
@@ -281,14 +278,13 @@ Parameter some_good_features : Prop.
 Lemma embed_sparsely_listDir_with_good_features (ds1 sub_ds ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
 	-> is_one_way_listDir sub_ds
-	-> exists l r sub_ls, 
-		let sub_ls' := proj1_sig sub_ls in
+	-> exists l r sub_ls (H: is_one_way_embedding sub_ls), 
 		embed_listDir ds1 l
-		/\ embed_listDir sub_ds sub_ls'
+		/\ embed_listDir sub_ds sub_ls
 		/\ embed_listDir ds2 r
-		/\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls' ++ r)
-		/\ ~ close (l ++ sub_ls' ++ r)
-		/\ sparse sub_ls (l ++ sub_ls' ++ r)
+		/\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r)
+		/\ ~ close (l ++ sub_ls ++ r)
+		/\ sparse sub_ls (l ++ sub_ls ++ r) H
 		/\ some_good_features.
 Proof. Admitted.
 
@@ -297,7 +293,7 @@ Lemma embedding_P_to_PMP_in_rect : forall (seg : Segment) (H: embed_listDir [Plu
 	exists seg1 seg2 seg3,
 		embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3] (* この内部で seg1-3 が連結していることは示されてほしい *)
 		/\ (forall rr, (exists seg, In seg [seg1; seg2; seg3] /\ onSegment seg rr)
-				-> in_rect (exist _ [seg] (embedding_P_is_oneway seg H)) rr) (* seg が張る矩形の内部で分割できている *)
+				-> in_rect [seg] rr (embedding_P_is_oneway seg H)) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3] [seg]
 		/\ slope_init seg = slope_init seg1
 		/\ slope_term seg = slope_term seg3.
@@ -311,15 +307,15 @@ Lemma embedding_PMP_to_P_in_rect : forall (seg1 seg2 seg3 : Segment) (H: embed_l
 	exists seg,
 		embed_listDir [Plus] [seg]
 		/\ (forall rr, onSegment seg rr
-				-> in_rect (exist _ [seg1; seg2; seg3] (embedding_PMP_is_oneway _ _ _ H)) rr) (* seg が張る矩形の内部で分割できている *)
+				-> in_rect [seg1; seg2; seg3] rr (embedding_PMP_is_oneway _ _ _ H)) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3] [seg]
 		/\ slope_init seg = slope_init seg1
 		/\ slope_term seg = slope_term seg3.
 Proof. Admitted.
 
-(* 簡約前の scurve 内の Plus (の向きを持つ Primitive Segment) の埋め込みを，[Plus; Minus; Plus] の埋め込みに変えたら，
-		簡約後の scurve の埋め込みである *)
-(* TODO: コンパクトにする，もし hd_scurve 取れればきれい？ *)
+(*  向き ds1 ++ ds2 ++ ds3 の ds2 (の向きを持つ scurve) の埋め込みを，ds2' の埋め込みに変えたら，
+		向き ds1 ++ ds2' ++ ds3 の埋め込みである *)
+(* TODO: 向き列を交えず scurve だけでいけばコンパクトに，もし hd_scurve 取れればきれい？ *)
 Lemma embbeding_inner_change : forall sc1 sc2 ds1 ds2 ds2' ds3 ls1 ls2 ls2' ls3,
 	embed_scurve sc1 (ls1 ++ ls2 ++ ls3) (* つまり ls1, ls2, ls3 は繋がっている *)
 	-> embed_listDir ds2 ls2
@@ -332,16 +328,15 @@ Lemma embbeding_inner_change : forall sc1 sc2 ds1 ds2 ds2' ds3 ls1 ls2 ls2' ls3,
 Proof. Admitted.
 
 (* sub_ls の周りが疎な開埋め込みにおいて，端点で傾きを保ちつつ sub_ls をその領域に収まるセグメント列に置き換えても開のまま *)
-Lemma seg_in_rectangle_keep_openness : forall sub_ls ls rs (segs: list Segment), (* segs: list Segment にすると，segs の連結性証明が必要 *)
-	let sub_ls' := proj1_sig sub_ls in
-	~ close (ls ++ sub_ls' ++ rs)
-	-> sparse sub_ls (ls ++ sub_ls' ++ rs)
+Lemma seg_in_rectangle_keep_openness : forall (ls rs segs sub_ls : list Segment) (H: is_one_way_embedding sub_ls), (* segs: list Segment にすると，segs の連結性証明が必要 *)
+	~ close (ls ++ sub_ls ++ rs)
+	-> sparse sub_ls (ls ++ sub_ls ++ rs) H
 	-> segs <> []
 	-> is_curve segs (* 必要と思う *)
-	-> slope_init (hd default_segment sub_ls') = slope_init (hd default_segment segs)
-	-> slope_term (last sub_ls' default_segment) = slope_term (last segs default_segment)
-	-> (forall rr, (exists seg, In seg segs /\ onSegment seg rr) -> in_rect sub_ls rr) 
-	-> same_init_and_term segs sub_ls' 
+	-> slope_init (hd default_segment sub_ls) = slope_init (hd default_segment segs)
+	-> slope_term (last sub_ls default_segment) = slope_term (last segs default_segment)
+	-> (forall rr, (exists seg, In seg segs /\ onSegment seg rr) -> in_rect sub_ls rr H) 
+	-> same_init_and_term segs sub_ls 
 	-> ~ close (ls ++ segs ++ rs).
 Proof. Admitted.
 
@@ -362,7 +357,7 @@ Lemma AdmissibleDirs_r1_Plus: forall l r,
 Proof.
 	intros l r admds. 
 	(* 疎な開埋め込みをとる *)
-	pose proof (embed_sparsely_listDir_with_good_features _ _ _ admds PMP_is_oneway) as [ls1 [ls3 [[ls2 Honeway] [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen [Hsparse Hgood]]]]]]]]];
+	pose proof (embed_sparsely_listDir_with_good_features _ _ _ admds PMP_is_oneway) as [ls1 [ls3 [ls2 [Honeway [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen [Hsparse Hgood]]]]]]]]]];
 	simpl in *.
 	assert (Hdir: hd Plus (l ++ Plus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
@@ -391,7 +386,7 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
-			apply (seg_in_rectangle_keep_openness (exist _ [seg1; seg2; seg3] (embedding_PMP_is_oneway seg1 seg2 seg3 Hls2))); 
+			apply (seg_in_rectangle_keep_openness _ _ _ [seg1; seg2; seg3] (embedding_PMP_is_oneway seg1 seg2 seg3 Hls2)); 
 			try assumption; try (symmetry; assumption).
 			(* 残った subgoal もほぼ自明 *)
 			* unfold not. intros. discriminate.
@@ -408,7 +403,7 @@ Lemma AdmissibleDirs_r1_Plus_inv: forall l r,
 Proof.
 	intros l r admds. 
 	(* 疎な開埋め込みをとる *)
-	pose proof (embed_sparsely_listDir _ _ _ admds P_is_oneway) as [ls1 [ls3 [[ls2 Honeway] [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]];
+	pose proof (embed_sparsely_listDir _ _ _ admds P_is_oneway) as [ls1 [ls3 [ls2 [Honeway [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]]];
 	simpl in *.
 	assert (Hdir: hd Plus (l ++ Plus :: Minus :: Plus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
@@ -438,7 +433,7 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
-			apply (seg_in_rectangle_keep_openness (exist _ [segP] (embedding_P_is_oneway segP Hls2))); try assumption.
+			apply (seg_in_rectangle_keep_openness _ _ _ [segP] (embedding_P_is_oneway segP Hls2)); try assumption.
 			(* 仮定を満たすことはほぼ作業的に示せる *)
 			* unfold not. intros. discriminate.
 			* apply embedding_is_curve_listDir. exists [Plus; Minus; Plus]. assumption.
