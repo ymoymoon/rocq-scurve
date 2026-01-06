@@ -317,6 +317,8 @@ Lemma seg_in_rectangle_keep_openness : forall (ls rs sub_ls sub_ls' : list Segme
 Proof. Admitted.
 
 
+(* 許容可能性保持に関する主張８つと，その系 *)
+
 (* [+-+ => +] での簡約で，簡約元が許容可能なら簡約先も許容可能 *)
 Lemma AdmissibleDirs_r1_Plus: forall l r,
   AdmissibleDirs (l ++ [Plus; Minus; Plus] ++ r) -> AdmissibleDirs (l ++ [Plus] ++ r).
@@ -363,6 +365,10 @@ Proof.
 				destruct H1; [subst; assumption | exfalso; assumption].
 Qed.
 
+Lemma AdmissibleDirs_r1_Minus: forall l r,
+  AdmissibleDirs (l ++ [Minus; Plus; Minus] ++ r) -> AdmissibleDirs (l ++ [Minus] ++ r).
+Proof.
+Admitted.
 
 (* [+-+ => +] での簡約で，簡約先が許容可能ならもともと許容可能 *)
 Lemma AdmissibleDirs_r1_Plus_inv: forall l r,
@@ -465,11 +471,6 @@ Lemma AdmissibleDirs_r2_Minus_inv: forall l r,
 Proof.
 Admitted.
 
-Lemma AdmissibleDirs_r1_Minus: forall l r,
-  AdmissibleDirs (l ++ [Minus; Plus; Minus] ++ r) -> AdmissibleDirs (l ++ [Minus] ++ r).
-Proof.
-Admitted.
-
 Lemma AdmissibleDirs_r2_Plus: forall l r,
   AdmissibleDirs (l ++ [Plus; Plus; Minus; Minus] ++ r) -> AdmissibleDirs (l ++ [Plus; Minus] ++ r).
 Proof.
@@ -491,3 +492,24 @@ Proof.
 	- (* --++ -> -+ *) split. apply AdmissibleDirs_r2_Minus. apply AdmissibleDirs_r2_Minus_inv.
 Qed.
 
+Lemma AdmissibleDirs_preserve_Step : forall ds ds',
+	ReduceDirStep ds ds' 
+	-> (AdmissibleDirs ds <-> AdmissibleDirs ds').
+Proof.
+  intros ds ds' Hstep.
+  inversion Hstep ; subst.
+  apply AdmissibleDirs_preserve_Rule. auto.
+Qed.
+
+Corollary AdmissibleDirs_preserve  : forall ds ds',
+	ReduceDir ds ds' 
+	-> (AdmissibleDirs ds <-> AdmissibleDirs ds').
+Proof.
+  intros ds ds' Hreduce.
+  induction Hreduce.
+  - (* RDRefl: ds = ds なので自明 *)
+    reflexivity.
+  - (* RDTrans: ds -> ds' -> ds'' の場合 *)
+    apply (@iff_trans _ (AdmissibleDirs ds') _); try assumption.
+		apply AdmissibleDirs_preserve_Step. assumption.
+Qed.
