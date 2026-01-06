@@ -122,18 +122,6 @@ Qed.
 Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい？ *)
 Parameter slope_term : Segment -> R.
 
-(* 2次元曲線（連結性を保証）．embed_scurve を使う際はその中で連結性の保証がされるので使用しなくて良い *)
-Inductive is_curve : list Segment -> Prop := 
-| IsCurveNil : is_curve nil
-| IsCurveSingle : forall seg, is_curve [seg]
-| IsCurveCons : forall seg1 seg2 segs,
-		is_curve (seg2 :: segs)
-		-> term seg1 = init seg2
-		-> is_curve (seg1 :: seg2 :: segs).
-
-(* scurve と対応するものとして使うべきか *)
-(* Definition curve := {ls : list Segment | is_curve ls}.  *)
-
 Definition same_init_and_term (c1 c2 : list Segment) := (* curve にすべきかも．ただこの方が汎用的か *)
 	init (hd default_segment c1) = init (hd default_segment c2) 
 	/\ term (last c1 default_segment) = term (last c2 default_segment).
@@ -221,20 +209,6 @@ Qed.
 Lemma embedding_three_dir : forall d1 d2 d3 ls, 
 	embed_listDir [d1; d2; d3] ls -> exists seg1 seg2 seg3, ls = [seg1; seg2; seg3].
 Proof. 
-Admitted.
-
-Lemma embedding_is_curve_listDir : forall ls, 
-	(exists ds, embed_listDir ds ls) -> is_curve ls.
-Proof.
-	intros ls. induction ls as [ | s1 ls' IH].
-	- (* ls =[] *) intros. apply IsCurveNil.
-	- destruct ls' as [ | s2 ls''].
-		+ (* ls =[s] *) intros. apply IsCurveSingle.
-		+ (* ls = s1 :: s2 :: ls' *) intros [ds [sc [H1 H2]]]. 
-			inversion H2; subst.
-			apply IsCurveCons.
-			* apply IH. admit. 
-			* assumption.
 Admitted.
 
 
