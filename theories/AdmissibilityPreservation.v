@@ -116,25 +116,6 @@ Proof.
 			assumption.
 Qed.
 
-(* 許容可能性を考えるうえで X1 は適当に固定していい *)
-Lemma AdmissibleDirs_head_fix : forall (ds: list Direction) (p: PrimitiveSegment),
-	AdmissibleDirs ((orn p) :: ds) <-> 
-		(forall sc, 
-		hd_scurve sc = p 
-		-> scurve_to_direction sc = (orn p) :: ds
-		-> admissible sc).
-Proof.
-	intros ds p. split.
-	- auto.
-	- intros H.
-		(* 1つでも許容可能な scurve を作ればいい *)
-		apply AdmissibleDirs_exist.
-		pose proof (direction_scurve_correspondence ds p) as [sc [H1 Hsc]].
-		exists sc. split.
-		+ (* 向き *) rewrite Hsc. reflexivity.
-		+ (* 許容可能 *) apply H; try assumption.
-Qed.
-
 
 (* 許容可能性保持の証明に向けた定義と補題群 *)
 
@@ -150,6 +131,7 @@ Inductive is_curve : list Segment -> Prop :=
 		-> term seg1 = init seg2
 		-> is_curve (seg1 :: seg2 :: segs).
 
+(* scurve と対応するものとして使うべきか *)
 (* Definition curve := {ls : list Segment | is_curve ls}.  *)
 
 Definition same_init_and_term (c1 c2 : list Segment) := (* curve にすべきかも．ただこの方が汎用的か *)
@@ -183,17 +165,6 @@ Definition is_sparse_embedding (sc : scurve) (sub_ls ls : list Segment) (H: is_o
 	/\ embed_scurve sc ls
 	/\ forall rr, 
 		(exists seg, onExtendSegment ls seg rr) -> ~ in_rect sub_ls rr H.
-		(* 下のコメントは，その後曲線を移動させて矩形の縦長横長を操る（ことで端点が絡んでも簡約して端の傾きを保存できるようにする）ことが想定されている．
-				人工的かつそのあと曲線の移動が挟まるはずなので，ここで定義を複雑にするより，他の Lemma でうまいことしたい． *)
-		(* /\ (l = [] -> (* sub_ls が端点を含む場合，延長線上にも関係ないセグメントが近づかないことを要請 *)
-				let X1 := head_seg sub_ls default_segment in 
-				let width := (term_x X1) - (init_x X1) in (* 矩形の横幅 *)
-				let length := (term_y X1) - (init_y X1) in (* 矩形の縦幅 *)
-				forall p, onHeadSegment X1 p -> 
-					let rect := rectangular_from_diagonal ((fst p)-width, (snd p)-length) p in (* 矩形 *)
-					forall q, 
-					(exists seg, onExtendSegment ls seg q /\ ~ onHeadSegment X1 q) 
-					-> ~ rect q) *)
 
 Definition sparse (sub_ls ls : list Segment) (H: is_one_way_embedding sub_ls) : Prop :=
 	exists sc, is_sparse_embedding sc sub_ls ls H.
@@ -245,7 +216,7 @@ Proof.
 		+ (* if lp = head :: tail *) simpl in Hcontra. discriminate.
 Qed.
 
-(* TODO: 上と統合 *)
+(* TODO: Embed.scurve_length_consis に倣って上と統合 *)
 Lemma embedding_three_dir : forall d1 d2 d3 ls, 
 	embed_listDir [d1; d2; d3] ls -> exists seg1 seg2 seg3, ls = [seg1; seg2; seg3].
 Proof. 
@@ -254,19 +225,19 @@ Admitted.
 Lemma embedding_is_curve_listDir : forall ls, 
 	(exists ds, embed_listDir ds ls) -> is_curve ls.
 Proof.
-	intros ls H. destruct H as [ds [sc [H1 H2]]].
-	induction H2 as [ | | ps lp A s1 s2 ls' Hembed Hconnect IH].
-	- (* ls =[] *) apply IsCurveNil.
-	- (* ls =[s] *) apply IsCurveSingle.
-	- (* ls = s1 :: s2 :: ls' *) apply IsCurveCons.
-		+ apply IH. admit. (* IH が弱い *)
-		+ assumption.
+	intros ls. induction ls as [ | s1 ls' IH].
+	- (* ls =[] *) intros. apply IsCurveNil.
+	- destruct ls' as [ | s2 ls''].
+		+ (* ls =[s] *) intros. apply IsCurveSingle.
+		+ (* ls = s1 :: s2 :: ls' *) intros [ds [sc [H1 H2]]]. 
+			inversion H2; subst.
+			apply IsCurveCons.
+			* apply IH. admit. 
+			* assumption.
 Admitted.
 
 
-(* 許容可能ならば，その中の単方向な sub_ds 周りで疎な開埋め込みが存在する．
- 		さらに sub_ls の始点と終点とそれぞれでの傾きを（sub_ls の向きを考慮した上で）自由に選んでも良い，
-		としたらのちに端点での傾きを保存するために役立つ？ *)
+(* 許容可能ならば，その中の単方向な sub_ds の埋め込み sub_ls 周りで疎な開埋め込みが存在する *)
 Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
 	-> is_one_way_listDir sub_ds
@@ -280,7 +251,8 @@ Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
 Proof. Admitted.
 
 (* TODO：some good features を具体化（引数要るだろう）して上の補題に統合する
-		embed_sparsely_listDir 上のコメントが役立つ？ *)
+		sub_ls の始点と終点とそれぞれでの傾きを（sub_ls の向きを考慮した上で）自由に選んでも良い，
+		としたらのちに端点での傾きを保存するために役立つ？  *)
 Parameter some_good_features : Prop.
 
 Lemma embed_sparsely_listDir_with_good_features (ds1 sub_ds ds2 : list Direction) :
@@ -347,16 +319,6 @@ Lemma seg_in_rectangle_keep_openness : forall (ls rs segs sub_ls : list Segment)
 	-> same_init_and_term segs sub_ls 
 	-> ~ close (ls ++ segs ++ rs).
 Proof. Admitted.
-
-(* 傾きの条件を無視できる代わりに，端点を含む置き換えには使えない *)
-(* Lemma seg_in_rectangle_keep_openness_old : forall sub_ls l ls r rs seg,
-	~ close ((l :: ls) ++ (proj1_sig sub_ls) ++ (r :: rs))
-	-> sparse sub_ls ((l :: ls) ++ (proj1_sig sub_ls) ++ (r :: rs))
-	-> (forall rr, onSegment seg rr -> in_rect sub_ls rr) 
-	-> init seg = init (hd default_segment (proj1_sig sub_ls)) 
-	-> term seg = term (last (proj1_sig sub_ls) default_segment)
-	-> ~ close ((l :: ls) ++ [seg] ++ (r :: rs)).
-Proof. Admitted. *)
 
 
 (* [+-+ => +] での簡約で，簡約元が許容可能なら簡約先も許容可能 *)
