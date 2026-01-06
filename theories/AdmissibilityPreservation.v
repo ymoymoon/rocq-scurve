@@ -131,7 +131,7 @@ Definition embed_listDir (ds: list Direction) (ls: list Segment) : Prop :=
 	/\ embed_scurve sc ls.
 
 (* 単方向 scurve *)
-(* TODO: 空リストは含まない．（含めるなら，後の定理の必要な部分に not nil 制約を入れる．）繋がっていることも保証． *)
+(* TODO: 空リストは含まない．（含めるなら，後の定理の必要な部分に not nil 制約を入れる．） *)
 Parameter is_one_way_scurve : scurve -> Prop.
 
 Definition is_one_way_embedding (ls : list Segment) : Prop :=
@@ -188,42 +188,59 @@ Lemma embedding_oneway_listDir : forall ds ls,
 Proof.
 Admitted.
 
+Lemma embedding_listDir_length_consis: forall (ds: list Direction) (ls: list Segment),
+  embed_listDir ds ls -> length ds = length ls.
+Proof.
+Admitted.
+
 Lemma embedding_one_dir : forall d ls, 
 	embed_listDir [d] ls -> exists seg, ls = [seg].
 Proof. 
-	intros d ls H. destruct H as [sc [Hd Hmain]].
-	inversion Hmain as [ | ps s | ps lp A s1 s2 ls' H0 Hlp H1 ]; subst.
-	- (* if ls = [] *) discriminate.
-	- (* if ls = [s], correct *) exists s. reflexivity.
-	- (* if ls = s1 :: s2 :: ls' *) 
-		unfold scurve_to_direction in Hd.
-		unfold connect in Hd. simpl in Hd. 
-		inversion Hd as [[H2 Hcontra]].
-		destruct lp as [lp H3]; destruct lp as [| head tail].
-		+ (* if lp = [] *) simpl in Hlp. inversion Hlp.
-		+ (* if lp = head :: tail *) simpl in Hcontra. discriminate.
+	intros d ls H. 
+	apply embedding_listDir_length_consis in H.
+	destruct ls as [ | x ls']; try discriminate.
+	destruct ls'; try discriminate.
+	repeat eexists.
 Qed.
 
-(* TODO: Embed.scurve_length_consis に倣って上と統合 *)
-Lemma embedding_three_dir : forall d1 d2 d3 ls, 
-	embed_listDir [d1; d2; d3] ls -> exists seg1 seg2 seg3, ls = [seg1; seg2; seg3].
-Proof. 
-Admitted.
-
-(* TODO: Embed.scurve_length_consis に倣って上と統合 *)
 Lemma embedding_two_dir : forall d1 d2 ls, 
 	embed_listDir [d1; d2] ls -> exists seg1 seg2, ls = [seg1; seg2].
 Proof. 
-Admitted.
+	intros d1 d2 ls H. 
+	apply embedding_listDir_length_consis in H.
+	destruct ls as [ | x1 ls1]; try discriminate.
+	destruct ls1 as [ | x2 ls2]; try discriminate.
+	destruct ls2; try discriminate.
+	repeat eexists.
+Qed.
 
-(* TODO: Embed.scurve_length_consis に倣って上と統合 *)
+Lemma embedding_three_dir : forall d1 d2 d3 ls, 
+	embed_listDir [d1; d2; d3] ls -> exists seg1 seg2 seg3, ls = [seg1; seg2; seg3].
+Proof. 
+	intros d1 d2 d3 ls H. 
+	apply embedding_listDir_length_consis in H.
+	destruct ls as [ | x1 ls1]; try discriminate.
+	destruct ls1 as [ | x2 ls2]; try discriminate.
+	destruct ls2 as [ | x3 ls3]; try discriminate.
+	destruct ls3; try discriminate.
+	repeat eexists.
+Qed.
+
 Lemma embedding_four_dir : forall d1 d2 d3 d4 ls, 
 	embed_listDir [d1; d2; d3; d4] ls -> exists seg1 seg2 seg3 seg4, ls = [seg1; seg2; seg3; seg4].
-Proof. 
-Admitted.
+Proof.
+	intros d1 d2 d3 d4 ls H. 
+	apply embedding_listDir_length_consis in H.
+	destruct ls as [ | x1 ls1]; try discriminate.
+	destruct ls1 as [ | x2 ls2]; try discriminate.
+	destruct ls2 as [ | x3 ls3]; try discriminate.
+	destruct ls3 as [ | x4 ls4]; try discriminate.
+	destruct ls4; try discriminate.
+	repeat eexists.
+Qed.
 
 
-(* 許容可能ならば，その中の単方向な sub_ds の埋め込み sub_ls 周りで疎な開埋め込みが存在する *)
+(*【証明の本質としている補題】 許容可能ならば，その中の単方向な sub_ds の埋め込み sub_ls 周りで疎な開埋め込みが存在する *)
 Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
 	-> is_one_way_listDir sub_ds
