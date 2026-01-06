@@ -171,21 +171,16 @@ Proof.
 	-
 Admitted.
 
-Lemma embedding_P_is_oneway : forall seg, 
-	embed_listDir [Plus] [seg] -> is_one_way_embedding [seg].
-Proof.
-	intros seg H. destruct H as [sc [Hdir Hembed]].
-	exists sc. split.
-	- assumption.
-	-
+Lemma PM_is_oneway : is_one_way_listDir [Plus; Minus].
+Proof. 
 Admitted.
 
 Lemma PMP_is_oneway : is_one_way_listDir [Plus; Minus; Plus].
 Proof.
 Admitted.
 
-Lemma embedding_PMP_is_oneway : forall seg1 seg2 seg3, 
-	embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3] -> is_one_way_embedding [seg1; seg2; seg3].
+Lemma embedding_oneway_listDir : forall ds ls, 
+	embed_listDir ds ls -> is_one_way_listDir ds -> is_one_way_embedding ls.
 Proof.
 Admitted.
 
@@ -249,7 +244,7 @@ Lemma embedding_P_to_PMP_in_rect : forall (seg : Segment) (H: embed_listDir [Plu
 	exists seg1 seg2 seg3,
 		embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3] (* この内部で seg1-3 が連結していることは示されてほしい *)
 		/\ (forall rr, (exists seg, In seg [seg1; seg2; seg3] /\ onSegment seg rr)
-				-> in_rect [seg] rr (embedding_P_is_oneway seg H)) (* seg が張る矩形の内部で分割できている *)
+				-> in_rect [seg] rr (embedding_oneway_listDir _ _ H P_is_oneway)) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3] [seg]
 		/\ slope_init seg = slope_init seg1
 		/\ slope_term seg = slope_term seg3.
@@ -264,7 +259,7 @@ Lemma embedding_PMP_to_P_in_rect : forall (seg1 seg2 seg3 : Segment) (H: embed_l
 	exists seg,
 		embed_listDir [Plus] [seg]
 		/\ (forall rr, onSegment seg rr
-				-> in_rect [seg1; seg2; seg3] rr (embedding_PMP_is_oneway _ _ _ H)) (* seg が張る矩形の内部で分割できている *)
+				-> in_rect [seg1; seg2; seg3] rr (embedding_oneway_listDir _ _ H PMP_is_oneway)) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3] [seg]
 		/\ slope_init seg = slope_init seg1
 		/\ slope_term seg = slope_term seg3.
@@ -338,8 +333,8 @@ Proof.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
 			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2; seg3] [segP] 
-				(embedding_PMP_is_oneway _ _ _ Hls2)
-				(embedding_P_is_oneway _ HP)); 
+				(embedding_oneway_listDir _ _ Hls2 PMP_is_oneway)
+				(embedding_oneway_listDir _ _ HP P_is_oneway)); 
 				try assumption; try (symmetry; assumption).
 			(* 残った subgoal もほぼ自明 *)
 			* intros rr [seg' [H1 H2]]. apply Hin_rect.
@@ -387,8 +382,8 @@ Proof.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
 			apply (seg_in_rectangle_keep_openness _ _ [segP] _ 
-				(embedding_P_is_oneway _ Hls2)
-				(embedding_PMP_is_oneway _ _ _ HPMP)); try assumption.
+				(embedding_oneway_listDir _ _ Hls2 P_is_oneway)
+				(embedding_oneway_listDir _ _ HPMP PMP_is_oneway)); try assumption.
 			(* 仮定を満たすことはほぼ作業的に示せる *)
 			* unfold same_init_and_term. split; symmetry; apply Hinit_term.
 Qed.
