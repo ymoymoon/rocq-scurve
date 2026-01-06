@@ -122,7 +122,7 @@ Qed.
 Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい？ *)
 Parameter slope_term : Segment -> R.
 
-Definition same_init_and_term (c1 c2 : list Segment) := (* curve にすべきかも．ただこの方が汎用的か *)
+Definition same_init_and_term (c1 c2 : list Segment) := 
 	init (hd default_segment c1) = init (hd default_segment c2) 
 	/\ term (last c1 default_segment) = term (last c2 default_segment).
 
@@ -274,7 +274,9 @@ Proof. Admitted.
 		向き ds1 ++ ds2' ++ ds3 の埋め込みである *)
 (* TODO: 向き列を交えず scurve だけでいけばコンパクトに，もし hd_scurve 取れればきれい？ *)
 Lemma embbeding_inner_change : forall sc1 sc2 ds1 ds2 ds2' ds3 ls1 ls2 ls2' ls3,
-	embed_scurve sc1 (ls1 ++ ls2 ++ ls3) (* つまり ls1, ls2, ls3 は繋がっている *)
+	ls2 <> []
+	-> ls2' <> []
+	-> embed_scurve sc1 (ls1 ++ ls2 ++ ls3) (* つまり ls1, ls2, ls3 は繋がっている *)
 	-> embed_listDir ds2 ls2
 	-> embed_listDir ds2' ls2'
 	-> same_init_and_term ls2 ls2'
@@ -304,7 +306,8 @@ Lemma AdmissibleDirs_r1_Plus: forall l r,
 Proof.
 	intros l r admds. 
 	(* 疎な開埋め込みをとる *)
-	pose proof (embed_sparsely_listDir_with_good_features _ _ _ admds PMP_is_oneway) as [ls1 [ls3 [ls2 [Honeway [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen [Hsparse Hgood]]]]]]]]]];
+	pose proof (embed_sparsely_listDir_with_good_features _ _ _ admds PMP_is_oneway) 
+		as [ls1 [ls3 [ls2 [Honeway [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen [Hsparse Hgood]]]]]]]]]];
 	simpl in *.
 	assert (Hdir: hd Plus (l ++ Plus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
@@ -329,7 +332,8 @@ Proof.
 		unfold admissible. 
 		split.
 		+ (* 埋め込みになっていること *) 
-			apply (embbeding_inner_change sc sc' l [Plus; Minus; Plus] [Plus] r ls1 [seg1; seg2; seg3] [segP] ls3); try assumption.
+			apply (embbeding_inner_change sc sc' l [Plus; Minus; Plus] [Plus] r ls1 [seg1; seg2; seg3] [segP] ls3); 
+				try assumption; try discriminate.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
@@ -349,7 +353,8 @@ Lemma AdmissibleDirs_r1_Plus_inv: forall l r,
 Proof.
 	intros l r admds. 
 	(* 疎な開埋め込みをとる *)
-	pose proof (embed_sparsely_listDir _ _ _ admds P_is_oneway) as [ls1 [ls3 [ls2 [Honeway [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]]];
+	pose proof (embed_sparsely_listDir _ _ _ admds P_is_oneway) 
+		as [ls1 [ls3 [ls2 [Honeway [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]]];
 	simpl in *.
 	assert (Hdir: hd Plus (l ++ Plus :: Minus :: Plus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
@@ -368,13 +373,15 @@ Proof.
 			unfold embed_listDir. exists sc. split; assumption.
 		}
 		pose proof (embedding_one_dir Plus ls2 Hls2) as [segP HP]; subst.
-		pose proof (embedding_P_to_PMP_in_rect segP Hls2) as [seg1 [seg2 [seg3 [HPMP [Hin_rect [Hinit_term [Hinit_slope Hterm_slope]]]]]]].
+		pose proof (embedding_P_to_PMP_in_rect segP Hls2) 
+			as [seg1 [seg2 [seg3 [HPMP [Hin_rect [Hinit_term [Hinit_slope Hterm_slope]]]]]]].
 		(* 欲しかった埋め込み *) 
 		exists (ls1 ++ [seg1; seg2; seg3] ++ ls3). 
 		unfold admissible. 
 		split.
 		+ (* 埋め込みになっていること *) 
-			apply (embbeding_inner_change sc sc' l [Plus] [Plus; Minus; Plus] r ls1 [segP] [seg1; seg2; seg3] ls3); try assumption.
+			apply (embbeding_inner_change sc sc' l [Plus] [Plus; Minus; Plus] r ls1 [segP] [seg1; seg2; seg3] ls3); 
+				try assumption; try discriminate.
 			* unfold same_init_and_term. split; symmetry; apply Hinit_term.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
 			* symmetry. assumption.
