@@ -188,10 +188,30 @@ Lemma embedding_oneway_listDir : forall ds ls,
 Proof.
 Admitted.
 
+Lemma scurve_listDir_length_consis: forall ds sc,
+  scurve_to_direction sc = ds -> length ds = length (proj1_sig sc).
+Proof.
+	intros ds. unfold scurve_to_direction. 
+	induction ds as [ | d ds' IH];  intros sc H.
+	- (* ds = [] *) 
+		destruct (proj1_sig sc); [auto | discriminate].
+	- (* ds = d::ds' *) 
+		destruct sc as [sc' Hsc].
+		destruct Hsc as [ | p ps Hps H0]; try discriminate.
+		simpl; f_equal.
+		apply (IH (exist _ _ Hps)).
+		simpl in *.
+		injection H; auto.
+Qed.
+
 Lemma embedding_listDir_length_consis: forall (ds: list Direction) (ls: list Segment),
   embed_listDir ds ls -> length ds = length ls.
 Proof.
-Admitted.
+	intros ds ls [sc [Hdir Hembed]].
+	rewrite (scurve_listDir_length_consis _ _ Hdir).
+	apply scurve_length_consis.
+	auto.
+Qed.
 
 Lemma embedding_one_dir : forall d ls, 
 	embed_listDir [d] ls -> exists seg, ls = [seg].
