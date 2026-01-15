@@ -27,6 +27,13 @@ Proof.
 	- simpl in *. congruence. 
 Qed.
 
+(* Parameter extend に関する補題 *)
+Definition onExtention ls rr := exists seg, onExtendSegment ls seg rr.
+
+Lemma extend_onExtendSegment : forall ls rr,
+	onExtention ls rr -> exists t, rr = extend ls t.
+Proof.
+Admitted.
 
 (* AdmissibleDirs について成り立ってほしい性質と，それに必要な補題 *)
 
@@ -149,11 +156,12 @@ Definition in_rect (ls: list Segment) (rr: R * R) :=
 
 (* scurve の埋め込みが sub_ls 周りで疎 := sub_ls の始点と終点から作成できる矩形に全然関係ないセグメントが侵入してこない
 		sub_ls が開か，全体として開埋め込みかは知らない *)
+(* TODO: 最後の条件が違う *)
 Definition is_sparse_embedding (sc : scurve) (sub_ls ls : list Segment) : Prop :=
 	exists l r, ls = l ++ sub_ls ++ r
 	/\ embed_scurve sc ls
 	/\ forall rr, 
-		(exists seg, onExtendSegment ls seg rr) -> ~ in_rect sub_ls rr.
+		onExtention ls rr -> ~ in_rect sub_ls rr.
 
 Definition sparse (sub_ls ls : list Segment) : Prop :=
 	exists sc, is_sparse_embedding sc sub_ls ls.
@@ -384,14 +392,38 @@ Lemma seg_in_rectangle_keep_openness : forall (ls rs sub_ls sub_ls' : list Segme
 Proof. 
 	intros ls rs sub_ls sub_ls' Hopen' Hopen Hsparse Hin_rect Hinit_term Hinit_slope Hterm_slope Hclose.
 	destruct Hclose as [t1 [t2 [H12 Hsame]]].
-	remember (ls ++ sub_ls ++ rs) as pre eqn: E.
-	(* 補題：t1, t2 の表す位置は，pre または sub_ls' どちらかの上． *)
+	remember (ls ++ sub_ls ++ rs) as pre eqn: Epre.
+	remember (ls ++ sub_ls' ++ rs) as post eqn: Epost.
+	(* 補題：t1, t2 が post で表す位置は，pre または sub_ls' どちらかの上． *)
+	assert (H: forall t, onExtention pre (extend post t)
+		\/ (exists seg, In seg sub_ls' /\ onSegment seg (extend post t))). {
+		admit.
+	}
 	(* t1, t2 の表す位置に関して場合分け *)
-	(* 両方が pre 上に存在した場合： pre が開であることに矛盾 *)
-	(* 両方が sub_ls' 上に存在した場合： sub_ls' が開であることに矛盾 *)
-	(* 一方が pre 上，もう一方が sub_ls' 上に存在した場合： 
+	destruct (H t1) as [Ht1 | Ht1]; destruct (H t2) as [Ht2 | Ht2].
+	- (* 両方が pre 上に存在した場合： pre が開であることに矛盾 *) 
+		apply Hopen. 
+		assert (H1 : exists t1', extend post t1 = extend pre t1'). {
+			apply extend_onExtendSegment. auto.
+		}
+		destruct H1 as [t1' Ht1'].
+		assert (H2 : exists t2', extend post t2 = extend pre t2'). {
+			apply extend_onExtendSegment. auto.
+		}
+		destruct H2 as [t2' Ht2'].
+		exists t1'. exists t2'. split.
+		+ (* t1', t2' が異なること．このままでは示せない *) admit.
+		+ (* t1', t2' が pre 上で同じ点を表すこと *) congruence.
+	- (* 一方が pre 上，もう一方が sub_ls' 上に存在した場合： 
 		その点は sub_ls から作られる矩形の中にあるので， pre が疎であることから sub_ls, つまり pre 上． 
 		pre が開であることに矛盾 *)
+		apply Hopen.
+		apply Hin_rect in Ht2. 
+		destruct Hsparse as [sc [ls' [rs' [_ [_ Hrect]]]]].
+		admit.
+	- admit.
+	- (* 両方が sub_ls' 上に存在した場合： sub_ls' が開であることに矛盾 *)
+		admit.
 Admitted.
 
 
