@@ -28,10 +28,13 @@ Proof.
 Qed.
 
 (* Parameter extend に関する補題 *)
-Definition onExtention ls rr := exists seg, onExtendSegment ls seg rr.
+Definition onExtend ls rr := exists seg, onExtendSegment ls seg rr.
+Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
 
 Lemma extend_onExtendSegment : forall ls rr,
-	onExtention ls rr -> exists t, rr = extend ls t.
+	onExtend ls rr -> exists t, rr = extend ls t.
+	(* extend の定義しだいだがおそらく逆も成立 *)
+	(* 右辺は onSegment などと同じ形 *)
 Proof.
 Admitted.
 
@@ -156,12 +159,11 @@ Definition in_rect (ls: list Segment) (rr: R * R) :=
 
 (* scurve の埋め込みが sub_ls 周りで疎 := sub_ls の始点と終点から作成できる矩形に全然関係ないセグメントが侵入してこない
 		sub_ls が開か，全体として開埋め込みかは知らない *)
-(* TODO: 最後の条件が違う *)
 Definition is_sparse_embedding (sc : scurve) (sub_ls ls : list Segment) : Prop :=
 	exists l r, ls = l ++ sub_ls ++ r
 	/\ embed_scurve sc ls
-	/\ forall rr, 
-		onExtention ls rr -> ~ in_rect sub_ls rr.
+	/\ (forall rr, 
+			(onExtend ls rr /\ in_rect sub_ls rr) -> onSegmentlist sub_ls rr).
 
 Definition sparse (sub_ls ls : list Segment) : Prop :=
 	exists sc, is_sparse_embedding sc sub_ls ls.
@@ -273,7 +275,7 @@ Proof.
 Admitted.
 
 
-(*【証明の本質としている補題】 許容可能ならば，その中の単方向な sub_ds の埋め込み sub_ls 周りで疎な開埋め込みが存在する *)
+(*【証明の本質としている補題１】 許容可能ならば，その中の単方向な sub_ds の埋め込み sub_ls 周りで疎な開埋め込みが存在する *)
 Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
 	-> is_one_way_listDir sub_ds
@@ -310,7 +312,7 @@ Lemma embedding_P_to_PMP_in_rect : forall (seg : Segment),
 	embed_listDir [Plus] [seg]
 	-> exists seg1 seg2 seg3,
 		embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3] (* この内部で seg1-3 が連結していることは示されてほしい *)
-		/\ (forall rr, (exists seg, In seg [seg1; seg2; seg3] /\ onSegment seg rr)
+		/\ (forall rr, onSegmentlist [seg1; seg2; seg3] rr
 				-> in_rect [seg] rr) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg] [seg1; seg2; seg3]
 		/\ slope_init seg = slope_init seg1
@@ -323,7 +325,7 @@ Lemma embedding_PM_to_PPMM_in_rect : forall (seg1 seg2 : Segment),
 	embed_listDir [Plus; Minus] [seg1; seg2]
 	-> exists seg1' seg2' seg3' seg4',
 		embed_listDir [Plus; Plus; Minus; Minus] [seg1'; seg2'; seg3'; seg4'] (* この内部で seg1-3 が連結していることは示されてほしい *)
-		/\ (forall rr, (exists seg, In seg [seg1'; seg2'; seg3'; seg4'] /\ onSegment seg rr)
+		/\ (forall rr, onSegmentlist [seg1'; seg2'; seg3'; seg4'] rr
 				-> in_rect [seg1; seg2] rr) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4']
 		/\ slope_init seg1 = slope_init seg1'
@@ -355,7 +357,7 @@ Lemma embedding_PPMM_to_PM_in_rect : forall (seg1 seg2 seg3 seg4 : Segment),
 	->
 	exists seg1' seg2',
 		embed_listDir [Plus; Minus] [seg1'; seg2'] 
-		/\ (forall rr, (exists seg, In seg [seg1'; seg2'] /\ onSegment seg rr)
+		/\ (forall rr, onSegmentlist [seg1'; seg2'] rr
 				-> in_rect [seg1; seg2; seg3; seg4] rr) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2']
 		/\ slope_init seg1 = slope_init seg1'
@@ -378,13 +380,13 @@ Lemma embbeding_inner_change : forall sc1 sc2 ds1 ds2 ds2' ds3 ls1 ls2 ls2' ls3,
 	-> embed_scurve sc2 (ls1 ++ ls2' ++ ls3).
 Proof. Admitted.
 
-(* sub_ls の周りが疎な開埋め込みにおいて，端点で傾きを保ちつつ
+(* 【証明の本質としている補題２】 sub_ls の周りが疎な開埋め込みにおいて，端点で傾きを保ちつつ
 		sub_ls をその領域に収まる開な sub_ls' に置き換えても開のまま *)
 Lemma seg_in_rectangle_keep_openness : forall (ls rs sub_ls sub_ls' : list Segment), 
 	~ close sub_ls'
 	-> ~ close (ls ++ sub_ls ++ rs)
 	-> sparse sub_ls (ls ++ sub_ls ++ rs)
-	-> (forall rr, (exists seg, In seg sub_ls' /\ onSegment seg rr) -> in_rect sub_ls rr) 
+	-> (forall rr, onSegmentlist sub_ls' rr -> in_rect sub_ls rr) 
 	-> same_init_and_term sub_ls sub_ls' 
 	-> slope_init (hd default_segment sub_ls) = slope_init (hd default_segment sub_ls')
 	-> slope_term (last sub_ls default_segment) = slope_term (last sub_ls' default_segment)
@@ -392,11 +394,12 @@ Lemma seg_in_rectangle_keep_openness : forall (ls rs sub_ls sub_ls' : list Segme
 Proof. 
 	intros ls rs sub_ls sub_ls' Hopen' Hopen Hsparse Hin_rect Hinit_term Hinit_slope Hterm_slope Hclose.
 	destruct Hclose as [t1 [t2 [H12 Hsame]]].
+	(* ls ++ sub_ls' ++ rs が t1, t2 の表す点で自己交差しているとして矛盾を導く *)
 	remember (ls ++ sub_ls ++ rs) as pre eqn: Epre.
 	remember (ls ++ sub_ls' ++ rs) as post eqn: Epost.
 	(* 補題：t1, t2 が post で表す位置は，pre または sub_ls' どちらかの上． *)
-	assert (H: forall t, onExtention pre (extend post t)
-		\/ (exists seg, In seg sub_ls' /\ onSegment seg (extend post t))). {
+	assert (H: forall t, onExtend pre (extend post t)
+		\/ onSegmentlist sub_ls' (extend post t)). {
 		admit.
 	}
 	(* t1, t2 の表す位置に関して場合分け *)
