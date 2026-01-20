@@ -274,6 +274,17 @@ Lemma oneway_then_open : forall ls,
 Proof.
 Admitted.
 
+(* sub_ls 周りで疎な埋め込みについて， sub_ls を矩形の中で sub_ls' に変えても疎なまま *)
+Lemma sparse_in_rect_change : forall (ls rs sub_ls sub_ls' : list Segment), 
+	sparse sub_ls (ls ++ sub_ls ++ rs)
+	-> (forall rr, onSegmentlist sub_ls' rr -> in_rect sub_ls rr) 
+	-> same_init_and_term sub_ls sub_ls' 
+	-> slope_init (hd default_segment sub_ls) = slope_init (hd default_segment sub_ls')
+	-> slope_term (last sub_ls default_segment) = slope_term (last sub_ls' default_segment)
+	-> sparse sub_ls' (ls ++ sub_ls' ++ rs).
+Proof. 
+Admitted.
+
 
 (*【証明の本質としている補題１】 許容可能ならば，その中の単方向な sub_ds の埋め込み sub_ls 周りで疎な開埋め込みが存在する *)
 Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
@@ -395,11 +406,11 @@ Proof.
 	intros ls rs sub_ls sub_ls' Hopen' Hopen Hsparse Hin_rect Hinit_term Hinit_slope Hterm_slope Hclose.
 	destruct Hclose as [t1 [t2 [H12 Hsame]]].
 	(* ls ++ sub_ls' ++ rs が t1, t2 の表す点で自己交差しているとして矛盾を導く *)
-	remember (ls ++ sub_ls ++ rs) as pre eqn: Epre.
-	remember (ls ++ sub_ls' ++ rs) as post eqn: Epost.
-	(* 補題：t1, t2 が post で表す位置は，pre または sub_ls' どちらかの上． *)
-	assert (H: forall t, onExtend pre (extend post t)
-		\/ onSegmentlist sub_ls' (extend post t)). {
+	pose (pre := ls ++ sub_ls ++ rs). 
+	pose (post := ls ++ sub_ls' ++ rs).
+	(* 補題：t1, t2 が post で表す位置は，矩形外なら pre 上，矩形内なら sub_ls' 上． *)
+	assert (H: forall t, ~ in_rect sub_ls (extend post t) /\ onExtend pre (extend post t)
+		\/ in_rect sub_ls (extend post t) /\ onSegmentlist sub_ls' (extend post t)). {
 		admit.
 	}
 	(* t1, t2 の表す位置に関して場合分け *)
@@ -407,26 +418,25 @@ Proof.
 	- (* 両方が pre 上に存在した場合： pre が開であることに矛盾 *) 
 		apply Hopen. 
 		assert (H1 : exists t1', extend post t1 = extend pre t1'). {
-			apply extend_onExtendSegment. auto.
+			apply extend_onExtendSegment. apply Ht1.
 		}
 		destruct H1 as [t1' Ht1'].
 		assert (H2 : exists t2', extend post t2 = extend pre t2'). {
-			apply extend_onExtendSegment. auto.
+			apply extend_onExtendSegment. apply Ht2.
 		}
 		destruct H2 as [t2' Ht2'].
 		exists t1'. exists t2'. split.
 		+ (* t1', t2' が異なること．このままでは示せない *) admit.
-		+ (* t1', t2' が pre 上で同じ点を表すこと *) congruence.
-	- (* 一方が pre 上，もう一方が sub_ls' 上に存在した場合： 
-		その点は sub_ls から作られる矩形の中にあるので， pre が疎であることから sub_ls, つまり pre 上． 
-		pre が開であることに矛盾 *)
-		apply Hopen.
-		apply Hin_rect in Ht2. 
-		destruct Hsparse as [sc [ls' [rs' [_ [_ Hrect]]]]].
-		admit.
-	- admit.
+		+ (* t1', t2' が pre 上で同じ点を表すこと *) subst pre post; congruence.
+	- (* 一方が矩形外，もう一方が矩形内に存在した場合： 矛盾 *) 
+		subst pre post. destruct Ht1; destruct Ht2; congruence.
+	- subst pre post. destruct Ht1; destruct Ht2; congruence.
 	- (* 両方が sub_ls' 上に存在した場合： sub_ls' が開であることに矛盾 *)
-		admit.
+		apply Hopen'.
+		destruct Ht1 as [_ Ht1]; destruct Ht2 as [_ Ht2].
+		exists t1. exists t2. split.
+		+ auto.
+		+ admit.
 Admitted.
 
 
