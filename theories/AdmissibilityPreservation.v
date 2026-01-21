@@ -28,10 +28,11 @@ Proof.
 Qed.
 
 (* Parameter extend に関する補題 *)
+
 Definition onExtend ls rr := exists seg, onExtendSegment ls seg rr.
 Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
 
-Lemma extend_onExtendSegment : forall ls rr,
+Lemma extend_onExtend : forall ls rr,
 	onExtend ls rr -> exists t, rr = extend ls t.
 	(* extend の定義しだいだがおそらく逆も成立 *)
 	(* 右辺は onSegment などと同じ形 *)
@@ -154,6 +155,7 @@ Definition is_one_way_listDir (ds: list Direction) : Prop :=
 (* 曲線の始点と終点を結んだ線分を対角線にもつ矩形．部分曲線を含むとは限らない *)
 Parameter rectangular_from_diagonal : R * R -> R * R -> (R * R -> Prop).
 Definition in_rect_from_diagonal a b rr := rectangular_from_diagonal a b rr.
+(* TODO: 空リストを含まない方が良い *)
 Definition in_rect (ls: list Segment) (rr: R * R) := 
 	in_rect_from_diagonal (init (hd default_segment ls)) (term (last ls default_segment)) rr.
 
@@ -409,20 +411,24 @@ Proof.
 	pose (pre := ls ++ sub_ls ++ rs). 
 	pose (post := ls ++ sub_ls' ++ rs).
 	(* 補題：t1, t2 が post で表す位置は，矩形外なら pre 上，矩形内なら sub_ls' 上． *)
-	assert (H: forall t, ~ in_rect sub_ls (extend post t) /\ onExtend pre (extend post t)
-		\/ in_rect sub_ls (extend post t) /\ onSegmentlist sub_ls' (extend post t)). {
+	assert (Ht1: ~ in_rect sub_ls (extend post t1) /\ onExtend pre (extend post t1)
+		\/ in_rect sub_ls (extend post t1) /\ onSegmentlist sub_ls' (extend post t1)). {
+		admit.
+	}
+	assert (Ht2: ~ in_rect sub_ls (extend post t2) /\ onExtend pre (extend post t2)
+		\/ in_rect sub_ls (extend post t2) /\ onSegmentlist sub_ls' (extend post t2)). {
 		admit.
 	}
 	(* t1, t2 の表す位置に関して場合分け *)
-	destruct (H t1) as [Ht1 | Ht1]; destruct (H t2) as [Ht2 | Ht2].
+	destruct Ht1 as [Ht1 | Ht1]; destruct Ht2 as [Ht2 | Ht2].
 	- (* 両方が pre 上に存在した場合： pre が開であることに矛盾 *) 
 		apply Hopen. 
 		assert (H1 : exists t1', extend post t1 = extend pre t1'). {
-			apply extend_onExtendSegment. apply Ht1.
+			apply extend_onExtend. apply Ht1.
 		}
 		destruct H1 as [t1' Ht1'].
 		assert (H2 : exists t2', extend post t2 = extend pre t2'). {
-			apply extend_onExtendSegment. apply Ht2.
+			apply extend_onExtend. apply Ht2.
 		}
 		destruct H2 as [t2' Ht2'].
 		exists t1'. exists t2'. split.
@@ -434,9 +440,7 @@ Proof.
 	- (* 両方が sub_ls' 上に存在した場合： sub_ls' が開であることに矛盾 *)
 		apply Hopen'.
 		destruct Ht1 as [_ Ht1]; destruct Ht2 as [_ Ht2].
-		exists t1. exists t2. split.
-		+ auto.
-		+ admit.
+		admit.
 Admitted.
 
 
