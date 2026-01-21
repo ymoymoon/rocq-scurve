@@ -7,16 +7,10 @@ Require Import Segment.
 Import ListNotations.
 
 
-Lemma F : False.
-Proof.
-	apply (neq_init_term_x (fun r => (1, 1))).
-	reflexivity.
-Qed.
-
 (* 単なるリストに関する補題 *)
 
 Lemma list_head_tail : forall {A} (dummy: A) (l: list A),
-	l <> nil -> (hd dummy l) :: (tl l) = l.
+	l <> [] -> (hd dummy l) :: (tl l) = l.
 Proof. 
 	intros A dummy l H. 
 	induction l.
