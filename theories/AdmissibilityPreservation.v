@@ -39,16 +39,30 @@ Definition same_slope_init_and_term (c1 c2 : list Segment) :=
 	slope_init (hd default_segment c1) = slope_init (hd default_segment c2) 
 	/\ slope_term (last c1 default_segment) = slope_term (last c2 default_segment).
 
-Definition onExtend ls rr := exists seg, onExtendSegment ls seg rr.
+Definition onHead (seg: Segment) (rr : R * R) := exists (t:R), t < 0 /\ point seg t = rr.
+Definition onLast (seg: Segment) (rr : R * R) := exists (t:R), 1 < t /\ point seg t = rr.
+(* TODO: extend の具体化後， onExtendSegment と整合することを確認 *)
+Definition onExtend ls rr := exists t, rr = extend ls t.
 Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
 
-Lemma extend_onExtend : forall ls rr,
-	onExtend ls rr -> exists t, rr = extend ls t.
-	(* extend の定義しだいだがおそらく逆も成立 *)
-	(* 右辺は onSegment などと同じ形 *)
-Proof.
+(* 始点と始点での傾きが同じであれば，始点方向への延長線は等しい *)
+Lemma same_extended_head : forall ls1 ls2,
+	let seg1 := hd default_segment ls1 in
+	let seg2 := hd default_segment ls2 in
+	init seg1 = init seg2
+	-> slope_init seg1 = slope_init seg2
+	-> (forall rr, onHead seg1 rr <-> onHead seg2 rr).
+Proof. 
 Admitted.
 
+Lemma same_extended_last : forall ls1 ls2,
+	let seg1 := last ls1 default_segment in
+	let seg2 := last ls2 default_segment in
+	term seg1 = term seg2
+	-> slope_term seg1 = slope_term seg2
+	-> (forall rr, onLast seg1 rr <-> onLast seg2 rr).
+Proof. 
+Admitted.
 
 (* AdmissibleDirs について成り立ってほしい性質と，それに必要な補題 *)
 
@@ -275,6 +289,7 @@ Proof.
 	repeat eexists.
 Qed.
 
+(* 単方向曲線は開 *)
 Lemma oneway_then_open : forall ls, 
 	is_one_way_embedding ls -> ~ close ls.
 Proof.
