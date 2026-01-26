@@ -423,16 +423,15 @@ Proof.
 	destruct Ht1 as [Ht1 | Ht1]; destruct Ht2 as [Ht2 | Ht2].
 	- (* 両方が pre 上に存在した場合： pre が開であることに矛盾 *) 
 		apply Hopen. 
-		assert (H1 : exists t1', extend post t1 = extend pre t1'). {
-			apply extend_onExtend. apply Ht1.
+		(* extend の定義に依存する仮定 *)
+		assert (H : exists diff, extend post t1 = extend pre (t1 + diff)
+			/\ extend post t2 = extend pre (t2 + diff)). {
+			admit.
 		}
-		destruct H1 as [t1' Ht1'].
-		assert (H2 : exists t2', extend post t2 = extend pre t2'). {
-			apply extend_onExtend. apply Ht2.
-		}
-		destruct H2 as [t2' Ht2'].
-		exists t1'. exists t2'. split.
-		+ (* t1', t2' が異なること．このままでは示せない *) admit.
+		destruct H as [diff [H1 H2]].
+		exists (t1 + diff). exists (t2 + diff). split.
+		+ (* 両者が異なること． *) unfold not. intros H. apply H12.
+			apply Rplus_eq_reg_r in H. assumption.
 		+ (* t1', t2' が pre 上で同じ点を表すこと *) subst pre post; congruence.
 	- (* 一方が矩形外，もう一方が矩形内に存在した場合： 矛盾 *) 
 		subst pre post. destruct Ht1; destruct Ht2; congruence.
@@ -440,7 +439,15 @@ Proof.
 	- (* 両方が sub_ls' 上に存在した場合： sub_ls' が開であることに矛盾 *)
 		apply Hopen'.
 		destruct Ht1 as [_ Ht1]; destruct Ht2 as [_ Ht2].
-		admit.
+		assert (H : exists diff, extend post t1 = extend sub_ls' (t1 + diff)
+			/\ extend post t2 = extend sub_ls' (t2 + diff)). {
+			admit.
+		}
+		destruct H as [diff [H1 H2]].
+		exists (t1 + diff). exists (t2 + diff). split.
+		+ (* 両者が異なること． *) unfold not. intros H. apply H12.
+			apply Rplus_eq_reg_r in H. assumption.
+		+ (* t1', t2' が pre 上で同じ点を表すこと *) subst pre post; congruence.
 Admitted.
 
 
