@@ -29,6 +29,16 @@ Qed.
 
 (* Parameter extend に関する補題 *)
 
+Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい？ *)
+Parameter slope_term : Segment -> R.
+
+Definition same_init_and_term (c1 c2 : list Segment) := 
+	init (hd default_segment c1) = init (hd default_segment c2) 
+	/\ term (last c1 default_segment) = term (last c2 default_segment).
+Definition same_slope_init_and_term (c1 c2 : list Segment) := 
+	slope_init (hd default_segment c1) = slope_init (hd default_segment c2) 
+	/\ slope_term (last c1 default_segment) = slope_term (last c2 default_segment).
+
 Definition onExtend ls rr := exists seg, onExtendSegment ls seg rr.
 Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
 
@@ -38,6 +48,7 @@ Lemma extend_onExtend : forall ls rr,
 	(* 右辺は onSegment などと同じ形 *)
 Proof.
 Admitted.
+
 
 (* AdmissibleDirs について成り立ってほしい性質と，それに必要な補題 *)
 
@@ -129,13 +140,6 @@ Qed.
 
 
 (* 許容可能性保持の証明に向けた定義と補題群 *)
-
-Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい？ *)
-Parameter slope_term : Segment -> R.
-
-Definition same_init_and_term (c1 c2 : list Segment) := 
-	init (hd default_segment c1) = init (hd default_segment c2) 
-	/\ term (last c1 default_segment) = term (last c2 default_segment).
 
 Definition embed_listDir (ds: list Direction) (ls: list Segment) : Prop :=
 	exists sc: scurve, scurve_to_direction sc = ds
@@ -281,8 +285,7 @@ Lemma sparse_in_rect_change : forall (ls rs sub_ls sub_ls' : list Segment),
 	sparse sub_ls (ls ++ sub_ls ++ rs)
 	-> (forall rr, onSegmentlist sub_ls' rr -> in_rect sub_ls rr) 
 	-> same_init_and_term sub_ls sub_ls' 
-	-> slope_init (hd default_segment sub_ls) = slope_init (hd default_segment sub_ls')
-	-> slope_term (last sub_ls default_segment) = slope_term (last sub_ls' default_segment)
+	-> same_slope_init_and_term sub_ls sub_ls'
 	-> sparse sub_ls' (ls ++ sub_ls' ++ rs).
 Proof. 
 Admitted.
@@ -328,8 +331,7 @@ Lemma embedding_P_to_PMP_in_rect : forall (seg : Segment),
 		/\ (forall rr, onSegmentlist [seg1; seg2; seg3] rr
 				-> in_rect [seg] rr) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg] [seg1; seg2; seg3]
-		/\ slope_init seg = slope_init seg1
-		/\ slope_term seg = slope_term seg3.
+		/\ same_slope_init_and_term [seg] [seg1; seg2; seg3].
 Proof. Admitted.
 
 (* [Plus; Minus] の埋め込みを，端点とそこでの傾きを保存したまま
@@ -341,8 +343,7 @@ Lemma embedding_PM_to_PPMM_in_rect : forall (seg1 seg2 : Segment),
 		/\ (forall rr, onSegmentlist [seg1'; seg2'; seg3'; seg4'] rr
 				-> in_rect [seg1; seg2] rr) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4']
-		/\ slope_init seg1 = slope_init seg1'
-		/\ slope_term seg2 = slope_term seg4'.
+		/\ same_slope_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4'].
 Proof. Admitted.
 
 (* good features があれば，[Plus; Minus; Plus] の埋め込みを， 端点とそこでの傾きを保存したまま
@@ -357,8 +358,7 @@ Lemma embedding_PMP_to_P_in_rect : forall (seg1 seg2 seg3 : Segment),
 		/\ (forall rr, onSegment seg rr
 				-> in_rect [seg1; seg2; seg3] rr ) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3] [seg]
-		/\ slope_init seg1 = slope_init seg
-		/\ slope_term seg3 = slope_term seg.
+		/\ same_slope_init_and_term [seg1; seg2; seg3] [seg].
 Proof. Admitted.
 
 (* good features があれば，[Plus; Plus; Minus; Minus] の埋め込みを，端点とそこでの傾きを保存したまま
@@ -373,8 +373,7 @@ Lemma embedding_PPMM_to_PM_in_rect : forall (seg1 seg2 seg3 seg4 : Segment),
 		/\ (forall rr, onSegmentlist [seg1'; seg2'] rr
 				-> in_rect [seg1; seg2; seg3; seg4] rr) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2']
-		/\ slope_init seg1 = slope_init seg1'
-		/\ slope_term seg4 = slope_term seg2'.
+		/\ same_slope_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2'].
 Proof. Admitted.
 
 (*  向き ds1 ++ ds2 ++ ds3 の ds2 (の向きを持つ scurve) の埋め込みを，ds2' の埋め込みに変えたら，
@@ -401,26 +400,20 @@ Lemma seg_in_rectangle_keep_openness : forall (ls rs sub_ls sub_ls' : list Segme
 	-> sparse sub_ls (ls ++ sub_ls ++ rs)
 	-> (forall rr, onSegmentlist sub_ls' rr -> in_rect sub_ls rr) 
 	-> same_init_and_term sub_ls sub_ls' 
-	-> slope_init (hd default_segment sub_ls) = slope_init (hd default_segment sub_ls')
-	-> slope_term (last sub_ls default_segment) = slope_term (last sub_ls' default_segment)
+	-> same_slope_init_and_term sub_ls sub_ls'
 	-> ~ close (ls ++ sub_ls' ++ rs).
 Proof. 
-	intros ls rs sub_ls sub_ls' Hopen' Hopen Hsparse Hin_rect Hinit_term Hinit_slope Hterm_slope Hclose.
+	intros ls rs sub_ls sub_ls' Hopen' Hopen Hsparse Hin_rect Hinit_term Hslope Hclose.
 	destruct Hclose as [t1 [t2 [H12 Hsame]]].
 	(* ls ++ sub_ls' ++ rs が t1, t2 の表す点で自己交差しているとして矛盾を導く *)
-	pose (pre := ls ++ sub_ls ++ rs). 
-	pose (post := ls ++ sub_ls' ++ rs).
+	set (pre := ls ++ sub_ls ++ rs). 
+	set (post := ls ++ sub_ls' ++ rs).
 	(* 補題：t1, t2 が post で表す位置は，矩形外なら pre 上，矩形内なら sub_ls' 上． *)
-	assert (Ht1: ~ in_rect sub_ls (extend post t1) /\ onExtend pre (extend post t1)
-		\/ in_rect sub_ls (extend post t1) /\ onSegmentlist sub_ls' (extend post t1)). {
-		admit.
-	}
-	assert (Ht2: ~ in_rect sub_ls (extend post t2) /\ onExtend pre (extend post t2)
-		\/ in_rect sub_ls (extend post t2) /\ onSegmentlist sub_ls' (extend post t2)). {
+	assert (Ht: onExtend pre (extend post t1) \/ onSegmentlist sub_ls' (extend post t1)). {
 		admit.
 	}
 	(* t1, t2 の表す位置に関して場合分け *)
-	destruct Ht1 as [Ht1 | Ht1]; destruct Ht2 as [Ht2 | Ht2].
+	destruct Ht as [Ht | Ht].
 	- (* 両方が pre 上に存在した場合： pre が開であることに矛盾 *) 
 		apply Hopen. 
 		(* extend の定義に依存する仮定 *)
@@ -433,12 +426,8 @@ Proof.
 		+ (* 両者が異なること． *) unfold not. intros H. apply H12.
 			apply Rplus_eq_reg_r in H. assumption.
 		+ (* t1', t2' が pre 上で同じ点を表すこと *) subst pre post; congruence.
-	- (* 一方が矩形外，もう一方が矩形内に存在した場合： 矛盾 *) 
-		subst pre post. destruct Ht1; destruct Ht2; congruence.
-	- subst pre post. destruct Ht1; destruct Ht2; congruence.
 	- (* 両方が sub_ls' 上に存在した場合： sub_ls' が開であることに矛盾 *)
 		apply Hopen'.
-		destruct Ht1 as [_ Ht1]; destruct Ht2 as [_ Ht2].
 		assert (H : exists diff, extend post t1 = extend sub_ls' (t1 + diff)
 			/\ extend post t2 = extend sub_ls' (t2 + diff)). {
 			admit.
@@ -479,7 +468,7 @@ Proof.
 			unfold embed_listDir. exists sc. split; assumption.
 		}
 		pose proof (embedding_three_dir Plus Minus Plus ls2 Hls2) as [seg1 [seg2 [seg3 HPMP]]]; subst.
-		pose proof (embedding_PMP_to_P_in_rect seg1 seg2 seg3 Hgood Hls2) as [segP [HP [Hin_rect [Hinit_term [Hinit_slope Hterm_slope]]]]].
+		pose proof (embedding_PMP_to_P_in_rect seg1 seg2 seg3 Hgood Hls2) as [segP [HP [Hin_rect [Hinit_term Hslope]]]].
 		(* 欲しかった埋め込み *) 
 		exists (ls1 ++ [segP] ++ ls3). 
 		unfold admissible. 
@@ -532,7 +521,7 @@ Proof.
 		}
 		pose proof (embedding_one_dir Plus ls2 Hls2) as [segP HP]; subst.
 		pose proof (embedding_P_to_PMP_in_rect segP Hls2) 
-			as [seg1 [seg2 [seg3 [HPMP [Hin_rect [Hinit_term [Hinit_slope Hterm_slope]]]]]]].
+			as [seg1 [seg2 [seg3 [HPMP [Hin_rect [Hinit_term Hslope]]]]]].
 		(* 欲しかった埋め込み *) 
 		exists (ls1 ++ [seg1; seg2; seg3] ++ ls3). 
 		unfold admissible. 
@@ -578,7 +567,8 @@ Proof.
 			unfold embed_listDir. exists sc. split; assumption.
 		}
 		pose proof (embedding_four_dir Plus Plus Minus Minus ls2 Hls2) as [seg1 [seg2 [seg3 [seg4 HPPMM]]]]; subst.
-		pose proof (embedding_PPMM_to_PM_in_rect seg1 seg2 seg3 seg4 Hgood Hls2) as [seg1' [seg2' [HPM [Hin_rect [Hinit_term [Hinit_slope Hterm_slope]]]]]].
+		pose proof (embedding_PPMM_to_PM_in_rect seg1 seg2 seg3 seg4 Hgood Hls2) 
+			as [seg1' [seg2' [HPM [Hin_rect [Hinit_term Hslope]]]]].
 		(* 欲しかった埋め込み *) 
 		exists (ls1 ++ [seg1'; seg2'] ++ ls3). 
 		unfold admissible. 
@@ -626,7 +616,7 @@ Proof.
 		}
 		pose proof (embedding_two_dir Plus Minus ls2 Hls2) as [seg1 [seg2 HPM]]; subst.
 		pose proof (embedding_PM_to_PPMM_in_rect _ _ Hls2) 
-			as [seg1' [seg2' [seg3' [seg4' [HPPMM [Hin_rect [Hinit_term [Hinit_slope Hterm_slope]]]]]]]].
+			as [seg1' [seg2' [seg3' [seg4' [HPPMM [Hin_rect [Hinit_term Hslope]]]]]]].
 		(* 欲しかった埋め込み *) 
 		exists (ls1 ++ [seg1'; seg2'; seg3'; seg4'] ++ ls3). 
 		unfold admissible. 
