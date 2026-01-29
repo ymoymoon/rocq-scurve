@@ -427,12 +427,6 @@ Proof.
 	set (pre := ls ++ sub_ls ++ rs). 
 	set (post := ls ++ sub_ls' ++ rs).
 	set (intersection := extend post t1).
-	assert (H: onHead (hd_segment pre) intersection 
-		\/ onSegmentlist pre intersection
-		\/ onSegmentlist sub_ls' intersection
-		\/ onLast (last_segment pre) intersection). {
-		admit.
-	}
 	assert (Ht: forall t, t < 0
 		\/ 0 <= t < INR (length ls)
 		\/ INR (length ls) <= t <= INR (length (ls ++ sub_ls'))
@@ -440,10 +434,45 @@ Proof.
 		\/ INR (length post) < t). {
 		admit.
 	}
+	assert (Ht_onHead: t1 < 0 /\ t2 < 0
+		-> exists t1' t2', extend post t1 = extend pre t1'
+			/\ extend post t2 = extend pre t2'
+			/\ t1' <> t2'). {
+		admit.
+	}
+	assert (Ht_ls: 0 <= t1 < INR (length ls) /\ 0 <= t2 < INR (length ls)
+		-> exists t1' t2', extend post t1 = extend pre t1'
+			/\ extend post t2 = extend pre t2'
+			/\ t1' <> t2'). {
+		admit.
+	}
+	assert (Ht_sub_ls': INR (length ls) <= t1 <= INR (length (ls ++ sub_ls')) /\ INR (length ls) <= t2 <= INR (length (ls ++ sub_ls'))
+		-> exists t1' t2', extend post t1 = extend sub_ls' t1'
+			/\ extend post t2 = extend sub_ls' t2'
+			/\ t1' <> t2'). {
+		admit.
+	}
+	assert (Ht_rs: INR (length (ls ++ sub_ls')) < t1 <= INR (length post) /\ INR (length (ls ++ sub_ls')) < t2 <= INR (length post)
+		-> exists t1' t2', extend post t1 = extend pre t1'
+			/\ extend post t2 = extend pre t2'
+			/\ t1' <> t2'). {
+		admit.
+	}
+	assert (Ht_onLast: INR (length post) < t1 /\ INR (length post) < t2
+		-> exists t1' t2', extend post t1 = extend pre t1'
+			/\ extend post t2 = extend pre t2'
+			/\ t1' <> t2'). {
+		admit.
+	}
+	assert (Ht_onHead_onLast: t1 < 0 /\ INR (length post) < t2
+		-> exists t1' t2', extend post t1 = extend pre t1'
+			/\ extend post t2 = extend pre t2'
+			/\ t1' <> t2'). {
+		admit.
+	}
 
-	(* intersection の位置に関して場合分け，または
-		t1, t2 の表す位置について場合分け *)
-	(* 後者は場合分けが多いが，したいことに近い *)
+	(* t1, t2 の表す位置について場合分け *)
+	destruct (Ht t1) as [ | [ | [| [|]]]]; destruct (Ht t2) as [ | [ | [| [|]]]].
 Admitted.
 
 
