@@ -32,23 +32,26 @@ Qed.
 Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい？ *)
 Parameter slope_term : Segment -> R.
 
+Definition hd_segment ls := hd default_segment ls.
+Definition last_segment ls := last ls default_segment.
+
 Definition same_init_and_term (c1 c2 : list Segment) := 
-	init (hd default_segment c1) = init (hd default_segment c2) 
-	/\ term (last c1 default_segment) = term (last c2 default_segment).
+	init (hd_segment c1) = init (hd_segment c2) 
+	/\ term (last_segment c1) = term (last_segment c2).
 Definition same_slope_init_and_term (c1 c2 : list Segment) := 
-	slope_init (hd default_segment c1) = slope_init (hd default_segment c2) 
-	/\ slope_term (last c1 default_segment) = slope_term (last c2 default_segment).
+	slope_init (hd_segment c1) = slope_init (hd_segment c2) 
+	/\ slope_term (last_segment c1) = slope_term (last_segment c2).
 
 Definition onHead (seg: Segment) (rr : R * R) := exists (t:R), t < 0 /\ point seg t = rr.
 Definition onLast (seg: Segment) (rr : R * R) := exists (t:R), 1 < t /\ point seg t = rr.
+Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
 (* TODO: extend の具体化後， onExtendSegment と整合することを確認 *)
 Definition onExtend ls rr := exists t, rr = extend ls t.
-Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
 
 (* 始点と始点での傾きが同じであれば，始点方向への延長線は等しい *)
 Lemma same_extended_head : forall ls1 ls2,
-	let seg1 := hd default_segment ls1 in
-	let seg2 := hd default_segment ls2 in
+	let seg1 := hd_segment ls1 in
+	let seg2 := hd_segment ls2 in
 	init seg1 = init seg2
 	-> slope_init seg1 = slope_init seg2
 	-> (forall rr, onHead seg1 rr <-> onHead seg2 rr).
@@ -56,8 +59,8 @@ Proof.
 Admitted.
 
 Lemma same_extended_last : forall ls1 ls2,
-	let seg1 := last ls1 default_segment in
-	let seg2 := last ls2 default_segment in
+	let seg1 := last_segment ls1 in
+	let seg2 := last_segment ls2 in
 	term seg1 = term seg2
 	-> slope_term seg1 = slope_term seg2
 	-> (forall rr, onLast seg1 rr <-> onLast seg2 rr).
@@ -175,7 +178,7 @@ Parameter rectangular_from_diagonal : R * R -> R * R -> (R * R -> Prop).
 Definition in_rect_from_diagonal a b rr := rectangular_from_diagonal a b rr.
 (* TODO: 空リストを含まない方が良い *)
 Definition in_rect (ls: list Segment) (rr: R * R) := 
-	in_rect_from_diagonal (init (hd default_segment ls)) (term (last ls default_segment)) rr.
+	in_rect_from_diagonal (init (hd_segment ls)) (term (last_segment ls)) rr.
 
 (* scurve の埋め込みが sub_ls 周りで疎 := sub_ls の始点と終点から作成できる矩形に全然関係ないセグメントが侵入してこない
 		sub_ls が開か，全体として開埋め込みかは知らない *)
@@ -423,35 +426,24 @@ Proof.
 	(* ls ++ sub_ls' ++ rs が t1, t2 の表す点で自己交差しているとして矛盾を導く *)
 	set (pre := ls ++ sub_ls ++ rs). 
 	set (post := ls ++ sub_ls' ++ rs).
-	(* 補題：t1, t2 が post で表す位置は，矩形外なら pre 上，矩形内なら sub_ls' 上． *)
-	assert (Ht: onExtend pre (extend post t1) \/ onSegmentlist sub_ls' (extend post t1)). {
+	set (intersection := extend post t1).
+	assert (H: onHead (hd_segment pre) intersection 
+		\/ onSegmentlist pre intersection
+		\/ onSegmentlist sub_ls' intersection
+		\/ onLast (last_segment pre) intersection). {
 		admit.
 	}
-	(* t1, t2 の表す位置に関して場合分け *)
-	destruct Ht as [Ht | Ht].
-	- (* 両方が pre 上に存在した場合： pre が開であることに矛盾 *) 
-		apply Hopen. 
-		(* extend の定義に依存する仮定 *)
-		assert (H : exists diff, extend post t1 = extend pre (t1 + diff)
-			/\ extend post t2 = extend pre (t2 + diff)). {
-			admit.
-		}
-		destruct H as [diff [H1 H2]].
-		exists (t1 + diff). exists (t2 + diff). split.
-		+ (* 両者が異なること． *) unfold not. intros H. apply H12.
-			apply Rplus_eq_reg_r in H. assumption.
-		+ (* t1', t2' が pre 上で同じ点を表すこと *) subst pre post; congruence.
-	- (* 両方が sub_ls' 上に存在した場合： sub_ls' が開であることに矛盾 *)
-		apply Hopen'.
-		assert (H : exists diff, extend post t1 = extend sub_ls' (t1 + diff)
-			/\ extend post t2 = extend sub_ls' (t2 + diff)). {
-			admit.
-		}
-		destruct H as [diff [H1 H2]].
-		exists (t1 + diff). exists (t2 + diff). split.
-		+ (* 両者が異なること． *) unfold not. intros H. apply H12.
-			apply Rplus_eq_reg_r in H. assumption.
-		+ (* t1', t2' が pre 上で同じ点を表すこと *) subst pre post; congruence.
+	assert (Ht: forall t, t < 0
+		\/ 0 <= t < INR (length ls)
+		\/ INR (length ls) <= t <= INR (length (ls ++ sub_ls'))
+		\/ INR (length (ls ++ sub_ls')) < t <= INR (length post)
+		\/ INR (length post) < t). {
+		admit.
+	}
+
+	(* intersection の位置に関して場合分け，または
+		t1, t2 の表す位置について場合分け *)
+	(* 後者は場合分けが多いが，したいことに近い *)
 Admitted.
 
 
