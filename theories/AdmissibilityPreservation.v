@@ -49,7 +49,7 @@ Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
 Definition onExtend ls rr := exists t, rr = extend ls t.
 
 (* 始点と始点での傾きが同じであれば，始点方向への延長線は等しい *)
-Lemma same_extended_head : forall ls1 ls2,
+Lemma same_extention_head : forall ls1 ls2,
 	let seg1 := hd_segment ls1 in
 	let seg2 := hd_segment ls2 in
 	init seg1 = init seg2
@@ -58,13 +58,37 @@ Lemma same_extended_head : forall ls1 ls2,
 Proof. 
 Admitted.
 
-Lemma same_extended_last : forall ls1 ls2,
+Lemma same_extention_last : forall ls1 ls2,
 	let seg1 := last_segment ls1 in
 	let seg2 := last_segment ls2 in
 	term seg1 = term seg2
 	-> slope_term seg1 = slope_term seg2
 	-> (forall rr, onLast seg1 rr <-> onLast seg2 rr).
 Proof. 
+Admitted.
+
+(* extend の単調性 *)
+(* TODO: もっと色々な場合がある *)
+Lemma extention_split : forall t1 t2 ls,
+	let p1 := extend ls t1 in
+	let p2 := extend ls t2 in
+	t1 < t2
+	-> (exists seg t1' t2', 
+			0 <= t1' <= 1 /\ 0 <= t2' <= 1 /\ In seg ls /\
+				p1 = point seg t1' /\ p2 = point seg t2' /\ t1' < t2').
+	(* and other cases *)
+Proof. 
+Admitted.
+
+(* ２つのセグメントが１点を共有していれば，それらのセグメントを含む曲線は閉 *)
+Lemma different_seg_have_same_point_close : forall s1 s2 p ls,
+	s1 <> s2 
+	-> onSegment s1 p
+	-> onSegment s1 p
+	-> In s1 ls
+	-> In s2 ls
+	-> close ls.
+Proof.
 Admitted.
 
 (* AdmissibleDirs について成り立ってほしい性質と，それに必要な補題 *)
@@ -427,52 +451,12 @@ Proof.
 	set (pre := ls ++ sub_ls ++ rs). 
 	set (post := ls ++ sub_ls' ++ rs).
 	set (intersection := extend post t1).
-	assert (Ht: forall t, t < 0
-		\/ 0 <= t < INR (length ls)
-		\/ INR (length ls) <= t <= INR (length (ls ++ sub_ls'))
-		\/ INR (length (ls ++ sub_ls')) < t <= INR (length post)
-		\/ INR (length post) < t). {
+	assert (H : t1 < t2 \/ t2 < t1). {
 		admit.
 	}
-	assert (Ht_onHead: t1 < 0 /\ t2 < 0
-		-> exists t1' t2', extend post t1 = extend pre t1'
-			/\ extend post t2 = extend pre t2'
-			/\ t1' <> t2'). {
-		admit.
-	}
-	assert (Ht_ls: 0 <= t1 < INR (length ls) /\ 0 <= t2 < INR (length ls)
-		-> exists t1' t2', extend post t1 = extend pre t1'
-			/\ extend post t2 = extend pre t2'
-			/\ t1' <> t2'). {
-		admit.
-	}
-	assert (Ht_sub_ls': INR (length ls) <= t1 <= INR (length (ls ++ sub_ls')) /\ INR (length ls) <= t2 <= INR (length (ls ++ sub_ls'))
-		-> exists t1' t2', extend post t1 = extend sub_ls' t1'
-			/\ extend post t2 = extend sub_ls' t2'
-			/\ t1' <> t2'). {
-		admit.
-	}
-	assert (Ht_rs: INR (length (ls ++ sub_ls')) < t1 <= INR (length post) /\ INR (length (ls ++ sub_ls')) < t2 <= INR (length post)
-		-> exists t1' t2', extend post t1 = extend pre t1'
-			/\ extend post t2 = extend pre t2'
-			/\ t1' <> t2'). {
-		admit.
-	}
-	assert (Ht_onLast: INR (length post) < t1 /\ INR (length post) < t2
-		-> exists t1' t2', extend post t1 = extend pre t1'
-			/\ extend post t2 = extend pre t2'
-			/\ t1' <> t2'). {
-		admit.
-	}
-	assert (Ht_onHead_onLast: t1 < 0 /\ INR (length post) < t2
-		-> exists t1' t2', extend post t1 = extend pre t1'
-			/\ extend post t2 = extend pre t2'
-			/\ t1' <> t2'). {
-		admit.
-	}
-
+	destruct H as [H | H].
 	(* t1, t2 の表す位置について場合分け *)
-	destruct (Ht t1) as [ | [ | [| [|]]]]; destruct (Ht t2) as [ | [ | [| [|]]]].
+	destruct (extention_split t1 t2 post H).
 Admitted.
 
 
