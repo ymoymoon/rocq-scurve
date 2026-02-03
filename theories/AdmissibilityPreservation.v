@@ -7,7 +7,7 @@ Require Import Segment.
 Import ListNotations.
 
 
-(* 単なるリストに関する補題 *)
+(* 単なるリストに関する補題など *)
 
 Lemma list_head_tail : forall {A} (dummy: A) (l: list A),
 	l <> [] -> (hd dummy l) :: (tl l) = l.
@@ -27,6 +27,12 @@ Proof.
 	- simpl in *. congruence. 
 Qed.
 
+(** a と b がこの順でリストに入っている *)
+Definition In_order {A} (a b : A) (l : list A) : Prop :=
+  exists l1 l2 l3,
+    l = l1 ++ a :: l2 ++ b :: l3.
+
+
 (* Parameter extend に関する補題 *)
 
 Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい？ *)
@@ -42,52 +48,86 @@ Definition same_slope_init_and_term (c1 c2 : list Segment) :=
 	slope_init (hd_segment c1) = slope_init (hd_segment c2) 
 	/\ slope_term (last_segment c1) = slope_term (last_segment c2).
 
-Definition onHead (seg: Segment) (rr : R * R) := exists (t:R), t < 0 /\ point seg t = rr.
-Definition onLast (seg: Segment) (rr : R * R) := exists (t:R), 1 < t /\ point seg t = rr.
+(* TODO: 空リストを省く *)
+Definition onHead (seg: Segment) (rr : R * R) := exists (t:R), t <= 0 /\ point seg t = rr.
+Definition onHead_extend (ls: list Segment) (rr : R * R) := onHead (hd_segment ls) rr.
+Definition onLast (seg: Segment) (rr : R * R) := exists (t:R), 1 <= t /\ point seg t = rr.
+Definition onLast_extend (ls: list Segment) (rr : R * R) := onLast (last_segment ls) rr.
 Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
-(* TODO: extend の具体化後， onExtendSegment と整合することを確認 *)
+(* TODO: extend に関する公理を完成させた後， onExtendSegment と整合することを確認
+		特に空リストの扱い *)
 Definition onExtend ls rr := exists t, rr = extend ls t.
 
+Definition same_extention_head ls1 ls2 := 
+	(forall rr, onHead_extend ls1 rr <-> onHead_extend ls2 rr).
+Definition same_extention_last ls1 ls2 := 
+	(forall rr, onLast_extend ls1 rr <-> onLast_extend ls2 rr).
+
 (* 始点と始点での傾きが同じであれば，始点方向への延長線は等しい *)
-Lemma same_extention_head : forall ls1 ls2,
+Lemma same_init_then_same_extention_head : forall ls1 ls2,
 	let seg1 := hd_segment ls1 in
 	let seg2 := hd_segment ls2 in
 	init seg1 = init seg2
 	-> slope_init seg1 = slope_init seg2
-	-> (forall rr, onHead seg1 rr <-> onHead seg2 rr).
+	-> same_extention_head ls1 ls2.
 Proof. 
 Admitted.
 
-Lemma same_extention_last : forall ls1 ls2,
+Lemma same_term_then_same_extention_last : forall ls1 ls2,
 	let seg1 := last_segment ls1 in
 	let seg2 := last_segment ls2 in
 	term seg1 = term seg2
 	-> slope_term seg1 = slope_term seg2
-	-> (forall rr, onLast seg1 rr <-> onLast seg2 rr).
+	-> same_extention_last ls1 ls2.
 Proof. 
 Admitted.
 
 (* extend の単調性 *)
-(* TODO: もっと色々な場合がある *)
+(* TODO: ls <> [] を仮定？ *)
 Lemma extention_split : forall t1 t2 ls,
 	let p1 := extend ls t1 in
 	let p2 := extend ls t2 in
 	t1 < t2
-	-> (exists seg t1' t2', 
-			0 <= t1' <= 1 /\ 0 <= t2' <= 1 /\ In seg ls /\
-				p1 = point seg t1' /\ p2 = point seg t2' /\ t1' < t2').
-	(* and other cases *)
+	-> (exists t1' t2', (* t1, t2 とも先頭の延長線上 *)
+			t1' < t2' <= 0 /\ 
+				p1 = point (hd_segment ls) t1' /\ p2 = point (hd_segment ls) t2')
+	\/ (exists t1' t2' seg, (* t1 は先頭の延長線上， t2 はセグメント上 *)
+			t1' <= 0 /\ 0 <= t2' <= 1 /\ In seg ls /\
+				p1 = point (hd_segment ls) t1' /\ p2 = point seg t2')
+	\/ (exists t1' t2', (* t1 は先頭の延長線上， t2 は末尾の延長線上 *)
+			t1' <= 0 /\ 1 <= t2' /\ 
+				p1 = point (hd_segment ls) t1' /\ p2 = point (last_segment ls) t2')
+	\/ (exists t1' t2' seg, (* t1, t2 とも同じセグメント上 *)
+			0 <= t1' < t2' /\ t2' <= 1 /\ In seg ls /\
+				p1 = point seg t1' /\ p2 = point seg t2')
+	\/ (exists t1' t2' seg1 seg2, (* t1, t2 が異なるセグメント上 *)
+			0 <= t1' <= 1 /\ 0 <= t2' <= 1 /\ In_order seg1 seg2 ls /\
+				p1 = point seg1 t1' /\ p2 = point seg2 t2')
+	\/ (exists t1' t2' seg, (* t1 はセグメント上， t2 は末尾の延長線上 *)
+			0 <= t1' <= 1 /\ 1 <= t2' /\ In seg ls /\
+				p1 = point seg t1' /\ p2 = point (last_segment ls) t2')
+	\/ (exists t1' t2', (* t1, t2 とも末尾の延長線上 *)
+			1 <= t1' < t2' /\ 
+				p1 = point (last_segment ls) t1' /\ p2 = point (last_segment ls) t2').
 Proof. 
 Admitted.
 
 (* ２つのセグメントが１点を共有していれば，それらのセグメントを含む曲線は閉 *)
-Lemma different_seg_have_same_point_close : forall s1 s2 p ls,
-	s1 <> s2 
-	-> onSegment s1 p
-	-> onSegment s1 p
-	-> In s1 ls
-	-> In s2 ls
+Lemma two_segs_have_same_point_close : forall s1 s2 p ls,
+	onSegment s1 p
+	-> onSegment s2 p
+	-> In_order s1 s2 ls (* 逆は不要 *)
 	-> close ls.
+Proof.
+Admitted.
+
+(* 先頭と末尾の延長線が交わっていたら，同じ延長線を持つ曲線は閉 *)
+Lemma head_last_cross_close : forall p ls1 ls2,
+	onHead_extend ls1 p
+	-> onLast_extend ls1 p
+	-> same_extention_head ls1 ls2
+	-> same_extention_last ls1 ls2
+	-> close ls2.
 Proof.
 Admitted.
 
@@ -451,12 +491,39 @@ Proof.
 	set (pre := ls ++ sub_ls ++ rs). 
 	set (post := ls ++ sub_ls' ++ rs).
 	set (intersection := extend post t1).
+	assert (Hsame_ex_head : same_extention_head pre post). {
+		admit.
+	}
+	assert (Hsame_ex_last : same_extention_last pre post). {
+		admit.
+	}
 	assert (H : t1 < t2 \/ t2 < t1). {
 		admit.
 	}
 	destruct H as [H | H].
 	(* t1, t2 の表す位置について場合分け *)
-	destruct (extention_split t1 t2 post H).
+	- (* t1 < t2 *) destruct (extention_split t1 t2 post H) 
+		as [H1 
+			| [H1 
+			| [[t1' [t2' [H1 [H2 [H11 H21]]]]] 
+			| [H1
+			| [H1 
+			| [H1 
+			| H1]]]]]].
+		+ (* t1, t2 ともに先頭の延長線上の点を指す場合：矛盾 *) admit.
+		+ (* t1 が先頭の延長線上の点を， t2 がセグメント上の点を指す場合 *)
+			(* セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) admit.
+		+ (* t1 が先頭の延長線上の点を， t2 が末尾の延長線上の点を指す場合 *)
+			apply Hopen. 
+			apply (head_last_cross_close intersection pre).
+			* exists t1'. split; auto. admit.
+			* admit. * admit. * admit.
+		+ (* t1, t2 が同じセグメント上の点を指す場合：矛盾 *) admit.
+		+ (* t1, t2 が異なるセグメント上の点を指す場合 *)
+			(* ２つのセグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) admit.
+		+ (* t1, t2 がセグメント上の点を， t2 が末尾の延長線上の点を指す場合 *)
+			(* セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) admit.
+		+ (* t1, t2 ともに末尾の延長線上の点を指す場合：矛盾 *) admit.
 Admitted.
 
 
