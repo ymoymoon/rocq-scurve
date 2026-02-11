@@ -32,12 +32,6 @@ Definition In_order {A} (a b : A) (l : list A) : Prop :=
   exists l1 l2 l3,
     l = l1 ++ a :: l2 ++ b :: l3.
 
-Lemma In_app : forall {A} (a:A) ls1 ls2,
-	In a (ls1 ++ ls2)
-	-> In a ls1 \/ In a ls2.
-Proof.
-Admitted.
-
 
 (* Parameter extend に関する補題 *)
 
@@ -133,6 +127,28 @@ Lemma head_last_cross_close : forall p ls1 ls2,
 	-> onLast_extend ls1 p
 	-> same_extention_head ls1 ls2
 	-> same_extention_last ls1 ls2
+	-> close ls2.
+Proof.
+Admitted.
+
+(* 先頭の延長線がとあるセグメントと交わっていたら，同じ延長線とセグメントを持つ曲線は閉 *)
+Lemma head_seg_cross_close : forall p seg ls1 ls2,
+	onHead_extend ls1 p
+	-> In seg ls1
+	-> onSegment seg p
+	-> same_extention_head ls1 ls2
+	-> In seg ls2
+	-> close ls2.
+Proof.
+Admitted.
+
+(* 末尾の延長線がとあるセグメントと交わっていたら，同じ延長線とセグメントを持つ曲線は閉 *)
+Lemma last_seg_cross_close : forall p seg ls1 ls2,
+	onLast_extend ls1 p
+	-> In seg ls1
+	-> onSegment seg p
+	-> same_extention_last ls1 ls2
+	-> In seg ls2
 	-> close ls2.
 Proof.
 Admitted.
@@ -264,7 +280,8 @@ Definition is_sparse_embedding (sc : scurve) (sub_ls ls : list Segment) : Prop :
 	exists l r, ls = l ++ sub_ls ++ r
 	/\ embed_scurve sc ls
 	/\ (forall rr, 
-			(onExtend ls rr /\ in_rect sub_ls rr) -> onSegmentlist sub_ls rr).
+			(onHead_extend ls rr \/ onSegmentlist l rr \/ onSegmentlist r rr \/ onLast_extend ls rr) 
+			-> ~ in_rect sub_ls rr).
 
 Definition sparse (sub_ls ls : list Segment) : Prop :=
 	exists sc, is_sparse_embedding sc sub_ls ls.
@@ -505,10 +522,10 @@ Proof.
 	set (pre := ls ++ sub_ls ++ rs). 
 	set (post := ls ++ sub_ls' ++ rs).
 	set (intersection := extend post t1).
-	assert (Hsame_ex_head : same_extention_head pre post). {
+	assert (Hsame_ex_head : same_extention_head post pre). {
 		admit.
 	}
-	assert (Hsame_ex_last : same_extention_last pre post). {
+	assert (Hsame_ex_last : same_extention_last post pre). {
 		admit.
 	}
 	assert (H : t1 < t2 \/ t2 < t1). {
@@ -518,7 +535,7 @@ Proof.
 	(* t1, t2 の表す位置について場合分け *)
 	- (* t1 < t2 *) destruct (extention_split t1 t2 post H) as [
 				[t1' [t2' [H12' [Heq1 Heq2]]]]
-			| [H1 
+			| [[t1' [t2' [seg [H1' [H2' [Hin_post [Heq1 Heq2]]]]]]]
 			| [[t1' [t2' [H1 [H2 [Heq1 Heq2]]]]]
 			| [[t1' [t2' [seg [H12' [_ [_ [Heq1 Heq2]]]]]]]
 			| [H1 
@@ -528,21 +545,48 @@ Proof.
 			destruct H12' as [H12' _].
 			apply Rlt_not_eq in H12'. apply H12'.
 			apply (one_seg_not_cross _ _ (hd_segment post)). subst post; congruence.
-		+ (* t1 が先頭の延長線上の点を， t2 がセグメント上の点を指す場合 *)
-			(* セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) admit.
-		+ (* t1 が先頭の延長線上の点を， t2 が末尾の延長線上の点を指す場合 *)
+		+ (* t1 が先頭の延長線上の点を， t2 がセグメント上の点を指す場合：セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) 
+			assert (Hin : In seg ls \/ In seg sub_ls' \/ In seg rs). {
+				apply in_app_or in Hin_post as [Hin_ls | Hin_rest]; auto. 
+				apply in_app_or in Hin_rest; auto. 
+			} 
+			destruct Hin as [Hin | [Hin | Hin]]. 
+			* (* 先頭の延長線と ls が交わっている場合： pre が開であることに矛盾 *) 
+				apply Hopen.
+				apply (head_seg_cross_close intersection seg post); auto. 
+				-- exists t1'. split; subst post intersection; congruence. 
+				-- exists t2'. split; subst post intersection; congruence. 
+				-- apply in_or_app; auto.
+			* (* 先頭の延長線と sub_ls' が交わっている場合： pre が疎であることに矛盾 *) 
+				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+					apply Hin_rect. exists seg. split; auto.
+					exists t2'. split; subst post intersection; congruence. 
+				}
+				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
+					destruct Hsparse as [sc [l [r [_ [_ Hsparse]]]]].
+					apply Hsparse.
+					left. admit. 
+				} 
+				auto.
+			* (* 先頭の延長線と rs が交わっている場合： pre が開であることに矛盾 *) 
+				apply Hopen.
+				apply (head_seg_cross_close intersection seg post); auto. 
+				-- exists t1'. split; subst post intersection; congruence. 
+				-- exists t2'. split; subst post intersection; congruence. 
+				-- apply in_or_app; right; apply in_or_app; auto.
+		+ (* t1 が先頭の延長線上の点を， t2 が末尾の延長線上の点を指す場合： pre が開であることに矛盾 *)
 			apply Hopen. 
-			apply (head_last_cross_close intersection pre).
-			* exists t1'. split; auto. admit.
-			* admit. * admit. * admit.
+			apply (head_last_cross_close intersection post); auto.
+			* exists t1'. split; subst post intersection; congruence. 
+			* exists t2'. split; subst post intersection; congruence. 
 		+ (* t1, t2 が同じセグメント上の点を指す場合：矛盾 *) 
 			destruct H12' as [_ H12'].
 			apply Rlt_not_eq in H12'. apply H12'.
 			apply (one_seg_not_cross _ _ seg). subst post; congruence.
-		+ (* t1, t2 が異なるセグメント上の点を指す場合 *)
-			(* ２つのセグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) admit.
-		+ (* t1, t2 がセグメント上の点を， t2 が末尾の延長線上の点を指す場合 *)
-			(* セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) admit.
+		+ (* t1, t2 が異なるセグメント上の点を指す場合：２つのセグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) 
+			admit.
+		+ (* t1 がセグメント上の点を， t2 が末尾の延長線上の点を指す場合：セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *)
+		  admit.
 		+ (* t1, t2 ともに末尾の延長線上の点を指す場合：矛盾 *) 
 			destruct H12' as [_ H12'].
 			apply Rlt_not_eq in H12'. apply H12'.
