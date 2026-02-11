@@ -32,6 +32,12 @@ Definition In_order {A} (a b : A) (l : list A) : Prop :=
   exists l1 l2 l3,
     l = l1 ++ a :: l2 ++ b :: l3.
 
+Lemma In_app : forall {A} (a:A) ls1 ls2,
+	In a (ls1 ++ ls2)
+	-> In a ls1 \/ In a ls2.
+Proof.
+Admitted.
+
 
 (* Parameter extend に関する補題 *)
 
@@ -130,6 +136,14 @@ Lemma head_last_cross_close : forall p ls1 ls2,
 	-> close ls2.
 Proof.
 Admitted.
+
+(* １つのセグメントの中（延長部分含め）で交差は起こらない *)
+Lemma one_seg_not_cross : forall t1 t2 seg,
+	point seg t1 = point seg t2
+	-> t1 = t2.
+Proof.
+Admitted.
+
 
 (* AdmissibleDirs について成り立ってほしい性質と，それに必要な補題 *)
 
@@ -502,15 +516,18 @@ Proof.
 	}
 	destruct H as [H | H].
 	(* t1, t2 の表す位置について場合分け *)
-	- (* t1 < t2 *) destruct (extention_split t1 t2 post H) 
-		as [H1 
+	- (* t1 < t2 *) destruct (extention_split t1 t2 post H) as [
+				[t1' [t2' [H12' [Heq1 Heq2]]]]
 			| [H1 
-			| [[t1' [t2' [H1 [H2 [H11 H21]]]]] 
-			| [H1
+			| [[t1' [t2' [H1 [H2 [Heq1 Heq2]]]]]
+			| [[t1' [t2' [seg [H12' [_ [_ [Heq1 Heq2]]]]]]]
 			| [H1 
 			| [H1 
-			| H1]]]]]].
-		+ (* t1, t2 ともに先頭の延長線上の点を指す場合：矛盾 *) admit.
+			| [t1' [t2' [H12' [Heq1 Heq2]]]]]]]]]].
+		+ (* t1, t2 ともに先頭の延長線上の点を指す場合：矛盾 *)
+			destruct H12' as [H12' _].
+			apply Rlt_not_eq in H12'. apply H12'.
+			apply (one_seg_not_cross _ _ (hd_segment post)). subst post; congruence.
 		+ (* t1 が先頭の延長線上の点を， t2 がセグメント上の点を指す場合 *)
 			(* セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) admit.
 		+ (* t1 が先頭の延長線上の点を， t2 が末尾の延長線上の点を指す場合 *)
@@ -518,12 +535,18 @@ Proof.
 			apply (head_last_cross_close intersection pre).
 			* exists t1'. split; auto. admit.
 			* admit. * admit. * admit.
-		+ (* t1, t2 が同じセグメント上の点を指す場合：矛盾 *) admit.
+		+ (* t1, t2 が同じセグメント上の点を指す場合：矛盾 *) 
+			destruct H12' as [_ H12'].
+			apply Rlt_not_eq in H12'. apply H12'.
+			apply (one_seg_not_cross _ _ seg). subst post; congruence.
 		+ (* t1, t2 が異なるセグメント上の点を指す場合 *)
 			(* ２つのセグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) admit.
 		+ (* t1, t2 がセグメント上の点を， t2 が末尾の延長線上の点を指す場合 *)
 			(* セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) admit.
-		+ (* t1, t2 ともに末尾の延長線上の点を指す場合：矛盾 *) admit.
+		+ (* t1, t2 ともに末尾の延長線上の点を指す場合：矛盾 *) 
+			destruct H12' as [_ H12'].
+			apply Rlt_not_eq in H12'. apply H12'.
+			apply (one_seg_not_cross _ _ (last_segment post)). subst post; congruence.
 Admitted.
 
 
