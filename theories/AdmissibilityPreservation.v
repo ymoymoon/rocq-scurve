@@ -76,13 +76,18 @@ Lemma In_order_split : forall {A} (a b : A) l1 l2 l3,
 		\/ (In a l1 /\ In b l2) (* b のみ l2 に入っている *)
 		\/ In_order a b (l1 ++ l3). (* a も b も l2 に入っていない *)
 Proof.
+	(* a, b が l2 に入っているかどうかで場合分け *)
 Admitted.
 
 Lemma In_order_append_mid : forall {A} (a b : A) l1 l2 l3,
 	In_order a b (l1 ++ l3)
 	-> In_order a b (l1 ++ l2 ++ l3).
 Proof.
+	intros A a b l1 l2 l3 H.
+	destruct H as [l1' [l2' [l3' E]]].
+	(* a, b が l1 に入っているかどうかで場合分け *)
 Admitted.
+
 
 (* Parameter extend に関する補題 *)
 
