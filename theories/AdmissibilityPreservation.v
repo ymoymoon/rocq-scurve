@@ -69,6 +69,20 @@ Definition In_order {A} (a b : A) (l : list A) : Prop :=
   exists l1 l2 l3,
     l = l1 ++ a :: l2 ++ b :: l3.
 
+Lemma In_order_split : forall {A} (a b : A) l1 l2 l3,
+	In_order a b (l1 ++ l2 ++ l3)
+	-> In_order a b l2 (* a も b も l2 に入っている *)
+		\/ (In a l2 /\ In b l3) (* a のみ l2 に入っている *)
+		\/ (In a l1 /\ In b l2) (* b のみ l2 に入っている *)
+		\/ In_order a b (l1 ++ l3). (* a も b も l2 に入っていない *)
+Proof.
+Admitted.
+
+Lemma In_order_append_mid : forall {A} (a b : A) l1 l2 l3,
+	In_order a b (l1 ++ l3)
+	-> In_order a b (l1 ++ l2 ++ l3).
+Proof.
+Admitted.
 
 (* Parameter extend に関する補題 *)
 
@@ -695,74 +709,108 @@ Proof.
 			apply (one_seg_not_cross _ _ seg). subst post; congruence.
 
 		- (* t1, t2 が異なるセグメント上の点を指す場合１：２つのセグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) 
-			assert (Hin1 : (In seg1 ls \/ In seg1 rs) \/ In seg1 sub_ls'). {
-				assert (Hin_post1 : In seg1 post). {
-					destruct Hin_post as [l1 [l2 [l3 E]]].
-					rewrite E. 
-					apply in_app_iff. right.
-					simpl. left. reflexivity.
-				}
-				apply in_app_or in Hin_post1 as [Hin_ls | Hin_rest]. 
-				* left. auto. 
-				* apply in_app_or in Hin_rest as [Hin_subls' | Hin_rs]; auto.
+			assert (Hin : (In_order seg1 seg2 sub_ls') 
+				\/ (In seg1 sub_ls' /\ In seg2 rs)
+				\/ (In seg1 ls /\ In seg2 sub_ls')
+				\/ In_order seg1 seg2 (ls ++ rs)). {
+					apply In_order_split.
+					auto.
 			}
-			assert (Hin2 : (In seg2 ls \/ In seg2 rs) \/ In seg2 sub_ls'). {
-				assert (Hin_post2 : In seg2 post). {
-					destruct Hin_post as [l1 [l2 [l3 E]]].
-					rewrite E. 
-					apply in_app_iff. right.
-					simpl. right. 
-					apply in_app_iff. right. 
-					simpl. left. reflexivity.
-				}
-				apply in_app_or in Hin_post2 as [Hin_ls | Hin_rest]. 
-				* left. auto. 
-				* apply in_app_or in Hin_rest as [Hin_subls' | Hin_rs]; auto.
-			}
-			destruct Hin1 as [Hin1 | Hin1]; destruct Hin2 as [Hin2 | Hin2]. 
-			+ (* 両方　pre 上の点である場合： pre が開であることに矛盾 *) 
-				apply Hopen.
-				apply (two_segs_have_same_point_close seg1 seg2 intersection). 
-				-- exists t1'. split; subst post intersection; congruence. 
-				-- exists t2'. split; subst post intersection; congruence. 
-				-- admit.
-			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合１： pre が疎であることに矛盾 *) 
-				assert (Hin_rect_yes : in_rect sub_ls intersection). {
-					apply Hin_rect. exists seg2. split; auto.
-					exists t2'. split; subst post intersection; congruence. 
-				}
-				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
-					destruct Hsparse as [sc [_ Hsparse]].
-					apply Hsparse.
-					right. apply or_assoc. left.
-					destruct Hin1; [left | right]; 
-						exists seg1; split; subst intersection; try assumption; 
-						exists t1'; auto. 
-				} 
-				auto.
-			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合２： pre が疎であることに矛盾 *) 
-				assert (Hin_rect_yes : in_rect sub_ls intersection). {
-					apply Hin_rect. exists seg1. split; auto.
-					exists t1'. split; subst post intersection; congruence. 
-				}
-				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
-					destruct Hsparse as [sc [_ Hsparse]].
-					apply Hsparse.
-					right. apply or_assoc. left.
-					destruct Hin2; [left | right]; 
-						exists seg2; split; subst intersection; try assumption; 
-						exists t2'; split; auto; subst post; congruence. 
-				} 
-				auto.
-			+ (* 両方　sub_ls' 上の点である場合： sub_ls' が開であることに矛盾 *) 
+			destruct Hin as [Hin | [Hin | [Hin | Hin]]]. 
+			+ (* 両方 sub_ls' 上の点である場合： sub_ls' が開であることに矛盾 *) 
 				apply Hopen'.
 				apply (two_segs_have_same_point_close seg1 seg2 intersection). 
 				-- exists t1'. split; subst post intersection; congruence. 
 				-- exists t2'. split; subst post intersection; congruence. 
-				-- admit.
+				-- auto.
+			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合１： pre が疎であることに矛盾 *) 
+				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+					destruct Hin.
+					apply Hin_rect. exists seg1. split; auto.
+					exists t1'. split; subst post intersection; congruence. 
+				}
+				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
+					destruct Hin.
+					destruct Hsparse as [sc [_ Hsparse]].
+					apply Hsparse.
+					right. right. left.
+					exists seg2. split; auto.
+					exists t2'. split; auto. subst post intersection; congruence. 
+				} 
+				auto.
+			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合２： pre が疎であることに矛盾 *) 
+				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+					destruct Hin.
+					apply Hin_rect. exists seg2. split; auto.
+					exists t2'. split; subst post intersection; congruence. 
+				}
+				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
+					destruct Hin.
+					destruct Hsparse as [sc [_ Hsparse]].
+					apply Hsparse.
+					right. left.
+					exists seg1. split; auto.
+					exists t1'. split; auto.
+				} 
+				auto.
+			+ (* 両方 pre 上の点である場合： pre が開であることに矛盾 *) 
+				apply Hopen.
+				apply (two_segs_have_same_point_close seg1 seg2 intersection). 
+				-- exists t1'. split; subst post intersection; congruence. 
+				-- exists t2'. split; subst post intersection; congruence. 
+				-- apply In_order_append_mid. auto.
 
 		- (* t1, t2 が異なるセグメント上の点を指す場合２：２つのセグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) 
-			admit.
+			assert (Hin : (In_order seg2 seg1 sub_ls') 
+				\/ (In seg2 sub_ls' /\ In seg1 rs)
+				\/ (In seg2 ls /\ In seg1 sub_ls')
+				\/ In_order seg2 seg1 (ls ++ rs)). {
+					apply In_order_split.
+					auto.
+			}
+			destruct Hin as [Hin | [Hin | [Hin | Hin]]]. 
+			+ (* 両方 sub_ls' 上の点である場合： sub_ls' が開であることに矛盾 *) 
+				apply Hopen'.
+				apply (two_segs_have_same_point_close seg2 seg1 intersection). 
+				-- exists t2'. split; subst post intersection; congruence. 
+				-- exists t1'. split; subst post intersection; congruence. 
+				-- auto.
+			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合１： pre が疎であることに矛盾 *) 
+				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+					destruct Hin.
+					apply Hin_rect. exists seg2. split; auto.
+					exists t2'. split; subst post intersection; congruence. 
+				}
+				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
+					destruct Hin.
+					destruct Hsparse as [sc [_ Hsparse]].
+					apply Hsparse.
+					right. right. left.
+					exists seg1. split; auto.
+					exists t1'. split; auto. 
+				} 
+				auto.
+			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合２： pre が疎であることに矛盾 *) 
+				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+					destruct Hin.
+					apply Hin_rect. exists seg1. split; auto.
+					exists t1'. split; subst post intersection; congruence. 
+				}
+				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
+					destruct Hin.
+					destruct Hsparse as [sc [_ Hsparse]].
+					apply Hsparse.
+					right. left.
+					exists seg2. split; auto.
+					exists t2'. split; auto. subst post intersection; congruence.
+				} 
+				auto.
+			+ (* 両方 pre 上の点である場合： pre が開であることに矛盾 *) 
+				apply Hopen.
+				apply (two_segs_have_same_point_close seg2 seg1 intersection). 
+				-- exists t2'. split; subst post intersection; congruence. 
+				-- exists t1'. split; subst post intersection; congruence. 
+				-- apply In_order_append_mid. auto.
 
 		- (* t1 がセグメント上の点を， t2 が末尾の延長線上の点を指す場合：セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *)
 		  assert (Hin : In seg pre \/ In seg sub_ls'). {
@@ -827,7 +875,7 @@ Proof.
 		- (* t1, t2 ともに末尾の延長線上の点を指す場合：矛盾 *) 
 			apply H12'.
 			apply (one_seg_not_cross _ _ (last_segment post)). subst post; congruence.
-Admitted.
+Qed.
 
 
 (* 許容可能性保持に関する主張８つと，その系 *)
