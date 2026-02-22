@@ -64,6 +64,74 @@ Proof.
 	- simpl in *. congruence. 
 Qed.
 
+Lemma app_split :
+  forall (A : Type) (l1 l2 l1' l2' : list A),
+  l1 ++ l2 = l1' ++ l2' ->
+  (exists a l, l1' = l1 ++ a :: l /\ l2 = a :: l ++ l2')
+	\/
+	(l1' = l1 /\ l2 = l2')
+  \/
+  (exists a l, l1 = l1' ++ a :: l /\ a :: l ++ l2 = l2').
+Proof.
+  (* intros A l1 l2 l1' l2' Heq.
+  destruct (le_lt_dec (length l1) (length l1')) as [Hle|Hlt].
+
+  - (* length l1 <= length l1' *)
+    left.
+    exists (skipn (length l1) l1').
+    split.
+
+    + (* l1' = l1 ++ r *)
+      rewrite <- firstn_skipn with (n := length l1) (l := l1').
+      f_equal.
+
+      rewrite <- Heq.
+      rewrite firstn_app.
+      rewrite firstn_all2; [|lia].
+      rewrite Nat.sub_diag.
+      simpl.
+      reflexivity.
+
+    + (* l2 = r ++ l2' *)
+      subst.
+      rewrite <- Heq at 1.
+      rewrite <- app_assoc.
+      rewrite firstn_skipn with (n := length l1) (l := l1' ++ l2').
+      rewrite firstn_app.
+      rewrite firstn_all2; [|lia].
+      rewrite Nat.sub_diag.
+      simpl.
+      reflexivity.
+
+  - (* length l1 > length l1' *)
+    right.
+    exists (skipn (length l1') l1).
+    split.
+
+    + (* l1 = l1' ++ r *)
+      rewrite <- firstn_skipn with (n := length l1') (l := l1).
+      f_equal.
+
+      rewrite Heq.
+      rewrite firstn_app.
+      rewrite firstn_all2; [|lia].
+      rewrite Nat.sub_diag.
+      simpl.
+      reflexivity.
+
+    + (* r ++ l2 = l2' *)
+      subst.
+      rewrite Heq.
+      rewrite <- app_assoc.
+      rewrite firstn_skipn with (n := length l1') (l := l1 ++ l2).
+      rewrite firstn_app.
+      rewrite firstn_all2; [|lia].
+      rewrite Nat.sub_diag.
+      simpl.
+      reflexivity.
+Qed. *)
+Admitted.
+
 (** a と b がこの順でリストに入っている *)
 Definition In_order {A} (a b : A) (l : list A) : Prop :=
   exists l1 l2 l3,
@@ -79,6 +147,60 @@ Proof.
 	intros A a b l1 l2 l3 H.
 	destruct H as [l1' [l2' [l3' H]]].
 	(* a, b が l2 に入っているかどうかで場合分け *)
+	apply app_split in H.
+	destruct H as [[x [l [_ Ha_right]]] | [H | [x [l [Ha_l1 H]]]]].
+	- (* a が l2 ++ l3 に入っている場合１ *)
+		rewrite app_comm_cons in Ha_right. 
+		apply app_split in Ha_right.
+		destruct Ha_right as [[x' [l' [_ Ha_l3]]] | [[_ Ha_l3] | [x' [l' [Ha_l2 H]]]]].
+		+ (* a, b が l3 に入っている場合１ *)
+			right; right; right.
+			exists (l1 ++ x' :: l'); exists l2'; exists l3'.
+			rewrite Ha_l3. rewrite <- app_assoc.
+			f_equal.
+		+ (* a, b が l3 に入っている場合２ *)
+			right; right; right.
+			exists l1; exists l2'; exists l3'.
+			rewrite Ha_l3. 
+			f_equal.
+		+ (* a が l2 に入っている場合 *)
+			injection H. intros H1 Ha. subst.
+			apply app_split in H1.
+			destruct H1 as [[x'' [l'' [_ Hb_l3]]] | [[_ Hb_l3] | [x'' [l'' [Hb_l2 H1]]]]].
+			* (* b が l3 に入っている場合１ *)
+				right; left. subst. split; try apply in_elt; try apply in_cons.
+				apply in_elt.
+			* (* b が l3 に入っている場合２ *)
+				right; left. subst. split; try apply in_elt; constructor; reflexivity.
+			* (* b が l2 に入っている場合 *)
+				left. injection H1. intros _ Hb. subst.
+				exists (x::l); exists l2'; exists l''. reflexivity.
+	- (* a が l2 ++ l3 に入っている場合２ *)
+		destruct l2 as [ | x l]. 
+		+ (* a, b が l3 に入っている場合 *)
+			right; right; right.
+			destruct H as [H1 H2]. rewrite app_nil_l in H2.
+			subst.
+			exists l1; exists l2'; exists l3'. reflexivity.
+		+ (* a が l2 に入っている場合 *)
+			destruct H as [H1 H2].
+			injection H2. intros H3 Ha. subst.
+			apply app_split in H3.
+			destruct H3 as [[x'' [l'' [_ Hb_l3]]] | [[_ Hb_l3] | [x'' [l'' [Hb_l2 H1]]]]].
+			* (* b が l3 に入っている場合１ *) 
+				right; left. subst. split; 
+				[constructor; reflexivity | apply in_cons; apply in_elt].
+			* (* b が l3 に入っている場合２ *) 
+				right; left. subst. split; constructor; reflexivity.
+			* (* b が l2 に入っている場合 *)
+				left. injection H1. intros _ Hb. subst.
+				exists []; exists l2'; exists l''. reflexivity.
+	- (* a が l1 に入っている場合 *)
+		injection H. intros H1 Ha. subst.
+		apply app_split in H1.
+		destruct H1 as [[x' [l' [_ Hb_right]]] | [[_ Hb_right] | [x' [l' [Hb_l1 H1]]]]].
+		+ (* b が l2 ++ l3 に入っている場合１ *)
+			
 Admitted.
 
 Lemma In_order_append_mid : forall {A} (a b : A) l1 l2 l3,
