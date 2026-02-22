@@ -76,6 +76,8 @@ Lemma In_order_split : forall {A} (a b : A) l1 l2 l3,
 		\/ (In a l1 /\ In b l2) (* b のみ l2 に入っている *)
 		\/ In_order a b (l1 ++ l3). (* a も b も l2 に入っていない *)
 Proof.
+	intros A a b l1 l2 l3 H.
+	destruct H as [l1' [l2' [l3' H]]].
 	(* a, b が l2 に入っているかどうかで場合分け *)
 Admitted.
 
@@ -325,8 +327,15 @@ Definition embed_listDir (ds: list Direction) (ls: list Segment) : Prop :=
 	/\ embed_scurve sc ls.
 
 (* 単方向 scurve *)
+(* cf. Embed.all_same_h *)
 (* TODO: 空リストは含まない．（含めるなら，後の定理の必要な部分に not nil 制約を入れる．） *)
-Parameter is_one_way_scurve : scurve -> Prop.
+Definition is_one_way_scurve (sc : scurve) : Prop :=
+	let lp := proj1_sig sc in
+	lp <> []
+	/\ (Forall (fun p => exists (v:V) (c:C), p = (v, e, c)) lp
+	\/ Forall (fun p => exists (v:V) (c:C), p = (v, w, c)) lp
+	\/ Forall (fun p => exists (h:H) (c:C), p = (n, h, c)) lp
+	\/ Forall (fun p => exists (h:H) (c:C), p = (s, h, c)) lp).
 
 Definition is_one_way_embedding (ls : list Segment) : Prop :=
 	exists sc, embed_scurve sc ls /\ is_one_way_scurve sc.
@@ -355,30 +364,70 @@ Definition sparse (l sub_ls r : list Segment) : Prop :=
 	exists sc, is_sparse_embedding sc l sub_ls r.
 
 
+Lemma is_one_way_listDir_forall : forall ds,
+	is_one_way_listDir ds <-> 
+		(forall sc, scurve_to_direction sc = ds -> is_one_way_scurve sc).
+Proof.
+Admitted. 
+
 Lemma P_is_oneway : is_one_way_listDir [Plus].
 Proof. 
-	pose proof (Direction_to_PrimitiveSegment Plus default_primitive_segment) as [p [H _]].
-	exists (scurve_from_one p). split.
-	- unfold scurve_to_direction. simpl. rewrite H. reflexivity.
-	-
-Admitted.
+	exists (scurve_from_one (n,e,cx)). split.
+	- unfold scurve_to_direction. reflexivity.
+	- unfold is_one_way_scurve; split.
+		+ (* not nil *) simpl. congruence.
+		+ (* Forall *) left. constructor; eauto.
+Qed.
 
 Lemma PM_is_oneway : is_one_way_listDir [Plus; Minus].
 Proof. 
-Admitted.
+	set (p1 := scurve_from_one (n,e,cx)).
+	set (p2 := scurve_from_one (n,e,cc)).
+	eexists (exist _ [(n,e,cx); (n,e,cc)] _). split.
+	- unfold scurve_to_direction. reflexivity.
+	- unfold is_one_way_scurve; split.
+		+ (* not nil *) simpl. congruence.
+		+ (* Forall *) left. constructor; eauto.
+	Unshelve. (* scurve であることの証明 *) 
+	simpl. repeat constructor.
+Qed.
 
 Lemma PMP_is_oneway : is_one_way_listDir [Plus; Minus; Plus].
 Proof.
-Admitted.
+	set (p1 := scurve_from_one (n,e,cx)).
+	set (p2 := scurve_from_one (n,e,cc)).
+	eexists (exist _ [(n,e,cx); (n,e,cc); (n,e,cx)] _). split.
+	- unfold scurve_to_direction. reflexivity.
+	- unfold is_one_way_scurve; split.
+		+ (* not nil *) simpl. congruence.
+		+ (* Forall *) left. repeat constructor; eauto.
+	Unshelve. (* scurve であることの証明 *) 
+	simpl. repeat constructor.
+Qed.
 
 Lemma PPMM_is_oneway : is_one_way_listDir [Plus; Plus; Minus; Minus].
 Proof.
-Admitted.
+	set (p1 := scurve_from_one (n,e,cx)).
+	set (p2 := scurve_from_one (s,e,cx)).
+	set (p3 := scurve_from_one (s,e,cc)).
+	set (p4 := scurve_from_one (n,e,cc)).
+	eexists (exist _ [(n,e,cx); (s,e,cx); (s,e,cc); (n,e,cc)] _). split.
+	- unfold scurve_to_direction. reflexivity.
+	- unfold is_one_way_scurve; split.
+		+ (* not nil *) simpl. congruence.
+		+ (* Forall *) left. repeat constructor; eauto.
+	Unshelve. (* scurve であることの証明 *) 
+	simpl. repeat constructor.
+Qed.
 
 Lemma embedding_oneway_listDir : forall ds ls, 
 	embed_listDir ds ls -> is_one_way_listDir ds -> is_one_way_embedding ls.
 Proof.
-Admitted.
+	intros ds ls H1 H2.
+	destruct H1 as [sc [Hdir Hembed]].
+	exists sc. split; auto.
+	apply (is_one_way_listDir_forall ds); auto.
+Qed.
 
 Lemma scurve_listDir_length_consis: forall ds sc,
   scurve_to_direction sc = ds -> length ds = length (proj1_sig sc).
