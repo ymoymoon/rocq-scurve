@@ -74,10 +74,10 @@ Lemma app_split :
   (exists a l, l1 = l1' ++ a :: l /\ a :: l ++ l2 = l2').
 Proof.
   (* intros A l1 l2 l1' l2' Heq.
-  destruct (le_lt_dec (length l1) (length l1')) as [Hle|Hlt].
+  destruct ((length l1) <=? (length l1'))%nat eqn: H.
 
   - (* length l1 <= length l1' *)
-    left.
+    left. apply app_eq_app.
     exists (skipn (length l1) l1').
     split.
 
@@ -171,7 +171,7 @@ Proof.
 				right; left. subst. split; try apply in_elt; try apply in_cons.
 				apply in_elt.
 			* (* b が l3 に入っている場合２ *)
-				right; left. subst. split; try apply in_elt; constructor; reflexivity.
+				right; left. subst. split; try apply in_elt; apply in_eq.
 			* (* b が l2 に入っている場合 *)
 				left. injection H1. intros _ Hb. subst.
 				exists (x::l); exists l2'; exists l''. reflexivity.
@@ -189,9 +189,9 @@ Proof.
 			destruct H3 as [[x'' [l'' [_ Hb_l3]]] | [[_ Hb_l3] | [x'' [l'' [Hb_l2 H1]]]]].
 			* (* b が l3 に入っている場合１ *) 
 				right; left. subst. split; 
-				[constructor; reflexivity | apply in_cons; apply in_elt].
+				[apply in_eq | apply in_cons; apply in_elt].
 			* (* b が l3 に入っている場合２ *) 
-				right; left. subst. split; constructor; reflexivity.
+				right; left. subst. split; apply in_eq.
 			* (* b が l2 に入っている場合 *)
 				left. injection H1. intros _ Hb. subst.
 				exists []; exists l2'; exists l''. reflexivity.
@@ -200,8 +200,36 @@ Proof.
 		apply app_split in H1.
 		destruct H1 as [[x' [l' [_ Hb_right]]] | [[_ Hb_right] | [x' [l' [Hb_l1 H1]]]]].
 		+ (* b が l2 ++ l3 に入っている場合１ *)
-			
-Admitted.
+			rewrite app_comm_cons in Hb_right. 
+			apply app_split in Hb_right.
+			destruct Hb_right as [[x'' [l'' [_ Hb_l3]]] | [[_ Hb_l3] | [x'' [l'' [Hb_l2 H1]]]]].
+			* (* b が l3 に入っている場合１ *)
+				repeat right. subst. exists l1'; exists (l ++ x'' :: l''); exists l3'. 
+				rewrite <- app_assoc. f_equal. simpl. f_equal.
+				rewrite <- app_assoc. reflexivity.
+			* (* b が l3 に入っている場合２ *) 
+				repeat right. subst. exists l1'; exists l; exists l3'.
+				rewrite <- app_assoc. reflexivity.
+			* (* b が l2 に入っている場合 *)
+				right; right; left. injection H1. intros _ Hb. subst.
+				split; apply in_elt.
+		+ (* b が l2 ++ l3 に入っている場合２ *)
+			destruct l2 as [ | x' l'].
+			* (* b が l3 に入っている場合 *)
+				repeat right.
+				rewrite app_nil_l in Hb_right. subst.
+				exists l1'; exists l; exists l3'.
+				rewrite <- app_assoc. reflexivity.
+			* (* b が l2 に入っている場合 *)
+				right; right; left. injection Hb_right. intros _ Hb. subst.
+				split; [apply in_elt | apply in_eq].
+		+ (* b が l1 に入っている場合 *)
+			repeat right. injection H1. intros _ Hb. subst.
+			exists l1'; exists l2'; exists (l' ++ l3).
+			rewrite <- app_assoc. f_equal. 
+			simpl. f_equal.
+			rewrite <- app_assoc. f_equal.
+Qed.
 
 Lemma In_order_append_mid : forall {A} (a b : A) l1 l2 l3,
 	In_order a b (l1 ++ l3)
