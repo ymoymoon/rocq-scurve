@@ -73,64 +73,30 @@ Lemma app_split :
   \/
   (exists a l, l1 = l1' ++ a :: l /\ a :: l ++ l2 = l2').
 Proof.
-  (* intros A l1 l2 l1' l2' Heq.
-  destruct ((length l1) <=? (length l1'))%nat eqn: H.
-
-  - (* length l1 <= length l1' *)
-    left. apply app_eq_app.
-    exists (skipn (length l1) l1').
-    split.
-
-    + (* l1' = l1 ++ r *)
-      rewrite <- firstn_skipn with (n := length l1) (l := l1').
-      f_equal.
-
-      rewrite <- Heq.
-      rewrite firstn_app.
-      rewrite firstn_all2; [|lia].
-      rewrite Nat.sub_diag.
-      simpl.
-      reflexivity.
-
-    + (* l2 = r ++ l2' *)
-      subst.
-      rewrite <- Heq at 1.
-      rewrite <- app_assoc.
-      rewrite firstn_skipn with (n := length l1) (l := l1' ++ l2').
-      rewrite firstn_app.
-      rewrite firstn_all2; [|lia].
-      rewrite Nat.sub_diag.
-      simpl.
-      reflexivity.
-
-  - (* length l1 > length l1' *)
-    right.
-    exists (skipn (length l1') l1).
-    split.
-
-    + (* l1 = l1' ++ r *)
-      rewrite <- firstn_skipn with (n := length l1') (l := l1).
-      f_equal.
-
-      rewrite Heq.
-      rewrite firstn_app.
-      rewrite firstn_all2; [|lia].
-      rewrite Nat.sub_diag.
-      simpl.
-      reflexivity.
-
-    + (* r ++ l2 = l2' *)
-      subst.
-      rewrite Heq.
-      rewrite <- app_assoc.
-      rewrite firstn_skipn with (n := length l1') (l := l1 ++ l2).
-      rewrite firstn_app.
-      rewrite firstn_all2; [|lia].
-      rewrite Nat.sub_diag.
-      simpl.
-      reflexivity.
-Qed. *)
-Admitted.
+  intros A l1 l2 l1' l2' Heq.
+	apply app_eq_app in Heq.
+	destruct Heq as [l [[H1 H2] | [H1 H2]]].
+	- (* length l1 >= length l1' *)
+		destruct l as [ | x l'].
+		+ (* length l1 = length l1' *)
+			right; left. 
+			rewrite app_nil_r in H1. simpl in H2.
+			split; auto.
+		+ (* length l1 > length l1' *)
+			right; right.
+			exists x; exists l'.
+			split; auto.
+	- (* length l1 <= length l1' *)
+		destruct l as [ | x l'].
+		+ (* length l1 = length l1' *)
+			right; left. 
+			rewrite app_nil_r in H1. simpl in H2.
+			split; auto.
+		+ (* length l1 < length l1' *)
+			left.
+			exists x; exists l'.
+			split; auto.
+Qed.
 
 (** a と b がこの順でリストに入っている *)
 Definition In_order {A} (a b : A) (l : list A) : Prop :=
