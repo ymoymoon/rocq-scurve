@@ -204,7 +204,41 @@ Proof.
 	intros A a b l1 l2 l3 H.
 	destruct H as [l1' [l2' [l3' E]]].
 	(* a, b が l1 に入っているかどうかで場合分け *)
-Admitted.
+	apply app_split in E.
+	destruct E as [[x [l [_ Ha_l3]]] | [[_ Ha_l3] | [x [l [Ha_l1 H]]]]].
+	- (* a が l3 に入っている場合１ *)
+		subst. 
+		exists (l1 ++ l2 ++ x :: l); exists l2'; exists l3'.
+		rewrite <- app_assoc. f_equal.
+		rewrite <- app_assoc. f_equal.
+	- (* a が l3 に入っている場合２ *)
+		subst.
+		exists (l1 ++ l2); exists l2'; exists l3'.
+		rewrite <- app_assoc. f_equal.
+	- (* a が l1 に入っている場合 *)
+		injection H. intros H1 Ha. subst.
+		apply app_split in H1.
+		destruct H1 as [[x' [l' [_ Hb_l3]]] | [[_ Hb_l3] | [x' [l' [Hb_l1 H1]]]]].
+		+ (* b が l3 に入っている場合１ *)
+			subst.
+			exists l1'; exists (l ++ l2 ++ x' :: l'); exists l3'.
+			rewrite <- app_assoc. f_equal.
+			simpl. f_equal.
+			rewrite <- app_assoc. f_equal.
+			rewrite <- app_assoc. f_equal.
+		+ (* b が l3 に入っている場合２ *)
+			subst.
+			exists l1'; exists (l ++ l2); exists l3'.
+			rewrite <- app_assoc. f_equal.
+			simpl. f_equal.
+			rewrite <- app_assoc. f_equal.
+		+ (* b が l1 に入っている場合 *)
+			injection H1. intros _ Hb. subst.
+			exists l1'; exists l2'; exists (l' ++ l2 ++ l3).
+			rewrite <- app_assoc. f_equal.
+			rewrite <- app_comm_cons. f_equal.
+			rewrite <- app_assoc. f_equal.
+Qed.
 
 
 (* Parameter extend に関する補題 *)
