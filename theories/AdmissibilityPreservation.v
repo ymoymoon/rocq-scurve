@@ -7,6 +7,7 @@ Require Import Segment.
 Import ListNotations.
 
 
+(* --------------------------------------------------------------------------- *)
 (* 単なるリストに関する補題など *)
 
 Lemma hd_app : forall {A : Type} (a b : list A) (dummy : A),
@@ -241,6 +242,7 @@ Proof.
 Qed.
 
 
+(* --------------------------------------------------------------------------- *)
 (* Parameter extend に関する補題 *)
 
 Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい？ *)
@@ -295,7 +297,8 @@ Admitted.
 Lemma extention_split : forall t1 t2 ls,
 	let p1 := extend ls t1 in
 	let p2 := extend ls t2 in
-	t1 <> t2
+	ls <> []
+	-> t1 <> t2
 	-> (exists t1' t2', (* t1, t2 とも先頭の延長線上 *)
 			t1' <= 0 /\ t2' <= 0 /\ t1' <> t2' /\
 				p1 = point (hd_segment ls) t1' /\ p2 = point (hd_segment ls) t2')
@@ -381,6 +384,7 @@ Proof.
 Admitted.
 
 
+(* --------------------------------------------------------------------------- *)
 (* AdmissibleDirs について成り立ってほしい性質と，それに必要な補題 *)
 
 Parameter default_primitive_segment : PrimitiveSegment.
@@ -470,6 +474,7 @@ Proof.
 Qed.
 
 
+(* --------------------------------------------------------------------------- *)
 (* 許容可能性保持の証明に向けた定義と補題群 *)
 
 Definition embed_listDir (ds: list Direction) (ls: list Segment) : Prop :=
@@ -787,6 +792,14 @@ Proof.
 	set (pre := ls ++ sub_ls ++ rs). 
 	set (post := ls ++ sub_ls' ++ rs).
 	set (intersection := extend post t1).
+	assert (H_notnil : post <> []). {
+		intros H. subst post.
+		apply app_eq_nil in H. 
+		destruct H as [_ H].
+		apply app_eq_nil in H. 
+		destruct H as [H _].
+		contradiction.
+	}
 	assert (Hsub_hd: hd_segment sub_ls = hd_segment (sub_ls ++ rs)). {
 		apply hd_app. assumption.
 	}
@@ -827,7 +840,7 @@ Proof.
 	}
 
 	(* t1, t2 の表す位置について場合分け *)
-	destruct (extention_split t1 t2 post H12) as [
+	destruct (extention_split t1 t2 post H_notnil H12) as [
 			(* t1 が先頭を指す場合 *)
 				[t1' [t2' [H1' [H2' [H12' [Heq1 Heq2]]]]]]
 			| [[t1' [t2' [seg [H1' [H2' [Hin_post [Heq1 Heq2]]]]]]]
@@ -1082,6 +1095,7 @@ Proof.
 Qed.
 
 
+(* --------------------------------------------------------------------------- *)
 (* 許容可能性保持に関する主張８つと，その系 *)
 
 (* [+-+ => +] での簡約で，簡約元が許容可能なら簡約先も許容可能 *)
