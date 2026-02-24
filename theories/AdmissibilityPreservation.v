@@ -85,7 +85,7 @@ Proof.
 			split; auto.
 		+ (* length l1 > length l1' *)
 			right; right.
-			exists x; exists l'.
+			exists x, l'.
 			split; auto.
 	- (* length l1 <= length l1' *)
 		destruct l as [ | x l'].
@@ -95,14 +95,36 @@ Proof.
 			split; auto.
 		+ (* length l1 < length l1' *)
 			left.
-			exists x; exists l'.
+			exists x, l'.
 			split; auto.
 Qed.
 
 (** a と b がこの順でリストに入っている *)
 Definition In_order {A} (a b : A) (l : list A) : Prop :=
-  exists l1 l2 l3,
-    l = l1 ++ a :: l2 ++ b :: l3.
+  exists l1 l2 l3, l = l1 ++ a :: l2 ++ b :: l3.
+
+Lemma In_split_In_order : forall {A} (a b : A) l,
+	In a l 
+	-> In b l
+	-> a = b \/ In_order a b l \/ In_order b a l.
+Proof.
+	intros A a b l Ha Hb.
+	apply in_split in Ha.
+	destruct Ha as [la1 [la2 Ha]].
+	apply in_split in Hb.
+	destruct Hb as [lb1 [lb2 H]].
+	subst.
+	apply app_split in H.
+	destruct H as [[x [l' [_ H]]] | [[_ H] | [x [l' [H1 H2]]]]].
+	- right; left.
+		injection H. intros H1 _. subst.
+		exists la1, l', lb2. reflexivity.
+	- left. injection H. auto.
+  - repeat right.
+		injection H2. intros _ Hb. subst.
+		exists lb1, l', la2. 
+		rewrite <- app_assoc. f_equal.
+Qed.
 
 Lemma In_order_split : forall {A} (a b : A) l1 l2 l3,
 	In_order a b (l1 ++ l2 ++ l3)
@@ -122,12 +144,12 @@ Proof.
 		destruct Ha_right as [[x' [l' [_ Ha_l3]]] | [[_ Ha_l3] | [x' [l' [Ha_l2 H]]]]].
 		+ (* a, b が l3 に入っている場合１ *)
 			right; right; right.
-			exists (l1 ++ x' :: l'); exists l2'; exists l3'.
+			exists (l1 ++ x' :: l'), l2', l3'.
 			rewrite Ha_l3. rewrite <- app_assoc.
 			f_equal.
 		+ (* a, b が l3 に入っている場合２ *)
 			right; right; right.
-			exists l1; exists l2'; exists l3'.
+			exists l1, l2', l3'.
 			rewrite Ha_l3. 
 			f_equal.
 		+ (* a が l2 に入っている場合 *)
@@ -141,14 +163,14 @@ Proof.
 				right; left. subst. split; try apply in_elt; apply in_eq.
 			* (* b が l2 に入っている場合 *)
 				left. injection H1. intros _ Hb. subst.
-				exists (x::l); exists l2'; exists l''. reflexivity.
+				exists (x::l), l2', l''. reflexivity.
 	- (* a が l2 ++ l3 に入っている場合２ *)
 		destruct l2 as [ | x l]. 
 		+ (* a, b が l3 に入っている場合 *)
 			right; right; right.
 			destruct H as [H1 H2]. rewrite app_nil_l in H2.
 			subst.
-			exists l1; exists l2'; exists l3'. reflexivity.
+			exists l1, l2', l3'. reflexivity.
 		+ (* a が l2 に入っている場合 *)
 			destruct H as [H1 H2].
 			injection H2. intros H3 Ha. subst.
@@ -161,7 +183,7 @@ Proof.
 				right; left. subst. split; apply in_eq.
 			* (* b が l2 に入っている場合 *)
 				left. injection H1. intros _ Hb. subst.
-				exists []; exists l2'; exists l''. reflexivity.
+				exists [], l2', l''. reflexivity.
 	- (* a が l1 に入っている場合 *)
 		injection H. intros H1 Ha. subst.
 		apply app_split in H1.
@@ -171,11 +193,11 @@ Proof.
 			apply app_split in Hb_right.
 			destruct Hb_right as [[x'' [l'' [_ Hb_l3]]] | [[_ Hb_l3] | [x'' [l'' [Hb_l2 H1]]]]].
 			* (* b が l3 に入っている場合１ *)
-				repeat right. subst. exists l1'; exists (l ++ x'' :: l''); exists l3'. 
+				repeat right. subst. exists l1', (l ++ x'' :: l''), l3'. 
 				rewrite <- app_assoc. f_equal. simpl. f_equal.
 				rewrite <- app_assoc. reflexivity.
 			* (* b が l3 に入っている場合２ *) 
-				repeat right. subst. exists l1'; exists l; exists l3'.
+				repeat right. subst. exists l1', l, l3'.
 				rewrite <- app_assoc. reflexivity.
 			* (* b が l2 に入っている場合 *)
 				right; right; left. injection H1. intros _ Hb. subst.
@@ -185,14 +207,14 @@ Proof.
 			* (* b が l3 に入っている場合 *)
 				repeat right.
 				rewrite app_nil_l in Hb_right. subst.
-				exists l1'; exists l; exists l3'.
+				exists l1', l, l3'.
 				rewrite <- app_assoc. reflexivity.
 			* (* b が l2 に入っている場合 *)
 				right; right; left. injection Hb_right. intros _ Hb. subst.
 				split; [apply in_elt | apply in_eq].
 		+ (* b が l1 に入っている場合 *)
 			repeat right. injection H1. intros _ Hb. subst.
-			exists l1'; exists l2'; exists (l' ++ l3).
+			exists l1', l2', (l' ++ l3).
 			rewrite <- app_assoc. f_equal. 
 			simpl. f_equal.
 			rewrite <- app_assoc. f_equal.
@@ -209,12 +231,12 @@ Proof.
 	destruct E as [[x [l [_ Ha_l3]]] | [[_ Ha_l3] | [x [l [Ha_l1 H]]]]].
 	- (* a が l3 に入っている場合１ *)
 		subst. 
-		exists (l1 ++ l2 ++ x :: l); exists l2'; exists l3'.
+		exists (l1 ++ l2 ++ x :: l), l2', l3'.
 		rewrite <- app_assoc. f_equal.
 		rewrite <- app_assoc. f_equal.
 	- (* a が l3 に入っている場合２ *)
 		subst.
-		exists (l1 ++ l2); exists l2'; exists l3'.
+		exists (l1 ++ l2), l2', l3'.
 		rewrite <- app_assoc. f_equal.
 	- (* a が l1 に入っている場合 *)
 		injection H. intros H1 Ha. subst.
@@ -222,20 +244,20 @@ Proof.
 		destruct H1 as [[x' [l' [_ Hb_l3]]] | [[_ Hb_l3] | [x' [l' [Hb_l1 H1]]]]].
 		+ (* b が l3 に入っている場合１ *)
 			subst.
-			exists l1'; exists (l ++ l2 ++ x' :: l'); exists l3'.
+			exists l1', (l ++ l2 ++ x' :: l'), l3'.
 			rewrite <- app_assoc. f_equal.
 			simpl. f_equal.
 			rewrite <- app_assoc. f_equal.
 			rewrite <- app_assoc. f_equal.
 		+ (* b が l3 に入っている場合２ *)
 			subst.
-			exists l1'; exists (l ++ l2); exists l3'.
+			exists l1', (l ++ l2), l3'.
 			rewrite <- app_assoc. f_equal.
 			simpl. f_equal.
 			rewrite <- app_assoc. f_equal.
 		+ (* b が l1 に入っている場合 *)
 			injection H1. intros _ Hb. subst.
-			exists l1'; exists l2'; exists (l' ++ l2 ++ l3).
+			exists l1', l2', (l' ++ l2 ++ l3).
 			rewrite <- app_assoc. f_equal.
 			rewrite <- app_comm_cons. f_equal.
 			rewrite <- app_assoc. f_equal.
@@ -293,8 +315,19 @@ Proof.
 Admitted.
 
 (* extend の単調性を公理として導ける？ *)
-(* TODO: ls <> [] を仮定？ *)
-Lemma extention_split : forall t1 t2 ls,
+Lemma extention_split : forall t ls,
+	let p := extend ls t in
+	ls <> []
+	-> (exists t', (* 先頭の延長線上 *)
+			t' <= 0 /\ p = point (hd_segment ls) t')
+	\/ (exists t' seg, (* セグメント上 *)
+			0 <= t' <= 1 /\ In seg ls /\ p = point seg t')
+	\/ (exists t', (* 末尾の延長線上 *)
+			1 <= t' /\ p = point (last_segment ls) t').
+Proof. 
+Admitted.
+
+Lemma extention_split_2 : forall t1 t2 ls,
 	let p1 := extend ls t1 in
 	let p2 := extend ls t2 in
 	ls <> []
@@ -333,6 +366,40 @@ Lemma extention_split : forall t1 t2 ls,
 			1 <= t1' /\ 1 <= t2' /\ t1' <> t2' /\
 				p1 = point (last_segment ls) t1' /\ p2 = point (last_segment ls) t2').
 Proof. 
+	intros t1 t2 ls p1 p2 Hls H12.
+	pose proof (extention_split t1 ls Hls) as H1.
+	pose proof (extention_split t2 ls Hls) as H2.
+	destruct H1 as [[t1' [Ht1' Heq1]] | [[t1' [seg1 [Ht1' [Hin1 Heq1]]]] | [t1' [Ht1' Heq1]]]];
+	destruct H2 as [[t2' [Ht2' Heq2]] | [[t2' [seg2 [Ht2' [Hin2 Heq2]]]] | [t2' [Ht2' Heq2]]]].
+	- (* t1, t2 とも先頭の延長線上 *) left. 
+		exists t1', t2'. repeat split; try tauto.
+		(* extend ls t1 = extend ls t1 の場合に証明できない *) admit.
+	- (* t1 は先頭の延長線上， t2 はセグメント上 *) right; left. 
+		exists t1', t2', seg2. tauto.
+	- (* t1 は先頭の延長線上， t2 は末尾の延長線上 *) do 2 right; left.
+		exists t1', t2'. tauto.
+	- (* t1 はセグメント上， t2 は先頭の延長線上 *) do 3 right; left.
+		exists t1', t2', seg1. tauto.
+	- (* t1, t2 ともセグメント上 *)
+		pose proof (In_split_In_order seg1 seg2 ls Hin1 Hin2) as Hin.
+		destruct Hin as [Hin | [Hin | Hin]].
+		+ (* t1, t2 とも同じセグメント上 *) do 4 right; left.
+			subst. 
+		  exists t1', t2', seg2. repeat split; try tauto.
+			(* extend ls t1 = extend ls t1 の場合に証明できない *) admit.
+		+ (* t1, t2 が異なるセグメント上 (t1 < t2) *) do 5 right; left.
+			exists t1', t2', seg1, seg2. tauto.
+		+ (* t1, t2 が異なるセグメント上 (t1 > t2) *) do 6 right; left.
+			exists t1', t2', seg1, seg2. tauto.
+	- (* t1 はセグメント上， t2 は末尾の延長線上 *) do 7 right; left.
+		exists t1', t2', seg1. tauto.
+	- (* t1 は末尾の延長線上， t2 は先頭の延長線上 *) do 8 right; left.
+		exists t1', t2'. tauto.
+	- (* t1 は末尾の延長線上， t2 はセグメント上 *) do 9 right; left.
+		exists t1', t2', seg2. tauto.
+	- (* t1, t2 とも末尾の延長線上 *) repeat right.
+		exists t1', t2'. repeat split; try tauto.
+		(* extend ls t1 = extend ls t1 の場合に証明できない *) admit.
 Admitted.
 
 (* ２つのセグメントが１点を共有していれば，それらのセグメントを含む曲線は閉 *)
@@ -840,7 +907,7 @@ Proof.
 	}
 
 	(* t1, t2 の表す位置について場合分け *)
-	destruct (extention_split t1 t2 post H_notnil H12) as [
+	destruct (extention_split_2 t1 t2 post H_notnil H12) as [
 			(* t1 が先頭を指す場合 *)
 				[t1' [t2' [H1' [H2' [H12' [Heq1 Heq2]]]]]]
 			| [[t1' [t2' [seg [H1' [H2' [Hin_post [Heq1 Heq2]]]]]]]
