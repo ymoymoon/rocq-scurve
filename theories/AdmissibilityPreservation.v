@@ -4,6 +4,7 @@ Require Import Stdlib.Reals.Reals.
 Require Import Embed.
 Require Import PrimitiveSegment.
 Require Import Segment.
+Require Import ListExt.
 Import ListNotations.
 
 
@@ -15,48 +16,17 @@ Lemma hd_app : forall {A : Type} (a b : list A) (dummy : A),
   hd dummy a = hd dummy (a ++ b).
 Proof.
   intros A a b dummy H.
-  destruct a.
-  - contradiction.
-  - reflexivity.
+  destruct a; firstorder.
 Qed.
 
-Lemma last_app : forall {A : Type} (l l' : list A) (d : A),
-  l' <> [] ->
-  last l' d = last (l ++ l') d.
-Proof.
-  intros A l.
-  induction l as [| x l IH]; intros l' d Hneq.
-  - (* l = [] *)
-    simpl.
-    reflexivity.
-  - (* l = x :: l *)
-    simpl.
-		assert (H : l ++ l' <> []). {
-			intros H1. apply app_eq_nil in H1. 
-			destruct H1. contradiction.
-		}
-    apply (IH l' d) in Hneq.
-    rewrite <- Hneq.
-		destruct (l ++ l'); congruence.
-Qed.
-
-Lemma last_app_cons : forall {A} (l l' : list A) (x dummy : A),
-	last (l ++ x :: l') dummy = last (x :: l') dummy.
-Proof.
-	intros A l l' x d.
-  rewrite <- last_app; congruence.
-Qed.
-
-Lemma list_head_tail : forall {A} (dummy: A) (l: list A),
+Lemma list_hd_tl : forall {A} (dummy: A) (l: list A),
 	l <> [] -> (hd dummy l) :: (tl l) = l.
 Proof. 
 	intros A dummy l H. 
-	induction l.
-	- contradiction.
-	- reflexivity. 
+	induction l; firstorder.
 Qed.
 
-Lemma list_map_head : forall {A B} (dummy: A) (x: B) (l: list A) (l': list B) f,
+Lemma list_map_hd : forall {A B} (dummy: A) (x: B) (l: list A) (l': list B) f,
 	map f l = x :: l' -> f (hd dummy l) = x.
 Proof. 
 	intros A B dummy x l l' f H.
@@ -903,7 +873,7 @@ Proof.
 			apply same_term_then_same_extention_last; 
 			repeat rewrite app_assoc;
 			unfold last_segment;
-			repeat rewrite last_app_cons; reflexivity.
+			repeat rewrite <- last_app; try reflexivity; discriminate.
 	}
 
 	(* t1, t2 の表す位置について場合分け *)
@@ -1177,7 +1147,7 @@ Proof.
 	assert (Hdir: hd Plus (l ++ Plus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
 		destruct l; simpl in *;
-		symmetry; eapply list_map_head; apply Hdir_sc.
+		symmetry; eapply list_map_hd; apply Hdir_sc.
 	}
 	(* AdmissibleDirs ds の証明では，向きが ds であり許容可能な scurve を1つつくればよい *)
 	apply AdmissibleDirs_exist.
@@ -1185,7 +1155,7 @@ Proof.
 		as [sc' [Hhead Hdir_sc']].
 	exists sc'. split.
 	- (* 向きが l ++ [Plus; Minus; Plus] ++ r であること *)
-		rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
+		rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 	- (* 許容可能であること *)
 		assert (H: embed_listDir (l ++ [Plus; Minus; Plus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
 			unfold embed_listDir. exists sc. split; assumption.
@@ -1200,7 +1170,7 @@ Proof.
 			apply (embbeding_inner_change sc sc' l [Plus; Minus; Plus] [Plus] r ls1 [seg1; seg2; seg3] [segP] ls3); 
 				try assumption; try discriminate.
 			(* 仮定を満たすことはほぼ作業的に示せる *)
-			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
+			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
 			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2; seg3] [segP]); 
@@ -1229,7 +1199,7 @@ Proof.
 	assert (Hdir: hd Plus (l ++ Plus :: Minus :: Plus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
 		destruct l; simpl in *;
-		symmetry; eapply list_map_head; apply Hdir_sc.
+		symmetry; eapply list_map_hd; apply Hdir_sc.
 	}	
 	(* AdmissibleDirs ds の証明では，向きが ds であり許容可能な scurve を1つつくればよい *)
 	apply AdmissibleDirs_exist.
@@ -1237,7 +1207,7 @@ Proof.
 		as [sc' [Hhead Hdir_sc']].
 	exists sc'. split.
 	- (* 向きが l ++ [Plus; Minus; Plus] ++ r であること *)
-		rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
+		rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 	- (* 許容可能であること *)
 		assert (H: embed_listDir (l ++ [Plus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
 			unfold embed_listDir. exists sc. split; assumption.
@@ -1252,7 +1222,7 @@ Proof.
 		+ (* 埋め込みになっていること *) 
 			apply (embbeding_inner_change sc sc' l [Plus] [Plus; Minus; Plus] r ls1 [segP] [seg1; seg2; seg3] ls3); 
 				try assumption; try discriminate.
-			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
+			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
 			apply (seg_in_rectangle_keep_openness _ _ [segP] _ ); try assumption; try congruence.
@@ -1276,7 +1246,7 @@ Proof.
 	assert (Hdir: hd Plus (l ++ Plus :: Minus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
 		destruct l; simpl in *;
-		symmetry; eapply list_map_head; apply Hdir_sc.
+		symmetry; eapply list_map_hd; apply Hdir_sc.
 	}
 	(* AdmissibleDirs ds の証明では，向きが ds であり許容可能な scurve を1つつくればよい *)
 	apply AdmissibleDirs_exist.
@@ -1284,7 +1254,7 @@ Proof.
 		as [sc' [Hhead Hdir_sc']].
 	exists sc'. split.
 	- (* 向きが l ++ [Plus; Minus; Plus] ++ r であること *)
-		rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
+		rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 	- (* 許容可能であること *)
 		assert (H: embed_listDir (l ++ [Plus; Plus; Minus; Minus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
 			unfold embed_listDir. exists sc. split; assumption.
@@ -1299,7 +1269,7 @@ Proof.
 		+ (* 埋め込みになっていること *) 
 			apply (embbeding_inner_change sc sc' l [Plus; Plus; Minus; Minus] [Plus; Minus] r ls1 [seg1; seg2; seg3; seg4] [seg1'; seg2'] ls3); 
 				try assumption; try discriminate.
-			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
+			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
 			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2; seg3; seg4] [seg1'; seg2']); 
@@ -1324,7 +1294,7 @@ Proof.
 	assert (Hdir: hd Plus (l ++ Plus :: Plus :: Minus :: Minus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
 		destruct l; simpl in *;
-		symmetry; eapply list_map_head; apply Hdir_sc.
+		symmetry; eapply list_map_hd; apply Hdir_sc.
 	}	
 	(* AdmissibleDirs ds の証明では，向きが ds であり許容可能な scurve を1つつくればよい *)
 	apply AdmissibleDirs_exist.
@@ -1332,7 +1302,7 @@ Proof.
 		as [sc' [Hhead Hdir_sc']].
 	exists sc'. split.
 	- (* 向きが l ++ [Plus; Minus; Plus] ++ r であること *)
-		rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
+		rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 	- (* 許容可能であること *)
 		assert (H: embed_listDir (l ++ [Plus; Minus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
 			unfold embed_listDir. exists sc. split; assumption.
@@ -1347,7 +1317,7 @@ Proof.
 		+ (* 埋め込みになっていること *) 
 			apply (embbeding_inner_change sc sc' l [Plus; Minus] [Plus; Plus; Minus; Minus] r ls1 [seg1; seg2] [seg1'; seg2'; seg3'; seg4'] ls3); 
 				try assumption; try discriminate.
-			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_head_tail. destruct l; discriminate.
+			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
 			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2] _ ); try assumption; try congruence.
