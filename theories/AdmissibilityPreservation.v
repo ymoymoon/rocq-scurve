@@ -235,7 +235,7 @@ Qed.
 
 
 (* --------------------------------------------------------------------------- *)
-(* Parameter extend に関する補題 *)
+(* Parameter extend に関する補題． Segment.v に移しても *)
 
 Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい？ *)
 Parameter slope_term : Segment -> R.
@@ -520,7 +520,7 @@ Definition embed_listDir (ds: list Direction) (ls: list Segment) : Prop :=
 
 (* 単方向 scurve *)
 (* cf. Embed.all_same_h *)
-(* TODO: 空リストは含まない．（含めるなら，後の定理の必要な部分に not nil 制約を入れる．） *)
+(* 空リストは含まない．（含めるなら，後の定理の必要な部分に not nil 制約を入れる．） *)
 Definition is_one_way_scurve (sc : scurve) : Prop :=
 	let lp := proj1_sig sc in
 	lp <> []
@@ -560,6 +560,16 @@ Lemma is_one_way_listDir_forall : forall ds,
 	is_one_way_listDir ds <-> 
 		(forall sc, scurve_to_direction sc = ds -> is_one_way_scurve sc).
 Proof.
+	intros ds. split.
+	- (* -> *) intros [sc' [Hembed Honeway]] sc Hdir.
+		(* 単方向曲線と向き列が同じなら単方向曲線 *) admit.
+	- (* <- *) intros H. 
+		destruct ds as [ | d ds'].
+		+ (* このままでは contradiction にならないか *) admit.
+		+ pose proof (Direction_to_PrimitiveSegment d default_primitive_segment) as [p [Hp _]].
+			subst.
+			pose proof (direction_scurve_correspondence ds' p) as [sc [_ Hdir]].
+			exists sc. split; auto.
 Admitted. 
 
 Lemma P_is_oneway : is_one_way_listDir [Plus].
