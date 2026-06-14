@@ -265,7 +265,7 @@ Definition same_extention_head ls1 ls2 :=
 Definition same_extention_last ls1 ls2 := 
 	(forall rr, onLast_extend ls1 rr <-> onLast_extend ls2 rr).
 
-(* 始点と始点での傾きが同じであれば，始点方向への延長線は等しい *)
+(* 始点と始点での傾きが同じであれば，始点方向への延長線は等しい（slope_init 等の満たすべき性質，仕様） *)
 Lemma same_init_then_same_extention_head : forall ls1 ls2,
 	let seg1 := hd_segment ls1 in
 	let seg2 := hd_segment ls2 in
@@ -284,7 +284,8 @@ Lemma same_term_then_same_extention_last : forall ls1 ls2,
 Proof. 
 Admitted.
 
-(* extend の単調性を公理として導ける？ *)
+(* extend の満たすべき性質．単調性を公理として導ける？ *)
+(* TODO : 後の定理を示すため，[t] の大小関係に関する縛りも結論に入れる *)
 Lemma extention_split : forall t ls,
 	let p := extend ls t in
 	ls <> []
@@ -343,7 +344,7 @@ Proof.
 	destruct H2 as [[t2' [Ht2' Heq2]] | [[t2' [seg2 [Ht2' [Hin2 Heq2]]]] | [t2' [Ht2' Heq2]]]].
 	- (* t1, t2 とも先頭の延長線上 *) left. 
 		exists t1', t2'. repeat split; try tauto.
-		(* extend ls t1 = extend ls t1 の場合に証明できない *) admit.
+		(* p1 = p2 かつ自己交差の場合に証明できない *) admit.
 	- (* t1 は先頭の延長線上， t2 はセグメント上 *) right; left. 
 		exists t1', t2', seg2. tauto.
 	- (* t1 は先頭の延長線上， t2 は末尾の延長線上 *) do 2 right; left.
@@ -356,7 +357,7 @@ Proof.
 		+ (* t1, t2 とも同じセグメント上 *) do 4 right; left.
 			subst. 
 		  exists t1', t2', seg2. repeat split; try tauto.
-			(* extend ls t1 = extend ls t1 の場合に証明できない *) admit.
+			(* p1 = p2 かつ自己交差の場合に証明できない *) admit.
 		+ (* t1, t2 が異なるセグメント上 (t1 < t2) *) do 5 right; left.
 			exists t1', t2', seg1, seg2. tauto.
 		+ (* t1, t2 が異なるセグメント上 (t1 > t2) *) do 6 right; left.
@@ -369,7 +370,7 @@ Proof.
 		exists t1', t2', seg2. tauto.
 	- (* t1, t2 とも末尾の延長線上 *) repeat right.
 		exists t1', t2'. repeat split; try tauto.
-		(* extend ls t1 = extend ls t1 の場合に証明できない *) admit.
+		(* p1 = p2 かつ自己交差の場合に証明できない *) admit.
 Admitted.
 
 (* ２つのセグメントが１点を共有していれば，それらのセグメントを含む曲線は閉 *)
@@ -413,7 +414,7 @@ Lemma last_seg_cross_close : forall p seg ls1 ls2,
 Proof.
 Admitted.
 
-(* １つのセグメントの中（延長部分含め）で交差は起こらない *)
+(* １つのセグメントの中（延長部分含め）で交差は起こらない（point の満たすべき性質，仕様） *)
 Lemma one_seg_not_cross : forall t1 t2 seg,
 	point seg t1 = point seg t2
 	-> t1 = t2.
@@ -480,7 +481,7 @@ Proof.
 Qed.
 
 (* 向き列の許容可能性を調べることで，scurve の許容可能性はわかる．
-	(１つの scurve で許容可能性が言えたら，同じ向き列を持つ他の scurve ４つの許容可能性もわかる．) *)
+	(つまり１つの scurve で許容可能性が言えたら，同じ向き列を持つ他の scurve ４つの許容可能性もわかる) *)
 Lemma admissible_AdmissibleDirs_correspondence : forall sc,
 	admissible sc <-> AdmissibleDirs (scurve_to_direction sc).
 Proof. 
@@ -537,7 +538,12 @@ Definition is_one_way_listDir (ds: list Direction) : Prop :=
 		必要があれば証明 *)
 
 (* 曲線の始点と終点を結んだ線分を対角線にもつ矩形．部分曲線を含むとは限らない *)
-Parameter rectangular_from_diagonal : R * R -> R * R -> (R * R -> Prop).
+Definition rectangular_from_diagonal (rr1 rr2 : R * R) : R * R -> Prop :=
+	let (x1, y1) := rr1 in 
+	let (x2, y2) := rr2 in 
+	fun rr => 
+	let (x, y) := rr in
+	(x1 < x < x2 \/ x2 < x < x1) /\ (y1 < y < y2 \/ y2 < y < y1).
 Definition in_rect_from_diagonal a b rr := rectangular_from_diagonal a b rr.
 (* TODO: 空リストを含まない方が良い *)
 Definition in_rect (ls: list Segment) (rr: R * R) := 
@@ -556,21 +562,35 @@ Definition sparse (l sub_ls r : list Segment) : Prop :=
 	exists sc, is_sparse_embedding sc l sub_ls r.
 
 
+(* 単方向曲線と向き列が同じなら単方向曲線 *) 
+Lemma is_one_way_same_direction : forall sc1 sc2,
+	scurve_to_direction sc1 = scurve_to_direction sc2
+	-> is_one_way_scurve sc1 
+	-> is_one_way_scurve sc2.
+Proof.	
+Admitted.
+
 Lemma is_one_way_listDir_forall : forall ds,
 	is_one_way_listDir ds <-> 
 		(forall sc, scurve_to_direction sc = ds -> is_one_way_scurve sc).
 Proof.
 	intros ds. split.
 	- (* -> *) intros [sc' [Hembed Honeway]] sc Hdir.
-		(* 単方向曲線と向き列が同じなら単方向曲線 *) admit.
+		eapply is_one_way_same_direction; [ | eassumption].
+		congruence.
 	- (* <- *) intros H. 
 		destruct ds as [ | d ds'].
-		+ (* このままでは contradiction にならないか *) admit.
+		+ (* このままでは contradiction にならないか *)
+			specialize H with (exist _ [] IsScurveNil).
+			unfold scurve_to_direction, is_one_way_scurve in H.
+			specialize (H eq_refl).
+			simpl in H; destruct H.
+			contradiction. 
 		+ pose proof (Direction_to_PrimitiveSegment d default_primitive_segment) as [p [Hp _]].
 			subst.
 			pose proof (direction_scurve_correspondence ds' p) as [sc [_ Hdir]].
 			exists sc. split; auto.
-Admitted. 
+Qed. 
 
 Lemma P_is_oneway : is_one_way_listDir [Plus].
 Proof. 
@@ -709,14 +729,14 @@ Proof.
 Admitted.
 
 (* sub_ls 周りで疎な埋め込みについて， sub_ls を矩形の中で sub_ls' に変えても疎なまま *)
-Lemma sparse_in_rect_change : forall (ls rs sub_ls sub_ls' : list Segment), 
+(* Lemma sparse_in_rect_change : forall (ls rs sub_ls sub_ls' : list Segment), 
 	sparse ls sub_ls rs
 	-> (forall rr, onSegmentlist sub_ls' rr -> in_rect sub_ls rr) 
 	-> same_init_and_term sub_ls sub_ls' 
 	-> same_slope_init_and_term sub_ls sub_ls'
 	-> sparse ls sub_ls' rs.
 Proof. 
-Admitted.
+Admitted. *)
 
 
 (*【証明の本質としている補題１】 許容可能ならば，その中の単方向な sub_ds の埋め込み sub_ls 周りで疎な開埋め込みが存在する *)
@@ -804,8 +824,8 @@ Lemma embedding_PPMM_to_PM_in_rect : forall (seg1 seg2 seg3 seg4 : Segment),
 		/\ same_slope_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2'].
 Proof. Admitted.
 
-(*  向き ds1 ++ ds2 ++ ds3 の ds2 (の向きを持つ scurve) の埋め込みを，ds2' の埋め込みに変えたら，
-		向き ds1 ++ ds2' ++ ds3 の埋め込みである *)
+(*  向き ds1 ++ ds2 ++ ds3 の ds2 (の向きを持つ scurve) の埋め込みを，端点の条件を満たしつつ
+		ds2' の埋め込みに変えたら，向き ds1 ++ ds2' ++ ds3 の埋め込みである *)
 (* TODO: 向き列を交えず scurve だけでいけばコンパクトに，もし hd_scurve 取れればきれい？ *)
 Lemma embbeding_inner_change : forall sc1 sc2 ds1 ds2 ds2' ds3 ls1 ls2 ls2' ls3,
 	ls2 <> []
@@ -822,6 +842,7 @@ Proof. Admitted.
 
 (* 【証明の本質としている補題２】 sub_ls の周りが疎な開埋め込みにおいて，端点で傾きを保ちつつ
 		sub_ls をその領域に収まる開な sub_ls' に置き換えても開のまま *)
+(* TODO : もうちょっと自動化できるはず．．． *)
 Lemma seg_in_rectangle_keep_openness : forall (ls rs sub_ls sub_ls' : list Segment),
 	sub_ls <> []
 	-> sub_ls' <> [] 
