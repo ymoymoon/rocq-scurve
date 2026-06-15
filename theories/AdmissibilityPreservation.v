@@ -838,7 +838,10 @@ Lemma embbeding_inner_change : forall sc1 sc2 ds1 ds2 ds2' ds3 ls1 ls2 ls2' ls3,
 	-> scurve_to_direction sc2 = ds1 ++ ds2' ++ ds3
 	-> hd_scurve sc1 = hd_scurve sc2
 	-> embed_scurve sc2 (ls1 ++ ls2' ++ ls3).
-Proof. Admitted.
+Proof. 
+	intros sc1 sc2 ds1 ds2 ds2' ds3 ls1 ls2 ls2' ls3.
+	intros Hls2 Hls2' Hembed Hembed_dir1 Hembed_dir2 Hinit_term Hdir1 Hdir2 Hhead.
+Admitted.
 
 (* 【証明の本質としている補題２】 sub_ls の周りが疎な開埋め込みにおいて，端点で傾きを保ちつつ
 		sub_ls をその領域に収まる開な sub_ls' に置き換えても開のまま *)
@@ -923,7 +926,7 @@ Proof.
 			| [[t1' [t2' [H1' [H2' [Heq1 Heq2]]]]]
 			| [[t1' [t2' [seg [H1' [H2' [Hin_post [Heq1 Heq2]]]]]]]
 			| [t1' [t2' [H1' [H2' [H12' [Heq1 Heq2]]]]]]]]]]]]]]]].
-		(* 似ている場合分けばっかりなので，まとめて処理したいが．．． *)
+		(* 似ている場合分けばかりなので，まとめて処理したい *)
 
 		- (* t1, t2 ともに先頭の延長線上の点を指す場合：矛盾 *)
 			apply H12'.
