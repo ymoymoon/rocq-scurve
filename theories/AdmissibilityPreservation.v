@@ -9,246 +9,10 @@ Import ListNotations.
 
 
 (* --------------------------------------------------------------------------- *)
-(* 単なるリストに関する補題など *)
-
-Lemma hd_app : forall {A : Type} (a b : list A) (dummy : A),
-  a <> [] ->
-  hd dummy a = hd dummy (a ++ b).
-Proof.
-  intros A a b dummy H.
-  destruct a; firstorder.
-Qed.
-
-Lemma list_hd_tl : forall {A} (dummy: A) (l: list A),
-	l <> [] -> (hd dummy l) :: (tl l) = l.
-Proof. 
-	intros A dummy l H. 
-	induction l; firstorder.
-Qed.
-
-Lemma list_map_hd : forall {A B} (dummy: A) (x: B) (l: list A) (l': list B) f,
-	map f l = x :: l' -> f (hd dummy l) = x.
-Proof. 
-	intros A B dummy x l l' f H.
-	induction l.
-	- discriminate.
-	- simpl in *. congruence. 
-Qed.
-
-Lemma app_split :
-  forall (A : Type) (l1 l2 l1' l2' : list A),
-  l1 ++ l2 = l1' ++ l2' ->
-  (exists a l, l1' = l1 ++ a :: l /\ l2 = a :: l ++ l2')
-	\/
-	(l1' = l1 /\ l2 = l2')
-  \/
-  (exists a l, l1 = l1' ++ a :: l /\ a :: l ++ l2 = l2').
-Proof.
-  intros A l1 l2 l1' l2' Heq.
-	apply app_eq_app in Heq.
-	destruct Heq as [l [[H1 H2] | [H1 H2]]].
-	- (* length l1 >= length l1' *)
-		destruct l as [ | x l'].
-		+ (* length l1 = length l1' *)
-			right; left. 
-			rewrite app_nil_r in H1. simpl in H2.
-			split; auto.
-		+ (* length l1 > length l1' *)
-			right; right.
-			exists x, l'.
-			split; auto.
-	- (* length l1 <= length l1' *)
-		destruct l as [ | x l'].
-		+ (* length l1 = length l1' *)
-			right; left. 
-			rewrite app_nil_r in H1. simpl in H2.
-			split; auto.
-		+ (* length l1 < length l1' *)
-			left.
-			exists x, l'.
-			split; auto.
-Qed.
-
-(** a と b がこの順でリストに入っている *)
-Definition In_order {A} (a b : A) (l : list A) : Prop :=
-  exists l1 l2 l3, l = l1 ++ a :: l2 ++ b :: l3.
-
-Lemma In_split_In_order : forall {A} (a b : A) l,
-	In a l 
-	-> In b l
-	-> a = b \/ In_order a b l \/ In_order b a l.
-Proof.
-	intros A a b l Ha Hb.
-	apply in_split in Ha.
-	destruct Ha as [la1 [la2 Ha]].
-	apply in_split in Hb.
-	destruct Hb as [lb1 [lb2 H]].
-	subst.
-	apply app_split in H.
-	destruct H as [[x [l' [_ H]]] | [[_ H] | [x [l' [H1 H2]]]]].
-	- right; left.
-		injection H. intros H1 _. subst.
-		exists la1, l', lb2. reflexivity.
-	- left. injection H. auto.
-  - repeat right.
-		injection H2. intros _ Hb. subst.
-		exists lb1, l', la2. 
-		rewrite <- app_assoc. f_equal.
-Qed.
-
-Lemma In_order_split : forall {A} (a b : A) l1 l2 l3,
-	In_order a b (l1 ++ l2 ++ l3)
-	-> In_order a b l2 (* a も b も l2 に入っている *)
-		\/ (In a l2 /\ In b l3) (* a のみ l2 に入っている *)
-		\/ (In a l1 /\ In b l2) (* b のみ l2 に入っている *)
-		\/ In_order a b (l1 ++ l3). (* a も b も l2 に入っていない *)
-Proof.
-	intros A a b l1 l2 l3 H.
-	destruct H as [l1' [l2' [l3' H]]].
-	(* a, b が l2 に入っているかどうかで場合分け *)
-	apply app_split in H.
-	destruct H as [[x [l [_ Ha_right]]] | [H | [x [l [Ha_l1 H]]]]].
-	- (* a が l2 ++ l3 に入っている場合１ *)
-		rewrite app_comm_cons in Ha_right. 
-		apply app_split in Ha_right.
-		destruct Ha_right as [[x' [l' [_ Ha_l3]]] | [[_ Ha_l3] | [x' [l' [Ha_l2 H]]]]].
-		+ (* a, b が l3 に入っている場合１ *)
-			right; right; right.
-			exists (l1 ++ x' :: l'), l2', l3'.
-			rewrite Ha_l3. rewrite <- app_assoc.
-			f_equal.
-		+ (* a, b が l3 に入っている場合２ *)
-			right; right; right.
-			exists l1, l2', l3'.
-			rewrite Ha_l3. 
-			f_equal.
-		+ (* a が l2 に入っている場合 *)
-			injection H. intros H1 Ha. subst.
-			apply app_split in H1.
-			destruct H1 as [[x'' [l'' [_ Hb_l3]]] | [[_ Hb_l3] | [x'' [l'' [Hb_l2 H1]]]]].
-			* (* b が l3 に入っている場合１ *)
-				right; left. subst. split; try apply in_elt; try apply in_cons.
-				apply in_elt.
-			* (* b が l3 に入っている場合２ *)
-				right; left. subst. split; try apply in_elt; apply in_eq.
-			* (* b が l2 に入っている場合 *)
-				left. injection H1. intros _ Hb. subst.
-				exists (x::l), l2', l''. reflexivity.
-	- (* a が l2 ++ l3 に入っている場合２ *)
-		destruct l2 as [ | x l]. 
-		+ (* a, b が l3 に入っている場合 *)
-			right; right; right.
-			destruct H as [H1 H2]. rewrite app_nil_l in H2.
-			subst.
-			exists l1, l2', l3'. reflexivity.
-		+ (* a が l2 に入っている場合 *)
-			destruct H as [H1 H2].
-			injection H2. intros H3 Ha. subst.
-			apply app_split in H3.
-			destruct H3 as [[x'' [l'' [_ Hb_l3]]] | [[_ Hb_l3] | [x'' [l'' [Hb_l2 H1]]]]].
-			* (* b が l3 に入っている場合１ *) 
-				right; left. subst. split; 
-				[apply in_eq | apply in_cons; apply in_elt].
-			* (* b が l3 に入っている場合２ *) 
-				right; left. subst. split; apply in_eq.
-			* (* b が l2 に入っている場合 *)
-				left. injection H1. intros _ Hb. subst.
-				exists [], l2', l''. reflexivity.
-	- (* a が l1 に入っている場合 *)
-		injection H. intros H1 Ha. subst.
-		apply app_split in H1.
-		destruct H1 as [[x' [l' [_ Hb_right]]] | [[_ Hb_right] | [x' [l' [Hb_l1 H1]]]]].
-		+ (* b が l2 ++ l3 に入っている場合１ *)
-			rewrite app_comm_cons in Hb_right. 
-			apply app_split in Hb_right.
-			destruct Hb_right as [[x'' [l'' [_ Hb_l3]]] | [[_ Hb_l3] | [x'' [l'' [Hb_l2 H1]]]]].
-			* (* b が l3 に入っている場合１ *)
-				repeat right. subst. exists l1', (l ++ x'' :: l''), l3'. 
-				rewrite <- app_assoc. f_equal. simpl. f_equal.
-				rewrite <- app_assoc. reflexivity.
-			* (* b が l3 に入っている場合２ *) 
-				repeat right. subst. exists l1', l, l3'.
-				rewrite <- app_assoc. reflexivity.
-			* (* b が l2 に入っている場合 *)
-				right; right; left. injection H1. intros _ Hb. subst.
-				split; apply in_elt.
-		+ (* b が l2 ++ l3 に入っている場合２ *)
-			destruct l2 as [ | x' l'].
-			* (* b が l3 に入っている場合 *)
-				repeat right.
-				rewrite app_nil_l in Hb_right. subst.
-				exists l1', l, l3'.
-				rewrite <- app_assoc. reflexivity.
-			* (* b が l2 に入っている場合 *)
-				right; right; left. injection Hb_right. intros _ Hb. subst.
-				split; [apply in_elt | apply in_eq].
-		+ (* b が l1 に入っている場合 *)
-			repeat right. injection H1. intros _ Hb. subst.
-			exists l1', l2', (l' ++ l3).
-			rewrite <- app_assoc. f_equal. 
-			simpl. f_equal.
-			rewrite <- app_assoc. f_equal.
-Qed.
-
-Lemma In_order_append_mid : forall {A} (a b : A) l1 l2 l3,
-	In_order a b (l1 ++ l3)
-	-> In_order a b (l1 ++ l2 ++ l3).
-Proof.
-	intros A a b l1 l2 l3 H.
-	destruct H as [l1' [l2' [l3' E]]].
-	(* a, b が l1 に入っているかどうかで場合分け *)
-	apply app_split in E.
-	destruct E as [[x [l [_ Ha_l3]]] | [[_ Ha_l3] | [x [l [Ha_l1 H]]]]].
-	- (* a が l3 に入っている場合１ *)
-		subst. 
-		exists (l1 ++ l2 ++ x :: l), l2', l3'.
-		rewrite <- app_assoc. f_equal.
-		rewrite <- app_assoc. f_equal.
-	- (* a が l3 に入っている場合２ *)
-		subst.
-		exists (l1 ++ l2), l2', l3'.
-		rewrite <- app_assoc. f_equal.
-	- (* a が l1 に入っている場合 *)
-		injection H. intros H1 Ha. subst.
-		apply app_split in H1.
-		destruct H1 as [[x' [l' [_ Hb_l3]]] | [[_ Hb_l3] | [x' [l' [Hb_l1 H1]]]]].
-		+ (* b が l3 に入っている場合１ *)
-			subst.
-			exists l1', (l ++ l2 ++ x' :: l'), l3'.
-			rewrite <- app_assoc. f_equal.
-			simpl. f_equal.
-			rewrite <- app_assoc. f_equal.
-			rewrite <- app_assoc. f_equal.
-		+ (* b が l3 に入っている場合２ *)
-			subst.
-			exists l1', (l ++ l2), l3'.
-			rewrite <- app_assoc. f_equal.
-			simpl. f_equal.
-			rewrite <- app_assoc. f_equal.
-		+ (* b が l1 に入っている場合 *)
-			injection H1. intros _ Hb. subst.
-			exists l1', l2', (l' ++ l2 ++ l3).
-			rewrite <- app_assoc. f_equal.
-			rewrite <- app_comm_cons. f_equal.
-			rewrite <- app_assoc. f_equal.
-Qed.
-
-
-(* --------------------------------------------------------------------------- *)
-(* Parameter extend に関する補題． Segment.v に移しても *)
-
-Parameter slope_init : Segment -> R. (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい？ *)
-Parameter slope_term : Segment -> R.
+(* Parameter extend に関する補題． SegmentList.v 等を新設しても *)
 
 Definition hd_segment ls := hd default_segment ls.
 Definition last_segment ls := last ls default_segment.
-
-Definition same_init_and_term (c1 c2 : list Segment) := 
-	init (hd_segment c1) = init (hd_segment c2) 
-	/\ term (last_segment c1) = term (last_segment c2).
-Definition same_slope_init_and_term (c1 c2 : list Segment) := 
-	slope_init (hd_segment c1) = slope_init (hd_segment c2) 
-	/\ slope_term (last_segment c1) = slope_term (last_segment c2).
 
 (* TODO: 空リストを省く *)
 Definition onHead (seg: Segment) (rr : R * R) := exists (t:R), t <= 0 /\ point seg t = rr.
@@ -264,25 +28,6 @@ Definition same_extention_head ls1 ls2 :=
 	(forall rr, onHead_extend ls1 rr <-> onHead_extend ls2 rr).
 Definition same_extention_last ls1 ls2 := 
 	(forall rr, onLast_extend ls1 rr <-> onLast_extend ls2 rr).
-
-(* 始点と始点での傾きが同じであれば，始点方向への延長線は等しい（slope_init 等の満たすべき性質，仕様） *)
-Lemma same_init_then_same_extention_head : forall ls1 ls2,
-	let seg1 := hd_segment ls1 in
-	let seg2 := hd_segment ls2 in
-	init seg1 = init seg2
-	-> slope_init seg1 = slope_init seg2
-	-> same_extention_head ls1 ls2.
-Proof. 
-Admitted.
-
-Lemma same_term_then_same_extention_last : forall ls1 ls2,
-	let seg1 := last_segment ls1 in
-	let seg2 := last_segment ls2 in
-	term seg1 = term seg2
-	-> slope_term seg1 = slope_term seg2
-	-> same_extention_last ls1 ls2.
-Proof. 
-Admitted.
 
 (* extend の満たすべき性質．単調性を公理として導ける？ *)
 (* TODO : 後の定理を示すため，[t] の大小関係に関する縛りも結論に入れる *)
@@ -422,21 +167,39 @@ Proof.
 Admitted.
 
 
+(* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい *)
+Parameter slope_init : Segment -> R.
+Parameter slope_term : Segment -> R.
+
+Definition same_init_and_term (c1 c2 : list Segment) := 
+	init (hd_segment c1) = init (hd_segment c2) 
+	/\ term (last_segment c1) = term (last_segment c2).
+Definition same_slope_init_and_term (c1 c2 : list Segment) := 
+	slope_init (hd_segment c1) = slope_init (hd_segment c2) 
+	/\ slope_term (last_segment c1) = slope_term (last_segment c2).
+
+(* 始点と始点での傾きが同じであれば，始点方向への延長線は等しい（slope_init 等の満たすべき性質，仕様） *)
+Lemma same_init_then_same_extention_head : forall ls1 ls2,
+	let seg1 := hd_segment ls1 in
+	let seg2 := hd_segment ls2 in
+	init seg1 = init seg2
+	-> slope_init seg1 = slope_init seg2
+	-> same_extention_head ls1 ls2.
+Proof. 
+Admitted.
+
+Lemma same_term_then_same_extention_last : forall ls1 ls2,
+	let seg1 := last_segment ls1 in
+	let seg2 := last_segment ls2 in
+	term seg1 = term seg2
+	-> slope_term seg1 = slope_term seg2
+	-> same_extention_last ls1 ls2.
+Proof. 
+Admitted.
+
+
 (* --------------------------------------------------------------------------- *)
 (* AdmissibleDirs について成り立ってほしい性質と，それに必要な補題 *)
-
-Parameter default_primitive_segment : PrimitiveSegment.
-Definition hd_scurve (sc: scurve) := hd default_primitive_segment (proj1_sig sc).
-
-Lemma one_pseg_is_scurve : forall (p: PrimitiveSegment), 
-	is_scurve [p].
-Proof. 
-	intros p. apply IsScurveCons.
-	- apply IsScurveNil.
-	- apply DcNil.
-Qed.
-	
-Definition scurve_from_one p := exist _ _ (one_pseg_is_scurve p).
 
 Lemma Direction_to_PrimitiveSegment : forall d p, exists p', orn p' = d /\ dc p p'.
 Proof.
@@ -519,22 +282,12 @@ Definition embed_listDir (ds: list Direction) (ls: list Segment) : Prop :=
 	exists sc: scurve, scurve_to_direction sc = ds
 	/\ embed_scurve sc ls.
 
-(* 単方向 scurve *)
-(* cf. Embed.all_same_h *)
-(* 空リストは含まない．（含めるなら，後の定理の必要な部分に not nil 制約を入れる．） *)
-Definition is_one_way_scurve (sc : scurve) : Prop :=
-	let lp := proj1_sig sc in
-	lp <> []
-	/\ (Forall (fun p => exists (v:V) (c:C), p = (v, e, c)) lp
-	\/ Forall (fun p => exists (v:V) (c:C), p = (v, w, c)) lp
-	\/ Forall (fun p => exists (h:H) (c:C), p = (n, h, c)) lp
-	\/ Forall (fun p => exists (h:H) (c:C), p = (s, h, c)) lp).
-
 Definition is_one_way_embedding (ls : list Segment) : Prop :=
 	exists sc, embed_scurve sc ls /\ is_one_way_scurve sc.
 Definition is_one_way_listDir (ds: list Direction) : Prop :=
 	exists sc: scurve, scurve_to_direction sc = ds /\ is_one_way_scurve sc.
-(* おそらく帰納的に定義することもできる．後者は回転数を使った定義もできる？
+(* 帰納的に定義することもできると思われる．
+		特に後者は，回転数を使った定義もできる？
 		必要があれば証明 *)
 
 (* 曲線の始点と終点を結んだ線分を対角線にもつ矩形．部分曲線を含むとは限らない *)
