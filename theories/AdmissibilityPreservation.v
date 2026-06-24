@@ -6,6 +6,7 @@ Require Import PrimitiveSegment.
 Require Import Segment.
 Require Import ListExt.
 Import ListNotations.
+From Stdlib Require Import Lra.
 
 
 (* --------------------------------------------------------------------------- *)
@@ -752,23 +753,43 @@ Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
 		/\ sparse l sub_ls r.
 Proof. Admitted.
 
-(* TODO：some good features を具体化（引数要るだろう）して上の補題に統合する
-		sub_ls の始点と終点とそれぞれでの傾きを（sub_ls の向きを考慮した上で）自由に選んでも良い，
-		としたらのちに端点での傾きを保存するために役立つ？  *)
-Parameter some_good_features : Prop.
-
-Lemma embed_sparsely_listDir_with_good_features (ds1 sub_ds ds2 : list Direction) :
-	AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
-	-> is_one_way_listDir sub_ds
-	-> exists l r sub_ls, 
+(* 上の補題を強めたもの
+		sub_ds の埋め込みについて，始点・終点・それぞれでの傾きを，
+		（ここでは右上方向に伸びると仮定した上で）任意に指定することができる *)
+(* TODO：上の補題に統合しても良い *)
+Lemma embed_sparsely_listDir_PMP (ds1 ds2 : list Direction) :
+	AdmissibleDirs (ds1 ++ [Plus; Minus; Plus] ++ ds2)
+	-> forall x1 x2 y1 y2 s1 s2,
+		x1 < x2 -> y1 < y2 -> 0 < s1 -> 0 < s2 ->
+		exists l r sub_ls, 
 		embed_listDir ds1 l
-		/\ embed_listDir sub_ds sub_ls
+		/\ embed_listDir [Plus; Minus; Plus] sub_ls
 		/\ embed_listDir ds2 r
-		/\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r)
+		/\ embed_listDir (ds1 ++ [Plus; Minus; Plus] ++ ds2) (l ++ sub_ls ++ r)
 		/\ ~ close (l ++ sub_ls ++ r)
 		/\ sparse l sub_ls r
-		/\ some_good_features.
+		/\ init (hd_segment sub_ls) = (x1, y1)
+		/\ term (last_segment sub_ls) = (x2, y2)
+		/\ slope_init (hd_segment sub_ls) = s1
+		/\ slope_term (last_segment sub_ls) = s2.
 Proof. Admitted.
+
+Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
+	AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2)
+	-> forall x1 x2 y1 y2 s1 s2,
+		x1 < x2 -> y1 < y2 -> 0 < s1 -> 0 < s2 ->
+		exists l r sub_ls, 
+		embed_listDir ds1 l
+		/\ embed_listDir [Plus; Plus; Minus; Minus] sub_ls
+		/\ embed_listDir ds2 r
+		/\ embed_listDir (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) (l ++ sub_ls ++ r)
+		/\ ~ close (l ++ sub_ls ++ r)
+		/\ sparse l sub_ls r
+		/\ init (hd_segment sub_ls) = (x1, y1)
+		/\ term (last_segment sub_ls) = (x2, y2)
+		/\ slope_init (hd_segment sub_ls) = s1
+		/\ slope_term (last_segment sub_ls) = s2.
+Proof. Admitted.	
 
 (* Plus (の向きを持つ Primitive Segment) の埋め込みを，端点とそこでの傾きを保存したまま
 		[Plus; Minus; Plus] の埋め込みとなる３つに矩形内で分割できる *)
@@ -794,11 +815,23 @@ Lemma embedding_PM_to_PPMM_in_rect : forall (seg1 seg2 : Segment),
 		/\ same_slope_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4'].
 Proof. Admitted.
 
-(* good features があれば，[Plus; Minus; Plus] の埋め込みを， 端点とそこでの傾きを保存したまま
-		Plus の埋め込みに矩形内で変更できる *)
-(* TODO：傾きも保存できるような good features を見つけて具体化 *)
+Definition rightabove (rr1 rr2 : R * R) := 
+	let (x1, y1) := rr1 in
+	let (x2, y2) := rr2 in x1 < x2 /\ y1 < y2.
+
+(* 0 で割ったら 0 なので注意 *)
+Definition slope_two (rr1 rr2 : R * R) :=
+	let (x1, y1) := rr1 in
+	let (x2, y2) := rr2 in (y2 - y1) / (x2 - x1).
+
+(* [Plus; Minus; Plus] の埋め込みは，その部分の埋め込みの終点が始点の右上側にあり，
+		始点での傾きが終点での傾き（どちらも正）よりも大きいならば，
+	  端点とそこでの傾きを保存したまま，矩形内で
+		Plus の埋め込みに変更できる *)
+(* TODO : もう少し一般化しても良いかもしれない *)
 Lemma embedding_PMP_to_P_in_rect : forall (seg1 seg2 seg3 : Segment),
-	some_good_features
+	rightabove (init seg1) (term seg3)
+	-> 0 < slope_term seg3 < slope_init seg1
 	-> embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3]
 	->
 	exists seg,
@@ -807,13 +840,18 @@ Lemma embedding_PMP_to_P_in_rect : forall (seg1 seg2 seg3 : Segment),
 				-> in_rect [seg1; seg2; seg3] rr ) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3] [seg]
 		/\ same_slope_init_and_term [seg1; seg2; seg3] [seg].
-Proof. Admitted.
+Proof. 
+	(* 始点・終点・それぞれでの傾きが固定されているので，具体的に Plus の埋め込みが取れるはず *)
+Admitted.
 
-(* good features があれば，[Plus; Plus; Minus; Minus] の埋め込みを，端点とそこでの傾きを保存したまま
-		[Plus; Minus] の埋め込みとなる2つに矩形内で分割できる *)
-(* TODO：傾きも保存できるような good features を見つけて具体化 *)
+(* [Plus; Plus; Minus; Minus] の埋め込みは，その部分の埋め込みの終点が始点の右上側にあり，
+		始点・終点での傾きがどちらも十分大きいならば，
+		端点とそこでの傾きを保存したまま，矩形内で
+		[Plus; Minus] の埋め込みに変更できる *)
 Lemma embedding_PPMM_to_PM_in_rect : forall (seg1 seg2 seg3 seg4 : Segment),
-	some_good_features
+	rightabove (init seg1) (term seg4)
+	-> slope_two (init seg1) (term seg4) < slope_init seg1
+	-> slope_two (init seg1) (term seg4) < slope_term seg4
 	-> embed_listDir [Plus; Plus; Minus; Minus] [seg1; seg2; seg3; seg4]
 	->
 	exists seg1' seg2',
@@ -822,7 +860,9 @@ Lemma embedding_PPMM_to_PM_in_rect : forall (seg1 seg2 seg3 seg4 : Segment),
 				-> in_rect [seg1; seg2; seg3; seg4] rr) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2']
 		/\ same_slope_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2'].
-Proof. Admitted.
+Proof. 
+	(* 始点から中心へ，終点から中心へそれぞれ Plus, Minus の埋め込みをとり，繋げれば良さそう *)
+Admitted.
 
 (*  向き ds1 ++ ds2 ++ ds3 の ds2 (の向きを持つ scurve) の埋め込みを，端点の条件を満たしつつ
 		ds2' の埋め込みに変えたら，向き ds1 ++ ds2' ++ ds3 の埋め込みである *)
@@ -1175,9 +1215,10 @@ Lemma AdmissibleDirs_r1_Plus: forall l r,
 Proof.
 	intros l r admds. 
 	(* 疎な開埋め込みをとる *)
-	pose proof (embed_sparsely_listDir_with_good_features _ _ _ admds PMP_is_oneway) 
-		as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen [Hsparse Hgood]]]]]]]]];
-	simpl in *.
+	pose proof (embed_sparsely_listDir_PMP _ _ admds) as H.
+	specialize H with 0 1 0 1 2 1.
+	destruct H as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen [Hsparse [Hinit [Hterm [Hs1 Hs2]]]]]]]]]]]];
+	try lra; simpl in *.
 	assert (Hdir: hd Plus (l ++ Plus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
 		destruct l; simpl in *;
@@ -1195,7 +1236,17 @@ Proof.
 			unfold embed_listDir. exists sc. split; assumption.
 		}
 		pose proof (embedding_three_dir Plus Minus Plus ls2 Hls2) as [seg1 [seg2 [seg3 HPMP]]]; subst.
-		pose proof (embedding_PMP_to_P_in_rect seg1 seg2 seg3 Hgood Hls2) as [segP [HP [Hin_rect [Hinit_term Hslope]]]].
+		assert (Hrightabove : rightabove (init seg1) (term seg3)). {
+			simpl in Hinit; rewrite Hinit.
+			unfold last_segment in Hterm; simpl in Hterm; rewrite Hterm.
+			simpl. split; lra.
+		}
+		assert (Hs : 0 < slope_term seg3 < slope_init seg1). {
+			simpl in Hs1; rewrite Hs1.
+			unfold last_segment in Hs2; simpl in Hs2; rewrite Hs2.
+			lra.
+		}
+		pose proof (embedding_PMP_to_P_in_rect seg1 seg2 seg3 Hrightabove Hs Hls2) as [segP [HP [Hin_rect [Hinit_term Hslope]]]].
 		(* 欲しかった埋め込み *) 
 		exists (ls1 ++ [segP] ++ ls3). 
 		unfold admissible. 
@@ -1274,9 +1325,10 @@ Lemma AdmissibleDirs_r2_Plus: forall l r,
 Proof.
 	intros l r admds. 
 	(* 疎な開埋め込みをとる *)
-	pose proof (embed_sparsely_listDir_with_good_features _ _ _ admds PPMM_is_oneway) 
-		as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen [Hsparse Hgood]]]]]]]]];
-	simpl in *.
+	pose proof (embed_sparsely_listDir_PPMM _ _ admds) as H.
+	specialize H with 0 1 0 1 2 2.
+	destruct H as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen [Hsparse [Hinit [Hterm [Hs1 Hs2]]]]]]]]]]]];
+	try lra; simpl in *.
 	assert (Hdir: hd Plus (l ++ Plus :: Minus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
 		destruct l; simpl in *;
@@ -1294,7 +1346,24 @@ Proof.
 			unfold embed_listDir. exists sc. split; assumption.
 		}
 		pose proof (embedding_four_dir Plus Plus Minus Minus ls2 Hls2) as [seg1 [seg2 [seg3 [seg4 HPPMM]]]]; subst.
-		pose proof (embedding_PPMM_to_PM_in_rect seg1 seg2 seg3 seg4 Hgood Hls2) 
+		assert (Hrightabove : rightabove (init seg1) (term seg4)). {
+			simpl in Hinit; rewrite Hinit.
+			unfold last_segment in Hterm; simpl in Hterm; rewrite Hterm.
+			simpl. split; lra.
+		}
+		assert (Hslope1 : slope_two (init seg1) (term seg4) < slope_init seg1). {
+			simpl in Hinit; rewrite Hinit.
+			unfold last_segment in Hterm; simpl in Hterm; rewrite Hterm.
+			simpl in Hs1; rewrite Hs1.
+			simpl. lra.
+		}
+		assert (Hslope2 : slope_two (init seg1) (term seg4) < slope_term seg4). {
+			simpl in Hinit; rewrite Hinit.
+			unfold last_segment in Hterm; simpl in Hterm; rewrite Hterm.
+			unfold last_segment in Hs2; simpl in Hs2; rewrite Hs2.
+			simpl. lra.
+		}
+		pose proof (embedding_PPMM_to_PM_in_rect seg1 seg2 seg3 seg4 Hrightabove Hslope1 Hslope2 Hls2) 
 			as [seg1' [seg2' [HPM [Hin_rect [Hinit_term Hslope]]]]].
 		(* 欲しかった埋め込み *) 
 		exists (ls1 ++ [seg1'; seg2'] ++ ls3). 
