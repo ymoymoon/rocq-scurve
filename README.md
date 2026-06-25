@@ -31,6 +31,10 @@ This gives a mechanical justification guarantee to the theory of QRC, which is s
 | admissibility of reduced form | 各簡約形の許容可能性 | Sec 4.1-4.7 | (Admissible.all_admissibles_quotient) |
 | judgment of admissibility | 許容可能性の判定法 | Th.2 |  |
 
+## Documentation
+
+[HTML rendering of the source code](https://proof-ninja.github.io/rocq-scurve/) (using [`rocqnavi`](https://github.com/affeldt-aist/rocqnavi)).
+
 ## Requirement
 
 - [opam](https://opam.ocaml.org/doc/Install.html)
