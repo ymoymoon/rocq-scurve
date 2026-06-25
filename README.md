@@ -7,6 +7,22 @@ This repository formalizes and proves the Admissibility condition in Takahashi's
 This project formalizes definitions and corollaries/theorems on Admissibility of trajectories in QRC in Rocq's proof environment.
 This gives a mechanical justification guarantee to the theory of QRC, which is spoken geometrically.
 
+## Documentation
+
+[HTML rendering of the source code](https://proof-ninja.github.io/rocq-scurve/) (using [`rocqnavi`](https://github.com/affeldt-aist/rocqnavi)).
+
+## Requirement
+
+- [opam](https://opam.ocaml.org/doc/Install.html)
+- [Rocq prover](https://rocq-prover.org/install)
+
+## How to Build
+
+```
+./configure.sh
+make
+```
+
 ## Correspondence with the Paper
 | Term | Term in Japanese | Paper (Japanese one) | Related Rocq Code |
 | ---- | ---- | ---- | ---- |
@@ -30,18 +46,6 @@ This gives a mechanical justification guarantee to the theory of QRC, which is s
 | admissibility preservation (<-) | 簡約形が許容可能なら簡約前も許容可能 | Th.1(<-) |  |
 | admissibility of reduced form | 各簡約形の許容可能性 | Sec 4.1-4.7 | (Admissible.all_admissibles_quotient) |
 | judgment of admissibility | 許容可能性の判定法 | Th.2 |  |
-
-## Requirement
-
-- [opam](https://opam.ocaml.org/doc/Install.html)
-- [Rocq prover](https://rocq-prover.org/install)
-
-## How to Build
-
-```
-./configure.sh
-make
-```
 
 ## References
 
