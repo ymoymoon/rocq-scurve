@@ -493,6 +493,16 @@ Proof.
 Admitted. *)
 
 
+Definition rightabove (rr1 rr2 : R * R) := 
+	let (x1, y1) := rr1 in
+	let (x2, y2) := rr2 in x1 < x2 /\ y1 < y2.
+
+(* 0 で割ったら 0 なので注意 *)
+Definition slope_two (rr1 rr2 : R * R) :=
+	let (x1, y1) := rr1 in
+	let (x2, y2) := rr2 in (y2 - y1) / (x2 - x1).
+
+
 (*【証明の本質としている補題１】 許容可能ならば，その中の単方向な sub_ds の埋め込み sub_ls 周りで疎な開埋め込みが存在する *)
 Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
@@ -507,41 +517,34 @@ Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
 Proof. Admitted.
 
 (* 上の補題を強めたもの
-		sub_ds の埋め込みについて，始点・終点・それぞれでの傾きを，
-		（ここでは右上方向に伸びると仮定した上で）任意に指定することができる *)
+		sub_ds の埋め込みについて，その部分の埋め込みの終点が始点の右上側にあり，
+		始点での傾きが終点での傾き（どちらも正）よりも大きいようにできる *)
 (* TODO：上の補題に統合しても良い *)
 Lemma embed_sparsely_listDir_PMP (ds1 ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ [Plus; Minus; Plus] ++ ds2)
-	-> forall x1 x2 y1 y2 s1 s2,
-		x1 < x2 -> y1 < y2 -> 0 < s1 -> 0 < s2 ->
-		exists l r sub_ls, 
-		embed_listDir ds1 l
-		/\ embed_listDir [Plus; Minus; Plus] sub_ls
+	-> exists l r seg1 seg2 seg3,
+		rightabove (init seg1) (term seg3)
+	  /\ 0 < slope_term seg3 < slope_init seg1 
+		/\ embed_listDir ds1 l
+		/\ embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3]
 		/\ embed_listDir ds2 r
-		/\ embed_listDir (ds1 ++ [Plus; Minus; Plus] ++ ds2) (l ++ sub_ls ++ r)
-		/\ ~ close (l ++ sub_ls ++ r)
-		/\ sparse l sub_ls r
-		/\ init (hd_segment sub_ls) = (x1, y1)
-		/\ term (last_segment sub_ls) = (x2, y2)
-		/\ slope_init (hd_segment sub_ls) = s1
-		/\ slope_term (last_segment sub_ls) = s2.
+		/\ embed_listDir (ds1 ++ [Plus; Minus; Plus] ++ ds2) (l ++ [seg1; seg2; seg3] ++ r)
+		/\ ~ close (l ++ [seg1; seg2; seg3] ++ r)
+		/\ sparse l [seg1; seg2; seg3] r.
 Proof. Admitted.
 
 Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2)
-	-> forall x1 x2 y1 y2 s1 s2,
-		x1 < x2 -> y1 < y2 -> 0 < s1 -> 0 < s2 ->
-		exists l r sub_ls, 
-		embed_listDir ds1 l
-		/\ embed_listDir [Plus; Plus; Minus; Minus] sub_ls
+	-> exists l r seg1 seg2 seg3 seg4, 
+		rightabove (init seg1) (term seg4)
+		/\ slope_two (init seg1) (term seg4) < slope_init seg1
+		/\ slope_two (init seg1) (term seg4) < slope_term seg4
+		/\ embed_listDir ds1 l
+		/\ embed_listDir [Plus; Plus; Minus; Minus] [seg1; seg2; seg3; seg4]
 		/\ embed_listDir ds2 r
-		/\ embed_listDir (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) (l ++ sub_ls ++ r)
-		/\ ~ close (l ++ sub_ls ++ r)
-		/\ sparse l sub_ls r
-		/\ init (hd_segment sub_ls) = (x1, y1)
-		/\ term (last_segment sub_ls) = (x2, y2)
-		/\ slope_init (hd_segment sub_ls) = s1
-		/\ slope_term (last_segment sub_ls) = s2.
+		/\ embed_listDir (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) (l ++ [seg1; seg2; seg3; seg4] ++ r)
+		/\ ~ close (l ++ [seg1; seg2; seg3; seg4] ++ r)
+		/\ sparse l [seg1; seg2; seg3; seg4] r.
 Proof. Admitted.	
 
 (* Plus (の向きを持つ Primitive Segment) の埋め込みを，端点とそこでの傾きを保存したまま
@@ -567,15 +570,6 @@ Lemma embedding_PM_to_PPMM_in_rect : forall (seg1 seg2 : Segment),
 		/\ same_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4']
 		/\ same_slope_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4'].
 Proof. Admitted.
-
-Definition rightabove (rr1 rr2 : R * R) := 
-	let (x1, y1) := rr1 in
-	let (x2, y2) := rr2 in x1 < x2 /\ y1 < y2.
-
-(* 0 で割ったら 0 なので注意 *)
-Definition slope_two (rr1 rr2 : R * R) :=
-	let (x1, y1) := rr1 in
-	let (x2, y2) := rr2 in (y2 - y1) / (x2 - x1).
 
 (* [Plus; Minus; Plus] の埋め込みは，その部分の埋め込みの終点が始点の右上側にあり，
 		始点での傾きが終点での傾き（どちらも正）よりも大きいならば，
@@ -969,8 +963,7 @@ Proof.
 	intros l r admds. 
 	(* 疎な開埋め込みをとる *)
 	pose proof (embed_sparsely_listDir_PMP _ _ admds) as H.
-	specialize H with 0 1 0 1 2 1.
-	destruct H as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen [Hsparse [Hinit [Hterm [Hs1 Hs2]]]]]]]]]]]];
+	destruct H as [ls1 [ls3 [seg1 [seg2 [seg3 [Hrightabove [Hslope [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]]]]]];
 	try lra; simpl in *.
 	assert (Hdir: hd Plus (l ++ Plus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
@@ -985,21 +978,7 @@ Proof.
 	- (* 向きが l ++ [Plus; Minus; Plus] ++ r であること *)
 		rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 	- (* 許容可能であること *)
-		assert (H: embed_listDir (l ++ [Plus; Minus; Plus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
-			unfold embed_listDir. exists sc. split; assumption.
-		}
-		pose proof (embedding_three_dir Plus Minus Plus ls2 Hls2) as [seg1 [seg2 [seg3 HPMP]]]; subst.
-		assert (Hrightabove : rightabove (init seg1) (term seg3)). {
-			simpl in Hinit; rewrite Hinit.
-			unfold last_segment in Hterm; simpl in Hterm; rewrite Hterm.
-			simpl. split; lra.
-		}
-		assert (Hs : 0 < slope_term seg3 < slope_init seg1). {
-			simpl in Hs1; rewrite Hs1.
-			unfold last_segment in Hs2; simpl in Hs2; rewrite Hs2.
-			lra.
-		}
-		pose proof (embedding_PMP_to_P_in_rect seg1 seg2 seg3 Hrightabove Hs Hls2) as [segP [HP [Hin_rect [Hinit_term Hslope]]]].
+		pose proof (embedding_PMP_to_P_in_rect seg1 seg2 seg3 Hrightabove Hslope Hls2) as [segP [HP [Hin_rect [Hinit_term Hsame_slope]]]].
 		(* 欲しかった埋め込み *) 
 		exists (ls1 ++ [segP] ++ ls3). 
 		unfold admissible. 
@@ -1079,8 +1058,7 @@ Proof.
 	intros l r admds. 
 	(* 疎な開埋め込みをとる *)
 	pose proof (embed_sparsely_listDir_PPMM _ _ admds) as H.
-	specialize H with 0 1 0 1 2 2.
-	destruct H as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen [Hsparse [Hinit [Hterm [Hs1 Hs2]]]]]]]]]]]];
+	destruct H as [ls1 [ls3 [seg1 [seg2 [seg3 [seg4 [Hrightabove [Hslope1 [Hslope2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]]]]]]]];
 	try lra; simpl in *.
 	assert (Hdir: hd Plus (l ++ Plus :: Minus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
@@ -1095,27 +1073,6 @@ Proof.
 	- (* 向きが l ++ [Plus; Minus; Plus] ++ r であること *)
 		rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 	- (* 許容可能であること *)
-		assert (H: embed_listDir (l ++ [Plus; Plus; Minus; Minus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
-			unfold embed_listDir. exists sc. split; assumption.
-		}
-		pose proof (embedding_four_dir Plus Plus Minus Minus ls2 Hls2) as [seg1 [seg2 [seg3 [seg4 HPPMM]]]]; subst.
-		assert (Hrightabove : rightabove (init seg1) (term seg4)). {
-			simpl in Hinit; rewrite Hinit.
-			unfold last_segment in Hterm; simpl in Hterm; rewrite Hterm.
-			simpl. split; lra.
-		}
-		assert (Hslope1 : slope_two (init seg1) (term seg4) < slope_init seg1). {
-			simpl in Hinit; rewrite Hinit.
-			unfold last_segment in Hterm; simpl in Hterm; rewrite Hterm.
-			simpl in Hs1; rewrite Hs1.
-			simpl. lra.
-		}
-		assert (Hslope2 : slope_two (init seg1) (term seg4) < slope_term seg4). {
-			simpl in Hinit; rewrite Hinit.
-			unfold last_segment in Hterm; simpl in Hterm; rewrite Hterm.
-			unfold last_segment in Hs2; simpl in Hs2; rewrite Hs2.
-			simpl. lra.
-		}
 		pose proof (embedding_PPMM_to_PM_in_rect seg1 seg2 seg3 seg4 Hrightabove Hslope1 Hslope2 Hls2) 
 			as [seg1' [seg2' [HPM [Hin_rect [Hinit_term Hslope]]]]].
 		(* 欲しかった埋め込み *) 
