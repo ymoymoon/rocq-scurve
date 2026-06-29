@@ -7,6 +7,7 @@ Require Import Segment.
 Require Import ListExt.
 Import ListNotations.
 From Stdlib Require Import Lra.
+From Stdlib Require Import Lia.
 
 
 (* --------------------------------------------------------------------------- *)
@@ -30,17 +31,30 @@ Definition same_extention_head ls1 ls2 :=
 Definition same_extention_last ls1 ls2 := 
 	(forall rr, onLast_extend ls1 rr <-> onLast_extend ls2 rr).
 
+(* 引数のリスト ls を extend した時に， ls の n 番目のセグメントの上を指すのは
+		nth (segment_border ls) <= t <= (n+1)th (segment_border ls)
+		また segment_border ls の先頭要素より小さい t では先頭の延長線上を指し，
+		segment_border ls の最後の要素より大きい t では末尾の延長線上を指す *)
+(* TODO : 空リストの扱い *)
+Parameter segment_border : list Segment -> list R.
+Axiom border_length : forall ls, length (segment_border ls) = S (length ls).
+
 (* extend の満たすべき性質．単調性を公理として導ける？ *)
 (* TODO : 後の定理を示すため，[t] の大小関係に関する縛りも結論に入れる *)
 Lemma extention_split : forall t ls,
 	let p := extend ls t in
 	ls <> []
-	-> (exists t', (* 先頭の延長線上 *)
-			t' <= 0 /\ p = point (hd_segment ls) t')
-	\/ (exists t' seg, (* セグメント上 *)
-			0 <= t' <= 1 /\ In seg ls /\ p = point seg t')
-	\/ (exists t', (* 末尾の延長線上 *)
-			1 <= t' /\ p = point (last_segment ls) t').
+	-> (exists border0 t', (* 先頭の延長線上 *)
+			nth_error (segment_border ls) 0 = Some border0 /\
+			t <= border0 /\ t' <= 0 /\ p = point (hd_segment ls) t')
+	\/ (exists n border1 border2 t' seg, (* セグメント上 *)
+			nth_error ls n = Some seg /\
+			nth_error (segment_border ls) n = Some border1 /\
+			nth_error (segment_border ls) (S n) = Some border2 /\
+			border1 <= t <= border2 /\ 0 <= t' <= 1 /\ p = point seg t')
+	\/ (exists border_last t', (* 末尾の延長線上 *)
+			nth_error (segment_border ls) (length ls) = Some border_last /\
+			border_last <= t /\ 1 <= t' /\ p = point (last_segment ls) t').
 Proof. 
 Admitted.
 
@@ -86,37 +100,56 @@ Proof.
 	intros t1 t2 ls p1 p2 Hls H12.
 	pose proof (extention_split t1 ls Hls) as H1.
 	pose proof (extention_split t2 ls Hls) as H2.
-	destruct H1 as [[t1' [Ht1' Heq1]] | [[t1' [seg1 [Ht1' [Hin1 Heq1]]]] | [t1' [Ht1' Heq1]]]];
-	destruct H2 as [[t2' [Ht2' Heq2]] | [[t2' [seg2 [Ht2' [Hin2 Heq2]]]] | [t2' [Ht2' Heq2]]]].
+	destruct H1 as [[border_first1 [t1' [Hnth1 [Ht1 [Ht1' Heq1]]]]] | [[n1 [border11 [border12 [t1' [seg1 [Hnth1 [Hnth11 [Hnth12 [Ht1 [Ht1' Heq1]]]]]]]]]] | [border_last1 [t1' [Hnth1 [Ht1 [Ht1' Heq1]]]]]]];
+	destruct H2 as [[border_first2 [t2' [Hnth2 [Ht2 [Ht2' Heq2]]]]] | [[n2 [border21 [border22 [t2' [seg2 [Hnth2 [Hnth21 [Hnth22 [Ht2 [Ht2' Heq2]]]]]]]]]] | [border_last2 [t2' [Hnth2 [Ht2 [Ht2' Heq2]]]]]]].
 	- (* t1, t2 とも先頭の延長線上 *) left. 
 		exists t1', t2'. repeat split; try tauto.
-		(* p1 = p2 かつ自己交差の場合に証明できない *) admit.
+		assert (border_first1 = border_first2) by congruence.
+		subst.
+		(* 補題が必要 *) admit.
 	- (* t1 は先頭の延長線上， t2 はセグメント上 *) right; left. 
-		exists t1', t2', seg2. tauto.
+		exists t1', t2', seg2. 
+		apply nth_error_In in Hnth2. tauto.
 	- (* t1 は先頭の延長線上， t2 は末尾の延長線上 *) do 2 right; left.
 		exists t1', t2'. tauto.
 	- (* t1 はセグメント上， t2 は先頭の延長線上 *) do 3 right; left.
-		exists t1', t2', seg1. tauto.
+		exists t1', t2', seg1.
+		apply nth_error_In in Hnth1. tauto.
 	- (* t1, t2 ともセグメント上 *)
-		pose proof (In_split_In_order seg1 seg2 ls Hin1 Hin2) as Hin.
-		destruct Hin as [Hin | [Hin | Hin]].
+		destruct (Nat.eqb n1 n2) eqn: E.
 		+ (* t1, t2 とも同じセグメント上 *) do 4 right; left.
+			apply Nat.eqb_eq in E.
 			subst. 
+			assert (seg1 = seg2) by congruence.
+			assert (border11 = border21) by congruence.
+			assert (border12 = border22) by congruence.
+			subst.
+			apply nth_error_In in Hnth1.
 		  exists t1', t2', seg2. repeat split; try tauto.
-			(* p1 = p2 かつ自己交差の場合に証明できない *) admit.
-		+ (* t1, t2 が異なるセグメント上 (t1 < t2) *) do 5 right; left.
-			exists t1', t2', seg1, seg2. tauto.
-		+ (* t1, t2 が異なるセグメント上 (t1 > t2) *) do 6 right; left.
-			exists t1', t2', seg1, seg2. tauto.
+			(* 補題が必要 *) admit.
+		+ destruct (Nat.leb n1 n2) eqn: E1.
+			* (* t1, t2 が異なるセグメント上 (t1 < t2) *) do 5 right; left.
+				assert ((n1 < n2)%nat). {
+					apply Nat.leb_le in E1.
+					destruct E1; try (rewrite Nat.eqb_refl in E; congruence).
+					lia.
+				}
+				exists t1', t2', seg1, seg2. admit.
+			* (* t1, t2 が異なるセグメント上 (t1 > t2) *) do 6 right; left.
+				exists t1', t2', seg1, seg2. admit.
 	- (* t1 はセグメント上， t2 は末尾の延長線上 *) do 7 right; left.
-		exists t1', t2', seg1. tauto.
+		exists t1', t2', seg1. 
+		apply nth_error_In in Hnth1. tauto.
 	- (* t1 は末尾の延長線上， t2 は先頭の延長線上 *) do 8 right; left.
 		exists t1', t2'. tauto.
 	- (* t1 は末尾の延長線上， t2 はセグメント上 *) do 9 right; left.
-		exists t1', t2', seg2. tauto.
+		exists t1', t2', seg2. 
+		apply nth_error_In in Hnth2. tauto.
 	- (* t1, t2 とも末尾の延長線上 *) repeat right.
 		exists t1', t2'. repeat split; try tauto.
-		(* p1 = p2 かつ自己交差の場合に証明できない *) admit.
+		assert (border_last1 = border_last2) by congruence.
+		subst.
+		(* 補題が必要 *) admit.
 Admitted.
 
 (* ２つのセグメントが１点を共有していれば，それらのセグメントを含む曲線は閉 *)
