@@ -427,3 +427,10 @@ Proof.
 			rewrite <- app_assoc. f_equal.
 Qed.
 
+Lemma In_order_nth : forall {A} n1 n2 a b (l : list A),
+	nth_error l n1 = Some a 
+	-> nth_error l n2 = Some b
+	-> n1 < n2
+	-> In_order a b l.
+Proof.
+Admitted.

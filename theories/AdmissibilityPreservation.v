@@ -79,6 +79,18 @@ Lemma extend_last_not_cross : forall ls t1 t2 border_last,
 Proof.
 Admitted.
 
+(* extend した時も１つのセグメントの中で交差は起こらない *)
+(* TODO : extend しない時の定理とまとめられないか *)
+Lemma extend_one_seg_not_cross : forall ls n t1 t2 border1 border2,
+	nth_error (segment_border ls) n = Some border1
+	-> nth_error (segment_border ls) (S n) = Some border2
+	-> border1 <= t1 <= border2
+	-> border1 <= t2 <= border2
+	-> extend ls t1 = extend ls t2
+	-> t1 = t2.
+Proof.
+Admitted.
+
 Lemma extention_split_2 : forall t1 t2 ls,
 	let p1 := extend ls t1 in
 	let p2 := extend ls t2 in
@@ -127,7 +139,6 @@ Proof.
 		exists t1', t2'. repeat split; try tauto.
 		assert (border_first1 = border_first2) by congruence.
 		subst.
-		(* 補題が必要 *)
 		intros contra; subst.
 		apply H12.
 		eapply extend_head_not_cross; try eassumption. 
@@ -151,7 +162,11 @@ Proof.
 			subst.
 			apply nth_error_In in Hnth1.
 		  exists t1', t2', seg2. repeat split; try tauto.
-			(* 補題が必要 *) admit.
+			(* 補題が必要 *)
+			intros contra; subst.
+			apply H12.
+			eapply (extend_one_seg_not_cross _ n2); try eassumption. 
+		 	congruence.
 		+ destruct (Nat.leb n1 n2) eqn: E1.
 			* (* t1, t2 が異なるセグメント上 (t1 < t2) *) do 5 right; left.
 				assert ((n1 < n2)%nat). {
@@ -159,9 +174,17 @@ Proof.
 					destruct E1; try (rewrite Nat.eqb_refl in E; congruence).
 					lia.
 				}
-				exists t1', t2', seg1, seg2. admit.
+				exists t1', t2', seg1, seg2. 
+				assert (In_order seg1 seg2 ls) by (eapply In_order_nth; eassumption). 
+				tauto.
 			* (* t1, t2 が異なるセグメント上 (t1 > t2) *) do 6 right; left.
-				exists t1', t2', seg1, seg2. admit.
+				assert ((n2 < n1)%nat). {
+					apply Nat.leb_gt in E1.
+					assumption.
+				}
+				exists t1', t2', seg1, seg2. 
+				assert (In_order seg2 seg1 ls) by (eapply In_order_nth; eassumption). 
+				tauto.
 	- (* t1 はセグメント上， t2 は末尾の延長線上 *) do 7 right; left.
 		exists t1', t2', seg1. 
 		apply nth_error_In in Hnth1. tauto.
@@ -178,7 +201,7 @@ Proof.
 		apply H12.
 		eapply extend_last_not_cross; try eassumption. 
 		congruence.
-Admitted.
+Qed.
 
 (* ２つのセグメントが１点を共有していれば，それらのセグメントを含む曲線は閉 *)
 Lemma two_segs_have_same_point_close : forall s1 s2 p ls,
