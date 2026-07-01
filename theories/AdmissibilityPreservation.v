@@ -58,6 +58,27 @@ Lemma extention_split : forall t ls,
 Proof. 
 Admitted.
 
+(* extend した延長部分の先頭だけで交差は起こらない *)
+(* TODO : この辺りは， segment_border が単調増加という公理などから示せるかもしれない *)
+Lemma extend_head_not_cross : forall ls t1 t2 border_first,
+	nth_error (segment_border ls) 0 = Some border_first
+	-> t1 <= border_first
+	-> t2 <= border_first
+	-> extend ls t1 = extend ls t2
+	-> t1 = t2.
+Proof.
+Admitted.
+
+(* extend した延長部分の末尾だけで交差は起こらない *)
+Lemma extend_last_not_cross : forall ls t1 t2 border_last,
+	nth_error (segment_border ls) (length ls) = Some border_last
+	-> border_last <= t1
+	-> border_last <= t2
+	-> extend ls t1 = extend ls t2
+	-> t1 = t2.
+Proof.
+Admitted.
+
 Lemma extention_split_2 : forall t1 t2 ls,
 	let p1 := extend ls t1 in
 	let p2 := extend ls t2 in
@@ -106,7 +127,11 @@ Proof.
 		exists t1', t2'. repeat split; try tauto.
 		assert (border_first1 = border_first2) by congruence.
 		subst.
-		(* 補題が必要 *) admit.
+		(* 補題が必要 *)
+		intros contra; subst.
+		apply H12.
+		eapply extend_head_not_cross; try eassumption. 
+		congruence.
 	- (* t1 は先頭の延長線上， t2 はセグメント上 *) right; left. 
 		exists t1', t2', seg2. 
 		apply nth_error_In in Hnth2. tauto.
@@ -149,7 +174,10 @@ Proof.
 		exists t1', t2'. repeat split; try tauto.
 		assert (border_last1 = border_last2) by congruence.
 		subst.
-		(* 補題が必要 *) admit.
+		intros contra; subst.
+		apply H12.
+		eapply extend_last_not_cross; try eassumption. 
+		congruence.
 Admitted.
 
 (* ２つのセグメントが１点を共有していれば，それらのセグメントを含む曲線は閉 *)
