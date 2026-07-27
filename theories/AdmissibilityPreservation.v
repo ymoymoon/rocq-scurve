@@ -586,6 +586,7 @@ Definition slope_two (rr1 rr2 : R * R) :=
 	let (x1, y1) := rr1 in
 	let (x2, y2) := rr2 in (y2 - y1) / (x2 - x1).
 
+Parameter orn_seg : Segment -> Direction.
 
 (*【証明の本質としている補題１】 許容可能ならば，その中の単方向な sub_ds の埋め込み sub_ls 周りで疎な開埋め込みが存在する *)
 Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
@@ -598,7 +599,20 @@ Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
 		/\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r)
 		/\ ~ close (l ++ sub_ls ++ r)
 		/\ sparse l sub_ls r.
-Proof. Admitted.
+Proof. 
+	intros Hadm Honeway.
+	assert (H_notnil : sub_ds <> []). {
+		intros contra.
+		destruct Honeway as [sc [Hdir Honeway]].
+		destruct Hdir.
+		destruct Honeway as [H_notnil_sc _].
+		unfold scurve_to_direction in contra.
+		apply map_eq_nil in contra.
+		congruence.
+	}
+	apply AdmissibleDirs_exist in Hadm.
+	destruct Hadm as [sc [Hdir [ls [Hembed Hopen]]]].
+Admitted.
 
 (* 上の補題を強めたもの
 		sub_ds の埋め込みについて，その部分の埋め込みの終点が始点の右上側にあり，
