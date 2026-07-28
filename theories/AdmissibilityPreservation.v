@@ -16,11 +16,13 @@ From Stdlib Require Import Lia.
 Definition hd_segment ls := hd default_segment ls.
 Definition last_segment ls := last ls default_segment.
 
+Definition Point := (R * R)%type.
+
 (* TODO: 空リストを省く *)
-Definition onHead (seg: Segment) (rr : R * R) := exists (t:R), t <= 0 /\ point seg t = rr.
-Definition onHead_extend (ls: list Segment) (rr : R * R) := onHead (hd_segment ls) rr.
-Definition onLast (seg: Segment) (rr : R * R) := exists (t:R), 1 <= t /\ point seg t = rr.
-Definition onLast_extend (ls: list Segment) (rr : R * R) := onLast (last_segment ls) rr.
+Definition onHead (seg: Segment) (rr : Point) := exists (t:R), t <= 0 /\ point seg t = rr.
+Definition onHead_extend (ls: list Segment) (rr : Point) := onHead (hd_segment ls) rr.
+Definition onLast (seg: Segment) (rr : Point) := exists (t:R), 1 <= t /\ point seg t = rr.
+Definition onLast_extend (ls: list Segment) (rr : Point) := onLast (last_segment ls) rr.
 Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
 (* TODO: extend に関する公理を完成させた後， onExtendSegment と整合することを確認
 		特に空リストの扱い *)
@@ -376,7 +378,7 @@ Definition is_one_way_listDir (ds: list Direction) : Prop :=
 		必要があれば証明 *)
 
 (* 曲線の始点と終点を結んだ線分を対角線にもつ矩形．部分曲線を含むとは限らない *)
-Definition rectangular_from_diagonal (rr1 rr2 : R * R) : R * R -> Prop :=
+Definition rectangular_from_diagonal (rr1 rr2 : Point) : Point -> Prop :=
 	let (x1, y1) := rr1 in 
 	let (x2, y2) := rr2 in 
 	fun rr => 
@@ -384,7 +386,7 @@ Definition rectangular_from_diagonal (rr1 rr2 : R * R) : R * R -> Prop :=
 	(x1 < x < x2 \/ x2 < x < x1) /\ (y1 < y < y2 \/ y2 < y < y1).
 Definition in_rect_from_diagonal a b rr := rectangular_from_diagonal a b rr.
 (* TODO: 空リストを含まない方が良い *)
-Definition in_rect (ls: list Segment) (rr: R * R) := 
+Definition in_rect (ls: list Segment) (rr: Point) := 
 	in_rect_from_diagonal (init (hd_segment ls)) (term (last_segment ls)) rr.
 
 (* scurve の埋め込みが sub_ls 周りで疎 := sub_ls の始点と終点から作成できる矩形に全然関係ないセグメントが侵入してこない
@@ -577,16 +579,114 @@ Proof.
 Admitted. *)
 
 
-Definition rightabove (rr1 rr2 : R * R) := 
+Definition rightabove (rr1 rr2 : Point) := 
 	let (x1, y1) := rr1 in
 	let (x2, y2) := rr2 in x1 < x2 /\ y1 < y2.
 
 (* 0 で割ったら 0 なので注意 *)
-Definition slope_two (rr1 rr2 : R * R) :=
+Definition slope_two (rr1 rr2 : Point) :=
 	let (x1, y1) := rr1 in
 	let (x2, y2) := rr2 in (y2 - y1) / (x2 - x1).
 
 Parameter orn_seg : Segment -> Direction.
+
+(* 上下に引き伸ばす時の境目の線 *)
+Parameter operation_border : list Segment -> list Segment -> list Segment -> (R -> R).
+Inductive Region : Type := Reduced | RegA | RegB.
+
+Definition classify (l sub_ls r : list Segment) (p : Point) : Region :=
+  let q0 := init (hd_segment sub_ls) in
+  let q3 := term (last_segment sub_ls) in
+  let y  := operation_border l sub_ls r (fst p) in
+  if Rlt_dec y (snd p) then RegA
+  else if Rlt_dec (snd p) y then RegB
+  else if Rle_dec (fst q0) (fst p) then
+         (if Rle_dec (fst p) (fst q3) then Reduced else RegB)
+       else RegA.
+
+Definition shift (h : R) (r : Region) (p : Point) : Point :=
+  match r with
+  | Reduced => p
+  | RegA    => (fst p, snd p + h)
+  | RegB    => (fst p, snd p - h)
+  end.
+
+Definition operate_point (l sub_ls r : list Segment) (h : R) (p : Point) : Point :=
+  shift h (classify l sub_ls r p) p.
+
+Definition operate (l sub_ls r : list Segment) (h : R) (ps : list Point) : list Point :=
+  map (operate_point l sub_ls r h) ps.
+
+(* 三分割の網羅性 *)
+Lemma classify_total :
+  forall l sub_ls r p,
+    classify l sub_ls r p = Reduced 
+		\/ classify l sub_ls r p = RegA 
+		\/ classify l sub_ls r p = RegB.
+Proof.
+  intros l sub_ls r p. unfold classify.
+  destruct (Rlt_dec (operation_border l sub_ls r (fst p)) (snd p)); auto.
+  destruct (Rlt_dec (snd p) (operation_border l sub_ls r (fst p))); auto.
+  destruct (Rle_dec (fst (init (hd_segment sub_ls))) (fst p));
+    [ destruct (Rle_dec (fst p) (fst (term (last_segment sub_ls)))) | ]; auto.
+Qed.
+
+Lemma classify_reduced_char :
+  forall l sub_ls r p,
+    classify l sub_ls r p = Reduced ->
+    snd p = operation_border l sub_ls r (fst p) /\
+    fst (init (hd_segment sub_ls)) <= fst p <= fst (term (last_segment sub_ls)).
+Proof.
+  intros l sub_ls r p H. unfold classify in H.
+  destruct (Rlt_dec (operation_border l sub_ls r (fst p)) (snd p)); [discriminate|].
+  destruct (Rlt_dec (snd p) (operation_border l sub_ls r (fst p))); [discriminate|].
+  destruct (Rle_dec (fst (init (hd_segment sub_ls))) (fst p)) as [Hle0|];
+    [ destruct (Rle_dec (fst p) (fst (term (last_segment sub_ls)))) as [Hle3|]; [|discriminate]
+    | discriminate].
+  split; [lra | split; assumption].
+Qed.
+
+Lemma op_fixes_reduced :
+  forall l sub_ls r h p,
+    classify l sub_ls r p = Reduced -> operate_point l sub_ls r h p = p.
+Proof.
+  intros l sub_ls r h p H. unfold operate_point. rewrite H. reflexivity.
+Qed.
+
+(* 性質の良い埋め込みを最初に取っておく（その後操作を施す） *)
+Lemma embed_listDir_cond : forall (ds1 sub_ds ds2 : list Direction),
+	AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
+	-> is_one_way_listDir sub_ds
+	-> exists l sub_ls r,
+		embed_listDir ds1 l
+		/\ embed_listDir sub_ds sub_ls
+		/\ embed_listDir ds2 r
+		/\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r)
+		/\ ~ close (l ++ sub_ls ++ r)
+		/\ all_same_h sub_ls e (* x 軸正の向きに単調 *)
+		/\ rightabove (init (hd_segment sub_ls)) (term (last_segment sub_ls))
+		/\ (forall rr, onSegmentlist sub_ls rr -> in_rect sub_ls rr) (* sub_ls は始点と終点から作れる長方形の中に収まる *).
+Proof.
+Admitted.
+
+(* 操作を施したら，簡約部周りで疎になる *)
+Lemma operate_sparse :
+  forall (ds1 sub_ds ds2 : list Direction) (l0 sub_ls0 r0 : list Segment),
+    embed_listDir ds1 l0 ->
+    embed_listDir sub_ds sub_ls0 ->
+    embed_listDir ds2 r0 ->
+    embed_listDir (ds1 ++ sub_ds ++ ds2) (l0 ++ sub_ls0 ++ r0) ->
+    ~ close (l0 ++ sub_ls0 ++ r0) ->
+    all_same_h sub_ls0 e (* x 軸正の向きに単調 *) ->
+    exists l r sub_ls,
+      embed_listDir ds1 l /\
+      embed_listDir sub_ds sub_ls /\
+      embed_listDir ds2 r /\
+      embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r) /\
+      ~ close (l ++ sub_ls ++ r) /\
+      sparse l sub_ls r.
+Proof.
+Admitted.
 
 (*【証明の本質としている補題１】 許容可能ならば，その中の単方向な sub_ds の埋め込み sub_ls 周りで疎な開埋め込みが存在する *)
 Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
@@ -610,9 +710,12 @@ Proof.
 		apply map_eq_nil in contra.
 		congruence.
 	}
-	apply AdmissibleDirs_exist in Hadm.
-	destruct Hadm as [sc [Hdir [ls [Hembed Hopen]]]].
-Admitted.
+	pose proof (embed_listDir_cond ds1 sub_ds ds2 Hadm Honeway) as 
+		[l [sub_ls [r [Hl [Hmid [Hr [Hembed [Hopen [Honeway_ls _]]]]]]]]].
+	pose proof (operate_sparse ds1 sub_ds ds2 l sub_ls r
+              Hl Hmid Hr Hembed Hopen Honeway_ls).
+	assumption.
+Qed.
 
 (* 上の補題を強めたもの
 		sub_ds の埋め込みについて，その部分の埋め込みの終点が始点の右上側にあり，
