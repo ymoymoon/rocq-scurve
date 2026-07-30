@@ -671,20 +671,19 @@ Admitted.
 
 (* 操作を施したら，簡約部周りで疎になる *)
 Lemma operate_sparse :
-  forall (ds1 sub_ds ds2 : list Direction) (l0 sub_ls0 r0 : list Segment),
-    embed_listDir ds1 l0 ->
-    embed_listDir sub_ds sub_ls0 ->
-    embed_listDir ds2 r0 ->
-    embed_listDir (ds1 ++ sub_ds ++ ds2) (l0 ++ sub_ls0 ++ r0) ->
-    ~ close (l0 ++ sub_ls0 ++ r0) ->
-    all_same_h sub_ls0 e (* x 軸正の向きに単調 *) ->
-    exists l r sub_ls,
-      embed_listDir ds1 l /\
-      embed_listDir sub_ds sub_ls /\
-      embed_listDir ds2 r /\
-      embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r) /\
-      ~ close (l ++ sub_ls ++ r) /\
-      sparse l sub_ls r.
+  forall (ds1 sub_ds ds2 : list Direction) (l sub_ls r : list Segment),
+    all_same_h sub_ls e -> (* x 軸正の向きに単調 *)
+		embed_listDir ds1 l ->
+    embed_listDir sub_ds sub_ls ->
+    embed_listDir ds2 r ->
+    embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r) ->
+    ~ close (l ++ sub_ls ++ r) ->
+    exists l' r',
+      embed_listDir ds1 l' /\ (* 埋め込みであること，開であることは保存 *)
+      embed_listDir ds2 r' /\
+      embed_listDir (ds1 ++ sub_ds ++ ds2) (l' ++ sub_ls ++ r') /\
+      ~ close (l' ++ sub_ls ++ r') /\
+      sparse l' sub_ls r'.
 Proof.
 Admitted.
 
@@ -713,8 +712,8 @@ Proof.
 	pose proof (embed_listDir_cond ds1 sub_ds ds2 Hadm Honeway) as 
 		[l [sub_ls [r [Hl [Hmid [Hr [Hembed [Hopen [Honeway_ls _]]]]]]]]].
 	pose proof (operate_sparse ds1 sub_ds ds2 l sub_ls r
-              Hl Hmid Hr Hembed Hopen Honeway_ls).
-	assumption.
+              Honeway_ls Hl Hmid Hr Hembed Hopen) as [l' [r' Hgoal]].
+	exists l', r', sub_ls. split; tauto.
 Qed.
 
 (* 上の補題を強めたもの
