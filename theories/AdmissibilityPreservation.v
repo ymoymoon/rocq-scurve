@@ -617,19 +617,6 @@ Definition operate_point (l sub_ls r : list Segment) (h : R) (p : Point) : Point
 Definition operate (l sub_ls r : list Segment) (h : R) (ps : list Point) : list Point :=
   map (operate_point l sub_ls r h) ps.
 
-(* 三分割の網羅性 *)
-Lemma classify_total :
-  forall l sub_ls r p,
-    classify l sub_ls r p = Reduced 
-		\/ classify l sub_ls r p = RegA 
-		\/ classify l sub_ls r p = RegB.
-Proof.
-  intros l sub_ls r p. unfold classify.
-  destruct (Rlt_dec (operation_border l sub_ls r (fst p)) (snd p)); auto.
-  destruct (Rlt_dec (snd p) (operation_border l sub_ls r (fst p))); auto.
-  destruct (Rle_dec (fst (init (hd_segment sub_ls))) (fst p));
-    [ destruct (Rle_dec (fst p) (fst (term (last_segment sub_ls)))) | ]; auto.
-Qed.
 
 Lemma classify_reduced_char :
   forall l sub_ls r p,
