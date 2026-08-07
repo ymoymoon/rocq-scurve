@@ -32,6 +32,7 @@ Axiom neq_init_term_x : forall seg, init_x seg <> term_x seg.
 Axiom neq_init_term_y : forall seg, init_y seg <> term_y seg.
 Axiom neq_init_term   : forall seg, init seg <> term seg.
 
+(* cvx_seg は不要？ orn_seg だけで良いのでは *)
 Parameter Direction : Type.
 Parameter orn_seg   : Segment -> Direction.
 Parameter Convexity : Type.
@@ -109,7 +110,8 @@ Qed.
 (*  2.  赤線 = x の関数（旧 operation_border の再実装）                *)
 (* ================================================================= *)
 
-Definition Border := R -> R.
+Definition Border := R -> R. (* これは良い？確かに境界線ならば関数だが，関数ならば境界線ではないので
+   Border に関する変な補題などがなければ良い *)
 Definition on_border (b : Border) (p : Point) : Prop := snd p = b (fst p).
 
 Inductive Region : Type := RegFix | RegUp | RegDown.
@@ -236,7 +238,7 @@ Record good_border (b : Border) (l sub r : list Segment) : Prop := {
   gb_side : forall s, In s (l ++ r) ->
               weakly_above b (onSegment s) \/ weakly_below b (onSegment s);
 
-  (* (A-4) 延長線（半直線・回り込まない）も横断しない *)
+  (* (A-4) 延長線（半直線）も横断しない *)
   gb_side_head : weakly_above b (onHead_extend (l ++ sub ++ r))
               \/ weakly_below b (onHead_extend (l ++ sub ++ r));
   gb_side_last : weakly_above b (onLast_extend (l ++ sub ++ r))
@@ -260,6 +262,7 @@ Definition eps_separates (b : Border) (eps : R) (l sub r : list Segment) : Prop 
  /\ (forall x, contact_x b (onLast_extend (l ++ sub ++ r)) x ->
        x < rx0 (rect_of sub) - eps \/ rx1 (rect_of sub) + eps < x).
        
+(* ε とった時，端点近くではすぐ横のセグメントが入り込んでしまうので対応必要 *)
 Axiom operate_seg_zone_head :
   forall b eps h s p,
     onHead (operate_seg b eps h s) p ->
@@ -374,6 +377,7 @@ Admitted.
 (* ---- Lemma C : 接続の丸め（★独立の難所）------------------------ *)
 (* 赤線と交わるセグメントは、赤線上の部分が不変なので、向きと凸性を    *)
 (* 保ったまま「同じ向きのセグメント1本」に調整できる                  *)
+(* ついでに傾きも同じに *)
 Lemma reconnect_one_segment :
   forall b eps h s,
     ~ weakly_above b (onSegment s) -> ~ weakly_below b (onSegment s) ->
