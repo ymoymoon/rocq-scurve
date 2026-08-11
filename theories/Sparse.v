@@ -17,51 +17,14 @@ From Stdlib Require Import Lia.
 
 Definition Point := (R * R)%type.
 
-Parameter Segment : Type.
-Parameter point : Segment -> R -> Point.
-Parameter default_segment : Segment.
-
-Definition init (seg : Segment) : Point := point seg 0.
-Definition term (seg : Segment) : Point := point seg 1.
-Definition init_x (s : Segment) : R := fst (init s).
-Definition init_y (s : Segment) : R := snd (init s).
-Definition term_x (s : Segment) : R := fst (term s).
-Definition term_y (s : Segment) : R := snd (term s).
-
-Axiom neq_init_term_x : forall seg, init_x seg <> term_x seg.
-Axiom neq_init_term_y : forall seg, init_y seg <> term_y seg.
-Axiom neq_init_term   : forall seg, init seg <> term seg.
-
-(* cvx_seg は不要？ orn_seg だけで良いのでは *)
-Parameter Direction : Type.
-Parameter orn_seg   : Segment -> Direction.
-Parameter Convexity : Type.
-Parameter cvx_seg   : Segment -> Convexity.
-
-Definition hd_segment   ls := hd default_segment ls.
+Definition hd_segment ls := hd default_segment ls.
 Definition last_segment ls := last ls default_segment.
 
-Definition onSegment (seg : Segment) (rr : Point) :=
-  exists t : R, 0 <= t <= 1 /\ point seg t = rr.
-Definition onHead (seg : Segment) (rr : Point) :=
-  exists t : R, t <= 0 /\ point seg t = rr.
-Definition onLast (seg : Segment) (rr : Point) :=
-  exists t : R, 1 <= t /\ point seg t = rr.
-Definition onHead_extend (ls : list Segment) (rr : Point) :=
-  onHead (hd_segment ls) rr.
-Definition onLast_extend (ls : list Segment) (rr : Point) :=
-  onLast (last_segment ls) rr.
-Definition onSegmentlist (l : list Segment) (rr : Point) :=
-  exists seg, In seg l /\ onSegment seg rr.
+Parameter orn_seg   : Segment -> Direction.
 
 Definition rightabove (rr1 rr2 : Point) :=
   let (x1, y1) := rr1 in
   let (x2, y2) := rr2 in x1 < x2 /\ y1 < y2.
-
-Parameter embed_listDir      : list Direction -> list Segment -> Prop.
-Parameter AdmissibleDirs     : list Direction -> Prop.
-Parameter is_one_way_listDir : list Direction -> Prop.
-Parameter close              : list Segment -> Prop.   (* ~ close = 開 *)
 
 (* x 単調 = x 軸正の向きに進み続ける（y は無関係） *)
 Definition x_monotone_seg  (s : Segment) : Prop := init_x s < term_x s.
@@ -69,19 +32,50 @@ Definition x_monotone_segs (ls : list Segment) : Prop :=
   forall s, In s ls -> x_monotone_seg s.
 
 
+(* TODO: 空リストを省く *)
+Definition onHead (seg: Segment) (rr : Point) := exists (t:R), t <= 0 /\ point seg t = rr.
+Definition onHead_extend (ls: list Segment) (rr : Point) := onHead (hd_segment ls) rr.
+Definition onLast (seg: Segment) (rr : Point) := exists (t:R), 1 <= t /\ point seg t = rr.
+Definition onLast_extend (ls: list Segment) (rr : Point) := onLast (last_segment ls) rr.
+Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
+(* TODO: extend に関する公理を完成させた後， onExtendSegment と整合することを確認
+		特に空リストの扱い *)
+Definition onExtend ls rr := exists t, rr = extend ls t.
+
+Definition same_extention_head ls1 ls2 := 
+	(forall rr, onHead_extend ls1 rr <-> onHead_extend ls2 rr).
+Definition same_extention_last ls1 ls2 := 
+	(forall rr, onLast_extend ls1 rr <-> onLast_extend ls2 rr).
+
+
+Definition embed_listDir (ds: list Direction) (ls: list Segment) : Prop :=
+	exists sc: scurve, scurve_to_direction sc = ds
+	/\ embed_scurve sc ls.
+
+Definition is_one_way_embedding (ls : list Segment) : Prop :=
+	exists sc, embed_scurve sc ls /\ is_one_way_scurve sc.
+Definition is_one_way_listDir (ds: list Direction) : Prop :=
+	exists sc: scurve, scurve_to_direction sc = ds /\ is_one_way_scurve sc.
+(* 帰納的に定義することもできると思われる．
+		特に後者は，回転数を使った定義もできる？
+		必要があれば証明 *)
+
+
 (* ================================================================= *)
-(*  1.  長方形と sparse（延長線も禁止）                                *)
+(*  1.  長方形と sparse                               *)
 (* ================================================================= *)
 
 Record Rect := mkRect { rx0 : R; ry0 : R; rx1 : R; ry1 : R }.
 
+(* 曲線の始点と終点を結んだ線分を対角線にもつ矩形．部分曲線を含むとは限らない *)
+(* TODO: 空リストを含まない方が良い *)
 Definition rect_of (sub : list Segment) : Rect :=
   let q0 := init (hd_segment sub) in
   let q3 := term (last_segment sub) in
   mkRect (Rmin (fst q0) (fst q3)) (Rmin (snd q0) (snd q3))
          (Rmax (fst q0) (fst q3)) (Rmax (snd q0) (snd q3)).
 
-(* 開長方形（境界ケースを避けられる：前回の指摘2） *)
+(* 開長方形（境界ケースを避けられる） *)
 Definition in_rect (Rc : Rect) (p : Point) : Prop :=
   rx0 Rc < fst p < rx1 Rc /\ ry0 Rc < snd p < ry1 Rc.
 
@@ -90,10 +84,10 @@ Definition rect_height (Rc : Rect) : R := ry1 Rc - ry0 Rc.
 
 Definition sparse (l sub r : list Segment) : Prop :=
   let Rc := rect_of sub in
-    (forall p, onSegmentlist (l ++ r) p     -> ~ in_rect Rc p)
-  /\ (forall p, onHead_extend (l ++ sub ++ r) p -> ~ in_rect Rc p)
-  /\ (forall p, onLast_extend (l ++ sub ++ r) p -> ~ in_rect Rc p).
-
+    (forall p, onHead_extend (l ++ sub ++ r) p
+    \/ onSegmentlist (l ++ r) p
+    \/ onLast_extend (l ++ sub ++ r) p -> ~ in_rect Rc p).
+  
 Lemma rect_dims_nonneg :
   forall sub, 0 <= rect_width (rect_of sub) /\ 0 <= rect_height (rect_of sub).
 Proof.
@@ -107,7 +101,7 @@ Qed.
 
 
 (* ================================================================= *)
-(*  2.  赤線 = x の関数（旧 operation_border の再実装）                *)
+(*  2.  境界線：x の関数                *)
 (* ================================================================= *)
 
 Definition Border := R -> R. (* これは良い？確かに境界線ならば関数だが，関数ならば境界線ではないので
@@ -116,7 +110,7 @@ Definition on_border (b : Border) (p : Point) : Prop := snd p = b (fst p).
 
 Inductive Region : Type := RegFix | RegUp | RegDown.
 
-(* sub を引数に取らない：赤線との上下比較だけで決まる *)
+(* sub を引数に取らない：境界線との上下比較だけで決まる *)
 Definition classify (b : Border) (p : Point) : Region :=
   if Rlt_dec (b (fst p)) (snd p) then RegUp
   else if Rlt_dec (snd p) (b (fst p)) then RegDown
@@ -165,6 +159,8 @@ Proof. intros b h p H. unfold operate_point. rewrite H. reflexivity. Qed.
 (*  3.  operate（Segment 1 本 → Segment 1 本、eps は丸め幅）           *)
 (* ================================================================= *)
 
+(* 基本はセグメント全体を，一定の値だけ上下させる．
+    境界線に端点を持つセグメントは，左右の微小領域の中で少し形を変え，境界線の端点を通るようにする *)
 Parameter operate_seg : Border -> R -> R -> Segment -> Segment.
 
 Definition operate_segs (b : Border) (eps h : R) (ls : list Segment)
@@ -175,19 +171,17 @@ Definition weakly_above (b : Border) (P : Point -> Prop) : Prop :=
 Definition weakly_below (b : Border) (P : Point -> Prop) : Prop :=
   forall p, P p -> snd p <= b (fst p).
 
-(* 仕様1：赤線上に完全に乗るセグメントは不動（sub がこれ） *)
+(* 仕様1：境界線上に完全に乗るセグメントは不動（簡約部分） *)
 Axiom operate_seg_fix :
   forall b eps h s,
     (forall p, onSegment s p -> on_border b p) -> operate_seg b eps h s = s.
 
-(* 仕様2：向きと凸性の保存（単一領域なら鉛直平行移動、交差時は Lemma C） *)
+(* 仕様2：向き（凸性）の保存（単一領域なら鉛直平行移動、交差時は Lemma C） *)
 Axiom operate_seg_orn :
   forall b eps h s, orn_seg (operate_seg b eps h s) = orn_seg s.
-Axiom operate_seg_cvx :
-  forall b eps h s, cvx_seg (operate_seg b eps h s) = cvx_seg s.
 
-(* 仕様3：移動後の点は「厳密な平行移動」か「赤線との接触点から eps 以内の *)
-(*        丸め部分」のいずれか（写真：赤線部分は不変なので調整）           *)
+(* 仕様3：移動後の点は「厳密な平行移動」か「境界線との接触点から eps 以内の *)
+(*        丸め部分」のいずれか（写真：境界線部分は不変なので調整）           *)
 Axiom operate_seg_zone :
   forall b eps h s p,
     onSegment (operate_seg b eps h s) p ->
@@ -212,10 +206,10 @@ Qed.
 
 
 (* ================================================================= *)
-(*  4.  良い赤線の仕様                                                *)
+(*  4.  良い境界線の仕様                                                *)
 (* ================================================================= *)
 
-(* --- 赤線との接触点の x 座標 --- *)
+(* --- 境界線との接触点の x 座標 --- *)
 Definition contact_x (b : Border) (P : Point -> Prop) (x : R) : Prop :=
   exists p, P p /\ on_border b p /\ fst p = x.
 
@@ -227,14 +221,14 @@ Axiom vspan_bounds :
     ry0 (rect_of sub) - vspan sub <= snd p <= ry1 (rect_of sub) + vspan sub.
 
 Record good_border (b : Border) (l sub r : list Segment) : Prop := {
-  (* (A-1) sub は赤線のグラフの一部 ⇒ 不動 *)
+  (* (A-1) sub は境界線のグラフの一部 ⇒ 不動 *)
   gb_fits : forall p, onSegmentlist sub p -> on_border b p;
 
-  (* (A-2) 長方形の x 範囲では、赤線は sub のグラフそのもの *)
+  (* (A-2) 長方形の x 範囲では、境界線は sub のグラフそのもの *)
   gb_cover : forall x, rx0 (rect_of sub) <= x <= rx1 (rect_of sub) ->
                exists q, onSegmentlist sub q /\ fst q = x /\ snd q = b x;
 
-  (* (A-3) l, r の各セグメントは赤線を横断しない *)
+  (* (A-3) l, r の各セグメントは境界線を横断しない *)
   gb_side : forall s, In s (l ++ r) ->
               weakly_above b (onSegment s) \/ weakly_below b (onSegment s);
 
@@ -244,7 +238,7 @@ Record good_border (b : Border) (l sub r : list Segment) : Prop := {
   gb_side_last : weakly_above b (onLast_extend (l ++ sub ++ r))
               \/ weakly_below b (onLast_extend (l ++ sub ++ r));
 
-  (* (A-5) l, r と延長線が赤線に触る x は、長方形の x 範囲の外 *)
+  (* (A-5) l, r と延長線が境界線に触る x は、長方形の x 範囲の外 *)
   gb_ct_seg : forall x, contact_x b (onSegmentlist (l ++ r)) x ->
                 x < rx0 (rect_of sub) \/ rx1 (rect_of sub) < x;
   gb_ct_head : forall x, contact_x b (onHead_extend (l ++ sub ++ r)) x ->
@@ -301,7 +295,7 @@ Proof.
     destruct (classify b p0) eqn:Hg;
       unfold shift in Hshift.
 
-    + (* RegFix : 不動。赤線に触っているので接触点、よって x 範囲の外 *)
+    + (* RegFix : 不動。境界線に触っているので接触点、よって x 範囲の外 *)
       subst p.
       assert (Hc : contact_x b P (fst p0)). {
         exists p0; repeat split;
@@ -309,7 +303,7 @@ Proof.
       }
       destruct (Hct _ Hc); lra.
 
-    + (* RegUp : 上へ h。p が長方形内 ⇒ 元の点は長方形より h 下 ⇒ 赤線も下 *)
+    + (* RegUp : 上へ h。p が長方形内 ⇒ 元の点は長方形より h 下 ⇒ 境界線も下 *)
       pose proof (classify_RegUp_char b p0 Hg) as Hup.
       subst p. cbn [fst snd] in Hx0, Hx1, Hy0, Hy1.
       destruct (Hcover (fst p0)) as [q [Hq [Hqx Hqy]]]; [lra|].
@@ -323,7 +317,7 @@ Proof.
       pose proof (vspan_bounds sub q Hq) as [Hql Hqr].
       lra.
 
-  - (* ---- 丸め（写真：赤線と交わる所は赤線部分が不変なので調整）---- *)
+  - (* ---- 丸め（写真：境界線と交わる所は境界線部分が不変なので調整）---- *)
     (* 丸めは接触点から x 方向 eps 以内。接触点は x 範囲から eps 以上外 *)
     assert (Hd' : fst p - fst p0 <= eps /\ - eps <= fst p - fst p0).
     { unfold Rabs in Hd. destruct (Rcase_abs (fst p - fst p0)); lra. }
@@ -354,7 +348,7 @@ Lemma one_way_gives_xmonotone :
     x_monotone_segs sub_ls.
 Admitted.
 
-(* ---- Lemma A : 良い赤線の存在（★ノート①〜⑤。停止性が核）-------- *)
+(* ---- Lemma A : 良い境界線の存在（停止性が核）-------- *)
 Lemma border_good :
   forall l sub r,
     x_monotone_segs sub -> ~ close (l ++ sub ++ r) ->
@@ -367,7 +361,7 @@ Lemma choose_eps :
     exists eps, 0 < eps /\ eps_separates b eps l sub r.
 Admitted.
 
-(* ---- h の選択（sub のみに依存。赤線に依存しない）---------------- *)
+(* ---- h の選択（sub のみに依存。境界線に依存しない）---------------- *)
 Lemma choose_h :
   forall sub, exists h,
     0 < h /\ rect_width (rect_of sub) < h
@@ -375,14 +369,13 @@ Lemma choose_h :
 Admitted.
 
 (* ---- Lemma C : 接続の丸め（★独立の難所）------------------------ *)
-(* 赤線と交わるセグメントは、赤線上の部分が不変なので、向きと凸性を    *)
+(* 境界線と交わるセグメントは、境界線上の部分が不変なので、向きを    *)
 (* 保ったまま「同じ向きのセグメント1本」に調整できる                  *)
 (* ついでに傾きも同じに *)
 Lemma reconnect_one_segment :
   forall b eps h s,
     ~ weakly_above b (onSegment s) -> ~ weakly_below b (onSegment s) ->
-    orn_seg (operate_seg b eps h s) = orn_seg s
-    /\ cvx_seg (operate_seg b eps h s) = cvx_seg s.
+    orn_seg (operate_seg b eps h s) = orn_seg s.
 Admitted.
 
 (* ---- sub は不動、リストは3分割を保つ（証明済み）----------------- *)
@@ -407,17 +400,17 @@ Proof.
 Qed.
 
 (* ---- Lemma D : 埋め込みの保存 ---------------------------------- *)
-(* 単一領域では鉛直平行移動（operate_seg_zone の第1枝）、赤線と交わる  *)
+(* 単一領域では鉛直平行移動（operate_seg_zone の第1枝）、境界線と交わる  *)
 (* 場合は Lemma C。いずれも orn/cvx 不変（operate_seg_orn/cvx）。      *)
 Lemma operate_preserves_embed :
   forall b eps h ds ls,
     embed_listDir ds ls -> embed_listDir ds (operate_segs b eps h ls).
 Admitted.
 
-(* ---- Lemma E : 開の保存（ノート2枚目左 [1][2][3]）-------------- *)
+(* ---- Lemma E : 開の保存 -------------- *)
 (* セグメントは有限・延長線は半直線なので「値が∞」の場合分けは不要。   *)
 (*  [1] セグメント×セグメント：同じ領域なら同じ h 平行移動 ⇒ 移動前も *)
-(*      交差して矛盾／赤線と交わる側は eps 近傍の議論で矛盾            *)
+(*      交差して矛盾／境界線と交わる側は eps 近傍の議論で矛盾            *)
 (*  [2] セグメント×延長線、[3] 延長線×延長線：同様に帰着              *)
 Lemma operate_preserves_open :
   forall b eps h l sub r,
@@ -426,7 +419,7 @@ Lemma operate_preserves_open :
     ~ close (operate_segs b eps h l ++ sub ++ operate_segs b eps h r).
 Admitted.
 
-(* ---- Lemma F : 疎になる（ノート2枚目右 [1][2]）----------------- *)
+(* ---- Lemma F : 疎になる ----------------- *)
 Lemma operate_gives_sparse :
   forall b eps h l sub r,
     0 < eps -> good_border b l sub r -> eps_separates b eps l sub r ->
@@ -435,10 +428,15 @@ Lemma operate_gives_sparse :
 Proof.
   intros b eps h l sub r Heps Hgb Hsep Hh.
   destruct Hsep as [HsepS [HsepH HsepL]].
-  unfold sparse. repeat split.
+  unfold sparse. intros p H. destruct H as [Hhead |[ Hmid | Hlast]].
 
-  - (* [1] l, r のセグメントが長方形に入らない *)
-    intros p [s [Hs Hp]].
+  - (* [head] 先頭の延長線が長方形に入らない *)
+    (* operate 後の先頭セグメントは operate_seg b eps h (hd_segment (l++sub++r)) *)
+    (* operate_seg_zone_head + zone_not_in_rect（P := onHead_extend ...）で同型 *)
+    admit.
+
+  - (* [mid] l, r のセグメントが長方形に入らない *)
+    destruct Hmid as [s [Hs Hp]].
     (* s は operate_seg の像なので、元のセグメント s0 を取り出す *)
     apply in_app_or in Hs.
     assert (Hs0 : exists s0, In s0 (l ++ r) /\ s = operate_seg b eps h s0).
@@ -448,18 +446,15 @@ Proof.
     destruct Hs0 as [s0 [Hin0 Heq0]]. subst s.
     destruct (operate_seg_zone b eps h s0 p Hp) as [[p0 [Hp0 Hsh]] | [p0 [Hp0 [Hb Hd]]]].
     + eapply (zone_not_in_rect b eps h sub (onSegmentlist (l ++ r)) p p0);
-        eauto using (gb_cover _ _ _ _ Hgb).
+        eauto.
+      * apply (gb_cover _ _ _ _ Hgb).
       * exists s0; split; assumption.
     + eapply (zone_not_in_rect b eps h sub (onSegmentlist (l ++ r)) p p0);
-        eauto using (gb_cover _ _ _ _ Hgb).
+        eauto.
+      * apply (gb_cover _ _ _ _ Hgb).
       * exists s0; split; assumption.
 
-  - (* [2-head] 先頭の延長線が長方形に入らない *)
-    (* operate 後の先頭セグメントは operate_seg b eps h (hd_segment (l++sub++r)) *)
-    (* operate_seg_zone_head + zone_not_in_rect（P := onHead_extend ...）で同型 *)
-    admit.
-
-  - (* [2-last] 末尾の延長線も同様（operate_seg_zone_last を使う）*)
+  - (* [last] 末尾の延長線も同様（operate_seg_zone_last を使う）*)
     admit.
 Admitted.
 
@@ -493,13 +488,13 @@ Proof.
   assert (Hx : x_monotone_segs sub0)
     by (eapply one_way_gives_xmonotone; eauto).
 
-  (* Step 4 : h を sub0 だけから決める（★赤線に依存しない）*)
+  (* Step 4 : h を sub0 だけから決める（★境界線に依存しない）*)
   destruct (choose_h sub0) as [h [Hh0 [HhW HhH]]].
 
-  (* Step 5 : 赤線を取る（Lemma A）*)
+  (* Step 5 : 境界線を取る（Lemma A）*)
   destruct (border_good l0 sub0 r0 Hx Hopen0) as [b Hgb].
 
-  (* Step 6 : ε を赤線の後で決める *)
+  (* Step 6 : ε を境界線の後で決める *)
   destruct (choose_eps b l0 sub0 r0 Hgb) as [eps [Heps0 Hsep]].
 
   (* Step 7 : operate して結論 *)
@@ -511,7 +506,5 @@ Proof.
   - rewrite <- (operate_split b eps h l0 sub0 r0 Hgb).
     eapply operate_preserves_embed; eauto.
   - eapply operate_preserves_open; eauto.
-  - eapply operate_gives_sparse; eauto.
-  - eapply operate_gives_sparse; eauto.
   - eapply operate_gives_sparse; eauto.
 Qed.

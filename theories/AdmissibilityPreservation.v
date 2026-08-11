@@ -5,6 +5,7 @@ Require Import Embed.
 Require Import PrimitiveSegment.
 Require Import Segment.
 Require Import ListExt.
+Require Import Sparse.
 Import ListNotations.
 From Stdlib Require Import Lra.
 From Stdlib Require Import Lia.
@@ -12,26 +13,6 @@ From Stdlib Require Import Lia.
 
 (* --------------------------------------------------------------------------- *)
 (* Parameter extend に関する補題． SegmentList.v 等を新設しても *)
-
-Definition hd_segment ls := hd default_segment ls.
-Definition last_segment ls := last ls default_segment.
-
-Definition Point := (R * R)%type.
-
-(* TODO: 空リストを省く *)
-Definition onHead (seg: Segment) (rr : Point) := exists (t:R), t <= 0 /\ point seg t = rr.
-Definition onHead_extend (ls: list Segment) (rr : Point) := onHead (hd_segment ls) rr.
-Definition onLast (seg: Segment) (rr : Point) := exists (t:R), 1 <= t /\ point seg t = rr.
-Definition onLast_extend (ls: list Segment) (rr : Point) := onLast (last_segment ls) rr.
-Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
-(* TODO: extend に関する公理を完成させた後， onExtendSegment と整合することを確認
-		特に空リストの扱い *)
-Definition onExtend ls rr := exists t, rr = extend ls t.
-
-Definition same_extention_head ls1 ls2 := 
-	(forall rr, onHead_extend ls1 rr <-> onHead_extend ls2 rr).
-Definition same_extention_last ls1 ls2 := 
-	(forall rr, onLast_extend ls1 rr <-> onLast_extend ls2 rr).
 
 (* 引数のリスト ls を extend した時に， ls の n 番目のセグメントの上を指すのは
 		nth (segment_border ls) <= t <= (n+1)th (segment_border ls)
@@ -365,43 +346,6 @@ Qed.
 (* --------------------------------------------------------------------------- *)
 (* 許容可能性保持の証明に向けた定義と補題群 *)
 
-Definition embed_listDir (ds: list Direction) (ls: list Segment) : Prop :=
-	exists sc: scurve, scurve_to_direction sc = ds
-	/\ embed_scurve sc ls.
-
-Definition is_one_way_embedding (ls : list Segment) : Prop :=
-	exists sc, embed_scurve sc ls /\ is_one_way_scurve sc.
-Definition is_one_way_listDir (ds: list Direction) : Prop :=
-	exists sc: scurve, scurve_to_direction sc = ds /\ is_one_way_scurve sc.
-(* 帰納的に定義することもできると思われる．
-		特に後者は，回転数を使った定義もできる？
-		必要があれば証明 *)
-
-(* 曲線の始点と終点を結んだ線分を対角線にもつ矩形．部分曲線を含むとは限らない *)
-Definition rectangular_from_diagonal (rr1 rr2 : Point) : Point -> Prop :=
-	let (x1, y1) := rr1 in 
-	let (x2, y2) := rr2 in 
-	fun rr => 
-	let (x, y) := rr in
-	(x1 < x < x2 \/ x2 < x < x1) /\ (y1 < y < y2 \/ y2 < y < y1).
-Definition in_rect_from_diagonal a b rr := rectangular_from_diagonal a b rr.
-(* TODO: 空リストを含まない方が良い *)
-Definition in_rect (ls: list Segment) (rr: Point) := 
-	in_rect_from_diagonal (init (hd_segment ls)) (term (last_segment ls)) rr.
-
-(* scurve の埋め込みが sub_ls 周りで疎 := sub_ls の始点と終点から作成できる矩形に全然関係ないセグメントが侵入してこない
-		sub_ls が開か，全体として開埋め込みかは知らない *)
-Definition is_sparse_embedding (sc : scurve) (l sub_ls r : list Segment) : Prop :=
-	let ls := l ++ sub_ls ++ r in
-	embed_scurve sc ls
-	/\ (forall rr, 
-			(onHead_extend ls rr \/ onSegmentlist l rr \/ onSegmentlist r rr \/ onLast_extend ls rr) 
-			-> ~ in_rect sub_ls rr).
-
-Definition sparse (l sub_ls r : list Segment) : Prop :=
-	exists sc, is_sparse_embedding sc l sub_ls r.
-
-
 (* 単方向曲線と向き列が同じなら単方向曲線 *) 
 Lemma is_one_way_same_direction : forall sc1 sc2,
 	scurve_to_direction sc1 = scurve_to_direction sc2
@@ -579,131 +523,13 @@ Proof.
 Admitted. *)
 
 
-Definition rightabove (rr1 rr2 : Point) := 
-	let (x1, y1) := rr1 in
-	let (x2, y2) := rr2 in x1 < x2 /\ y1 < y2.
-
 (* 0 で割ったら 0 なので注意 *)
 Definition slope_two (rr1 rr2 : Point) :=
 	let (x1, y1) := rr1 in
 	let (x2, y2) := rr2 in (y2 - y1) / (x2 - x1).
 
-Parameter orn_seg : Segment -> Direction.
 
-(* 上下に引き伸ばす時の境目の線 *)
-Parameter operation_border : list Segment -> list Segment -> list Segment -> (R -> R).
-Inductive Region : Type := Reduced | RegA | RegB.
-
-Definition classify (l sub_ls r : list Segment) (p : Point) : Region :=
-  let q0 := init (hd_segment sub_ls) in
-  let q3 := term (last_segment sub_ls) in
-  let y  := operation_border l sub_ls r (fst p) in
-  if Rlt_dec y (snd p) then RegA
-  else if Rlt_dec (snd p) y then RegB
-  else if Rle_dec (fst q0) (fst p) then
-         (if Rle_dec (fst p) (fst q3) then Reduced else RegB)
-       else RegA.
-
-Definition shift (h : R) (r : Region) (p : Point) : Point :=
-  match r with
-  | Reduced => p
-  | RegA    => (fst p, snd p + h)
-  | RegB    => (fst p, snd p - h)
-  end.
-
-Definition operate_point (l sub_ls r : list Segment) (h : R) (p : Point) : Point :=
-  shift h (classify l sub_ls r p) p.
-
-Definition operate (l sub_ls r : list Segment) (h : R) (ps : list Point) : list Point :=
-  map (operate_point l sub_ls r h) ps.
-
-
-Lemma classify_reduced_char :
-  forall l sub_ls r p,
-    classify l sub_ls r p = Reduced ->
-    snd p = operation_border l sub_ls r (fst p) /\
-    fst (init (hd_segment sub_ls)) <= fst p <= fst (term (last_segment sub_ls)).
-Proof.
-  intros l sub_ls r p H. unfold classify in H.
-  destruct (Rlt_dec (operation_border l sub_ls r (fst p)) (snd p)); [discriminate|].
-  destruct (Rlt_dec (snd p) (operation_border l sub_ls r (fst p))); [discriminate|].
-  destruct (Rle_dec (fst (init (hd_segment sub_ls))) (fst p)) as [Hle0|];
-    [ destruct (Rle_dec (fst p) (fst (term (last_segment sub_ls)))) as [Hle3|]; [|discriminate]
-    | discriminate].
-  split; [lra | split; assumption].
-Qed.
-
-Lemma op_fixes_reduced :
-  forall l sub_ls r h p,
-    classify l sub_ls r p = Reduced -> operate_point l sub_ls r h p = p.
-Proof.
-  intros l sub_ls r h p H. unfold operate_point. rewrite H. reflexivity.
-Qed.
-
-(* 性質の良い埋め込みを最初に取っておく（その後操作を施す） *)
-Lemma embed_listDir_cond : forall (ds1 sub_ds ds2 : list Direction),
-	AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
-	-> is_one_way_listDir sub_ds
-	-> exists l sub_ls r,
-		embed_listDir ds1 l
-		/\ embed_listDir sub_ds sub_ls
-		/\ embed_listDir ds2 r
-		/\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r)
-		/\ ~ close (l ++ sub_ls ++ r)
-		/\ all_same_h sub_ls e (* x 軸正の向きに単調 *)
-		/\ rightabove (init (hd_segment sub_ls)) (term (last_segment sub_ls))
-		/\ (forall rr, onSegmentlist sub_ls rr -> in_rect sub_ls rr) (* sub_ls は始点と終点から作れる長方形の中に収まる *).
-Proof.
-Admitted.
-
-(* 操作を施したら，簡約部周りで疎になる *)
-Lemma operate_sparse :
-  forall (ds1 sub_ds ds2 : list Direction) (l sub_ls r : list Segment),
-    all_same_h sub_ls e -> (* x 軸正の向きに単調 *)
-		embed_listDir ds1 l ->
-    embed_listDir sub_ds sub_ls ->
-    embed_listDir ds2 r ->
-    embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r) ->
-    ~ close (l ++ sub_ls ++ r) ->
-    exists l' r',
-      embed_listDir ds1 l' /\ (* 埋め込みであること，開であることは保存 *)
-      embed_listDir ds2 r' /\
-      embed_listDir (ds1 ++ sub_ds ++ ds2) (l' ++ sub_ls ++ r') /\
-      ~ close (l' ++ sub_ls ++ r') /\
-      sparse l' sub_ls r'.
-Proof.
-Admitted.
-
-(*【証明の本質としている補題１】 許容可能ならば，その中の単方向な sub_ds の埋め込み sub_ls 周りで疎な開埋め込みが存在する *)
-Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
-	AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
-	-> is_one_way_listDir sub_ds
-	-> exists l r sub_ls, 
-		embed_listDir ds1 l
-		/\ embed_listDir sub_ds sub_ls
-		/\ embed_listDir ds2 r
-		/\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r)
-		/\ ~ close (l ++ sub_ls ++ r)
-		/\ sparse l sub_ls r.
-Proof. 
-	intros Hadm Honeway.
-	assert (H_notnil : sub_ds <> []). {
-		intros contra.
-		destruct Honeway as [sc [Hdir Honeway]].
-		destruct Hdir.
-		destruct Honeway as [H_notnil_sc _].
-		unfold scurve_to_direction in contra.
-		apply map_eq_nil in contra.
-		congruence.
-	}
-	pose proof (embed_listDir_cond ds1 sub_ds ds2 Hadm Honeway) as 
-		[l [sub_ls [r [Hl [Hmid [Hr [Hembed [Hopen [Honeway_ls _]]]]]]]]].
-	pose proof (operate_sparse ds1 sub_ds ds2 l sub_ls r
-              Honeway_ls Hl Hmid Hr Hembed Hopen) as [l' [r' Hgoal]].
-	exists l', r', sub_ls. split; tauto.
-Qed.
-
-(* 上の補題を強めたもの
+(* embed_sparsely_listDir を強めたもの
 		sub_ds の埋め込みについて，その部分の埋め込みの終点が始点の右上側にあり，
 		始点での傾きが終点での傾き（どちらも正）よりも大きいようにできる *)
 (* TODO：上の補題に統合しても良い *)
@@ -741,7 +567,7 @@ Lemma embedding_P_to_PMP_in_rect : forall (seg : Segment),
 	-> exists seg1 seg2 seg3,
 		embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3] (* この内部で seg1-3 が連結していることは示されてほしい *)
 		/\ (forall rr, onSegmentlist [seg1; seg2; seg3] rr
-				-> in_rect [seg] rr) (* seg が張る矩形の内部で分割できている *)
+				-> in_rect (rect_of [seg]) rr) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg] [seg1; seg2; seg3]
 		/\ same_slope_init_and_term [seg] [seg1; seg2; seg3].
 Proof. Admitted.
@@ -753,7 +579,7 @@ Lemma embedding_PM_to_PPMM_in_rect : forall (seg1 seg2 : Segment),
 	-> exists seg1' seg2' seg3' seg4',
 		embed_listDir [Plus; Plus; Minus; Minus] [seg1'; seg2'; seg3'; seg4'] (* この内部で seg1-3 が連結していることは示されてほしい *)
 		/\ (forall rr, onSegmentlist [seg1'; seg2'; seg3'; seg4'] rr
-				-> in_rect [seg1; seg2] rr) (* seg が張る矩形の内部で分割できている *)
+				-> in_rect (rect_of [seg1; seg2]) rr) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4']
 		/\ same_slope_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4'].
 Proof. Admitted.
@@ -771,7 +597,7 @@ Lemma embedding_PMP_to_P_in_rect : forall (seg1 seg2 seg3 : Segment),
 	exists seg,
 		embed_listDir [Plus] [seg]
 		/\ (forall rr, onSegment seg rr
-				-> in_rect [seg1; seg2; seg3] rr ) (* seg が張る矩形の内部で分割できている *)
+				-> in_rect (rect_of [seg1; seg2; seg3]) rr ) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3] [seg]
 		/\ same_slope_init_and_term [seg1; seg2; seg3] [seg].
 Proof. 
@@ -791,7 +617,7 @@ Lemma embedding_PPMM_to_PM_in_rect : forall (seg1 seg2 seg3 seg4 : Segment),
 	exists seg1' seg2',
 		embed_listDir [Plus; Minus] [seg1'; seg2'] 
 		/\ (forall rr, onSegmentlist [seg1'; seg2'] rr
-				-> in_rect [seg1; seg2; seg3; seg4] rr) (* seg が張る矩形の内部で分割できている *)
+				-> in_rect (rect_of [seg1; seg2; seg3; seg4]) rr) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2']
 		/\ same_slope_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2'].
 Proof. 
@@ -826,7 +652,7 @@ Lemma seg_in_rectangle_keep_openness : forall (ls rs sub_ls sub_ls' : list Segme
 	-> ~ close sub_ls'
 	-> ~ close (ls ++ sub_ls ++ rs)
 	-> sparse ls sub_ls rs
-	-> (forall rr, onSegmentlist sub_ls' rr -> in_rect sub_ls rr) 
+	-> (forall rr, onSegmentlist sub_ls' rr -> in_rect (rect_of sub_ls) rr) 
 	-> same_init_and_term sub_ls sub_ls' 
 	-> same_slope_init_and_term sub_ls sub_ls'
 	-> ~ close (ls ++ sub_ls' ++ rs).
@@ -920,12 +746,11 @@ Proof.
 				-- exists t1'. split; subst post intersection; congruence. 
 				-- exists t2'. split; subst post intersection; congruence. 
 			+ (* 先頭の延長線と sub_ls' が交わっている場合： pre が疎であることに矛盾 *) 
-				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					apply Hin_rect. exists seg. split; auto.
 					exists t2'. split; subst post intersection; congruence. 
 				}
-				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
-					destruct Hsparse as [sc [_ Hsparse]].
+				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					apply Hsparse.
 					left.
 					apply Hsame_ex_head. 
@@ -953,12 +778,11 @@ Proof.
 				-- exists t2'. split; subst post intersection; congruence. 
 				-- exists t1'. split; subst post intersection; congruence. 
 			+ (* 先頭の延長線と sub_ls' が交わっている場合： pre が疎であることに矛盾 *) 
-				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					apply Hin_rect. exists seg. split; auto.
 					exists t1'. split; subst post intersection; congruence. 
 				}
-				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
-					destruct Hsparse as [sc [_ Hsparse]].
+				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					apply Hsparse.
 					left.
 					apply Hsame_ex_head. 
@@ -986,33 +810,33 @@ Proof.
 				-- exists t2'. split; subst post intersection; congruence. 
 				-- auto.
 			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合１： pre が疎であることに矛盾 *) 
-				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
 					apply Hin_rect. exists seg1. split; auto.
 					exists t1'. split; subst post intersection; congruence. 
 				}
-				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
+				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
-					destruct Hsparse as [sc [_ Hsparse]].
 					apply Hsparse.
-					right. right. left.
-					exists seg2. split; auto.
-					exists t2'. split; auto. subst post intersection; congruence. 
+					right. left.
+					exists seg2. split.
+					* apply in_or_app. auto.
+					* exists t2'. split; auto. subst post intersection; congruence. 
 				} 
 				auto.
 			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合２： pre が疎であることに矛盾 *) 
-				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
 					apply Hin_rect. exists seg2. split; auto.
 					exists t2'. split; subst post intersection; congruence. 
 				}
-				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
+				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
-					destruct Hsparse as [sc [_ Hsparse]].
 					apply Hsparse.
 					right. left.
-					exists seg1. split; auto.
-					exists t1'. split; auto.
+					exists seg1. split.
+					* apply in_or_app. auto.
+					* exists t1'. split; auto.
 				} 
 				auto.
 			+ (* 両方 pre 上の点である場合： pre が開であることに矛盾 *) 
@@ -1038,33 +862,33 @@ Proof.
 				-- exists t1'. split; subst post intersection; congruence. 
 				-- auto.
 			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合１： pre が疎であることに矛盾 *) 
-				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
 					apply Hin_rect. exists seg2. split; auto.
 					exists t2'. split; subst post intersection; congruence. 
 				}
-				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
+				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
-					destruct Hsparse as [sc [_ Hsparse]].
 					apply Hsparse.
-					right. right. left.
-					exists seg1. split; auto.
-					exists t1'. split; auto. 
+					right. left.
+					exists seg1. split.
+					* apply in_or_app. auto.
+					* exists t1'. split; auto. 
 				} 
 				auto.
 			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合２： pre が疎であることに矛盾 *) 
-				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
 					apply Hin_rect. exists seg1. split; auto.
 					exists t1'. split; subst post intersection; congruence. 
 				}
-				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
+				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
-					destruct Hsparse as [sc [_ Hsparse]].
 					apply Hsparse.
 					right. left.
-					exists seg2. split; auto.
-					exists t2'. split; auto. subst post intersection; congruence.
+					exists seg2. split.
+					* apply in_or_app. auto.
+					* exists t2'. split; auto. subst post intersection; congruence.
 				} 
 				auto.
 			+ (* 両方 pre 上の点である場合： pre が開であることに矛盾 *) 
@@ -1088,12 +912,11 @@ Proof.
 				-- exists t2'. split; subst post intersection; congruence. 
 				-- exists t1'. split; subst post intersection; congruence. 
 			* (* 末尾の延長線と sub_ls' が交わっている場合： pre が疎であることに矛盾 *) 
-				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					apply Hin_rect. exists seg. split; auto.
 					exists t1'. split; subst post intersection; congruence. 
 				}
-				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
-					destruct Hsparse as [sc [_ Hsparse]].
+				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					apply Hsparse.
 					repeat right.
 					apply Hsame_ex_last. 
@@ -1121,12 +944,11 @@ Proof.
 				-- exists t1'. split; subst post intersection; congruence. 
 				-- exists t2'. split; subst post intersection; congruence. 
 			* (* 末尾の延長線と sub_ls' が交わっている場合： pre が疎であることに矛盾 *) 
-				assert (Hin_rect_yes : in_rect sub_ls intersection). {
+				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					apply Hin_rect. exists seg. split; auto.
 					exists t2'. split; subst post intersection; congruence. 
 				}
-				assert (Hin_rect_no : ~ in_rect sub_ls intersection). {
-					destruct Hsparse as [sc [_ Hsparse]].
+				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					apply Hsparse.
 					repeat right.
 					apply Hsame_ex_last. 
