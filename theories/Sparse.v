@@ -61,6 +61,92 @@ Definition is_one_way_listDir (ds: list Direction) : Prop :=
 		必要があれば証明 *)
 
 
+    
+(* --------------------------------------------------------------------------- *)
+(* AdmissibleDirs について成り立ってほしい性質と，それに必要な補題 *)
+
+(* 単方向曲線と向き列が同じなら単方向曲線 *) 
+Lemma is_one_way_same_direction : forall sc1 sc2,
+	scurve_to_direction sc1 = scurve_to_direction sc2
+	-> is_one_way_scurve sc1 
+	-> is_one_way_scurve sc2.
+Proof.	
+Admitted.
+
+Lemma Direction_to_PrimitiveSegment : forall d p, exists p', orn p' = d /\ dc p p'.
+Proof.
+	intros d p.
+	destruct d; destruct p as [[v h] c];
+	destruct v; destruct h; destruct c; eexists;
+	(* split; try apply DXtrvN. reflexivity. *)
+	try solve [split; try apply DIfl; reflexivity];
+	try solve [split; try apply DXtrvN; reflexivity];
+	try solve [split; try apply DXtrvS; reflexivity];
+	try solve [split; try apply DXtrhN; reflexivity];
+	try solve [split; try apply DXtrhS; reflexivity].
+Qed.
+
+(* 向きの列と先頭の PrimitiveSegment の組に対し，対応する scurve が(1つ)定まる *)
+Lemma direction_scurve_correspondence : forall ds p,
+	exists sc, hd_scurve sc = p /\ scurve_to_direction sc = orn p :: ds.
+Proof.
+	intros ds.
+	induction ds as [ | d ds' IH]; intros p.
+	- (* ds = [] *) exists (scurve_from_one p). split; reflexivity.
+	- (* ds = d :: ds' *) 
+		(* 向き d を持ち，p と直接連結可能な PrimitiveSegment p' をとる *)
+		pose proof (Direction_to_PrimitiveSegment d p) as [p' [Horn_p' Hdc]].
+		(* IH より，先頭 p' で向き orn p' :: ds' の scurve がとれる *)
+		destruct (IH p') as [sc [Hhead Hdir]].
+		assert (H0: exists l, proj1_sig sc = p' :: l). {
+			unfold scurve_to_direction in Hdir. 
+			unfold hd_scurve in Hhead. 
+			destruct (proj1_sig sc) as [| p0 l0].
+			- discriminate.
+			- simpl in Hhead; subst. exists l0. reflexivity.
+		}
+		destruct H0 as [l H0].
+		pose (DcCons _ _ l Hdc) as H1.
+		rewrite <- H0 in H1.
+		(* p :: (proj1_sig sc) が求める scurve *)
+		exists (connect p sc H1). split.
+		+ (* 先頭の条件 *) auto.
+		+ (* 向きの条件 *) unfold scurve_to_direction. simpl.
+			unfold scurve_to_direction in Hdir. rewrite Hdir. rewrite Horn_p'. reflexivity.
+Qed.
+
+(* 向き列の許容可能性を調べることで，scurve の許容可能性はわかる．
+	(つまり１つの scurve で許容可能性が言えたら，同じ向き列を持つ他の scurve ４つの許容可能性もわかる) *)
+Lemma admissible_AdmissibleDirs_correspondence : forall sc,
+	admissible sc <-> AdmissibleDirs (scurve_to_direction sc).
+Proof. 
+	intros sc. split.
+	- intros adms ps Hps.
+	  (* ps が空なら自明，そうでなければ先頭の Primitive Segment の向きとして４通り考えられ，
+			内１つは ps = sc を導く．それ以外の場合は，sc の開埋め込みを90度ずつ回転させることで ps の開埋め込みとなる． *)
+	  admit.
+	- auto. 
+Admitted.
+
+(* 向きが ds の許容可能な scurve を見つけることと，向きが ds である任意の scurve が許容可能であることは同値 *)
+Lemma AdmissibleDirs_exist : forall ds,
+	AdmissibleDirs ds <-> exists sc, scurve_to_direction sc = ds /\ admissible sc.
+Proof.
+	intros ds. split.
+	- (* -> *) intros H.
+		destruct ds as [ | d tail].
+		+ (* ds = [] *) exists (exist _ _ IsScurveNil). auto.
+		+ (* ds = d :: tail *) 
+			pose proof (Direction_to_PrimitiveSegment d default_primitive_segment) as [p [H0 _]].
+			pose proof (direction_scurve_correspondence tail p) as [sc [H1 H2]].
+			exists sc. split; try apply H; subst; assumption.
+	- (* <- *) intros [sc [Hdir Hadm]].
+			rewrite <- Hdir.
+			apply admissible_AdmissibleDirs_correspondence.
+			assumption.
+Qed.
+
+
 (* ================================================================= *)
 (*  1.  長方形と sparse                               *)
 (* ================================================================= *)
@@ -166,6 +252,7 @@ Parameter operate_seg : Border -> R -> R -> Segment -> Segment.
 Definition operate_segs (b : Border) (eps h : R) (ls : list Segment)
   : list Segment := map (operate_seg b eps h) ls.
 
+(* 曲線 P は境界線 b より上（以上）にある *)
 Definition weakly_above (b : Border) (P : Point -> Prop) : Prop :=
   forall p, P p -> b (fst p) <= snd p.
 Definition weakly_below (b : Border) (P : Point -> Prop) : Prop :=
@@ -185,9 +272,9 @@ Axiom operate_seg_orn :
 Axiom operate_seg_zone :
   forall b eps h s p,
     onSegment (operate_seg b eps h s) p ->
-      (exists p0, onSegment s p0 /\ p = shift h (classify b p0) p0)
-   \/ (exists p0, onSegment s p0 /\ on_border b p0
-                  /\ Rabs (fst p - fst p0) <= eps).
+    exists p0, onSegment s p0 /\ 
+      (p = operate_point b h p0
+      \/ (on_border b p0 /\ Rabs (fst p - fst p0) <= eps)). (* TODO : ちょっと違う．また，ε をとった時，端点近くではすぐ横のセグメントが入り込んでしまうので対応必要 *)
 
 Lemma operate_segs_app :
   forall b eps h ls1 ls2,
@@ -214,12 +301,14 @@ Definition contact_x (b : Border) (P : Point -> Prop) (x : R) : Prop :=
   exists p, P p /\ on_border b p /\ fst p = x.
 
 (* --- sub の鉛直方向のはみ出し幅（x単調でも y単調ではないので必要）--- *)
+(* TODO : はみだしていても移動に支障ないので不要 *)
 Parameter vspan : list Segment -> R.
 Axiom vspan_nonneg : forall sub, 0 <= vspan sub.
 Axiom vspan_bounds :
   forall sub p, onSegmentlist sub p ->
     ry0 (rect_of sub) - vspan sub <= snd p <= ry1 (rect_of sub) + vspan sub.
 
+(* TODO : 中身の仕様は Lemma でわけたいが．． *)
 Record good_border (b : Border) (l sub r : list Segment) : Prop := {
   (* (A-1) sub は境界線のグラフの一部 ⇒ 不動 *)
   gb_fits : forall p, onSegmentlist sub p -> on_border b p;
@@ -248,6 +337,8 @@ Record good_border (b : Border) (l sub r : list Segment) : Prop := {
 }.
 
 (* ε は「接触 x が長方形の x 範囲から ε 以上離れている」ように取る *)
+(* TODO : 下と併せて eps は明示せず，各セグメントは自分の周りに，他の曲線が入ってこない領域を持ち，
+    その中で形を変えて，などできる，とするほうが？ *)
 Definition eps_separates (b : Border) (eps : R) (l sub r : list Segment) : Prop :=
     (forall x, contact_x b (onSegmentlist (l ++ r)) x ->
        x < rx0 (rect_of sub) - eps \/ rx1 (rect_of sub) + eps < x)
@@ -339,13 +430,29 @@ Admitted.
 
 Lemma admissible_gives_open_embed :
   forall ds, AdmissibleDirs ds -> exists ls, embed_listDir ds ls /\ ~ close ls.
-Admitted.
+Proof.
+  intros ds Hadm.
+  apply AdmissibleDirs_exist in Hadm.
+  destruct Hadm as [sc [Hdir Hadm]].
+  destruct Hadm as [ls [Hembed Hopen]].
+  exists ls.
+  split; auto.
+  exists sc.
+  split; auto.
+Qed.
 
-(* ---- x 単調（= x 軸正の向きに進み続ける。y は無関係）------------ *)
+(* x 単調にできる *)
 Lemma one_way_gives_xmonotone :
-  forall sub_ds sub_ls,
-    is_one_way_listDir sub_ds -> embed_listDir sub_ds sub_ls ->
-    x_monotone_segs sub_ls.
+  forall ds l sub_ls r,
+    embed_listDir ds (l ++ sub_ls ++ r) ->
+    is_one_way_embedding sub_ls ->
+    ~ close (l ++ sub_ls ++ r) -> (* TODO : この補題とは分離すべき *)
+    exists l' sub_ls' r',
+    embed_listDir ds (l' ++ sub_ls' ++ r') /\
+    x_monotone_segs sub_ls'/\
+    ~ close (l' ++ sub_ls' ++ r').
+Proof.
+  (* x 単調でなければ90度回転させる *)
 Admitted.
 
 (* ---- Lemma A : 良い境界線の存在（停止性が核）-------- *)
@@ -356,6 +463,7 @@ Lemma border_good :
 Admitted.
 
 (* ---- ε の選択（有限個のコンパクト集合と閉区間の正距離）----------- *)
+(* TODO : いくらか上で書いた変更 *)
 Lemma choose_eps :
   forall b l sub r, good_border b l sub r ->
     exists eps, 0 < eps /\ eps_separates b eps l sub r.
@@ -444,7 +552,7 @@ Proof.
       apply in_map_iff in H; destruct H as [s0 [Heq Hin]];
       exists s0; split; [apply in_or_app; auto | auto | apply in_or_app; auto | auto]. }
     destruct Hs0 as [s0 [Hin0 Heq0]]. subst s.
-    destruct (operate_seg_zone b eps h s0 p Hp) as [[p0 [Hp0 Hsh]] | [p0 [Hp0 [Hb Hd]]]].
+    destruct (operate_seg_zone b eps h s0 p Hp) as [p0 [Hp0 [Hsh | [Hb Hd]]]].
     + eapply (zone_not_in_rect b eps h sub (onSegmentlist (l ++ r)) p p0);
         eauto.
       * apply (gb_cover _ _ _ _ Hgb).
@@ -485,26 +593,32 @@ Proof.
   subst ls0.
 
   (* Step 3 : x 単調性 *)
-  assert (Hx : x_monotone_segs sub0)
-    by (eapply one_way_gives_xmonotone; eauto).
+  assert (Honeway : is_one_way_embedding sub0). {
+    destruct Hsub0 as [sc [Hdir Hembed]].
+    exists sc.
+    split; auto.
+    destruct Hone as [sc' [Hdir' Honeway]].
+    apply (is_one_way_same_direction _ _ (eq_trans Hdir' (eq_sym Hdir)) Honeway).
+  }
+  destruct (one_way_gives_xmonotone _ _ _ _ Hemb0 Honeway Hopen0) as [l' [sub' [r' [Hembed [Hx Hopen']]]]].
 
-  (* Step 4 : h を sub0 だけから決める（★境界線に依存しない）*)
-  destruct (choose_h sub0) as [h [Hh0 [HhW HhH]]].
+  (* Step 4 : h を sub' だけから決める（★境界線に依存しない）*)
+  destruct (choose_h sub') as [h [Hh [HhW HhH]]].
 
   (* Step 5 : 境界線を取る（Lemma A）*)
-  destruct (border_good l0 sub0 r0 Hx Hopen0) as [b Hgb].
+  destruct (border_good l' sub' r' Hx Hopen') as [b Hgb].
 
   (* Step 6 : ε を境界線の後で決める *)
-  destruct (choose_eps b l0 sub0 r0 Hgb) as [eps [Heps0 Hsep]].
+  destruct (choose_eps b l' sub' r' Hgb) as [eps [Heps Hsep]].
 
   (* Step 7 : operate して結論 *)
-  exists (operate_segs b eps h l0), (operate_segs b eps h r0), sub0.
+  exists (operate_segs b eps h l'), (operate_segs b eps h r'), sub'.
   repeat split.
-  - eapply operate_preserves_embed; eauto.
-  - exact Hsub0.
-  - eapply operate_preserves_embed; eauto.
-  - rewrite <- (operate_split b eps h l0 sub0 r0 Hgb).
+  - eapply operate_preserves_embed. admit.
+  - admit. 
+  - eapply operate_preserves_embed. admit.
+  - rewrite <- (operate_split b eps h l' sub' r' Hgb).
     eapply operate_preserves_embed; eauto.
   - eapply operate_preserves_open; eauto.
   - eapply operate_gives_sparse; eauto.
-Qed.
+Admitted.
