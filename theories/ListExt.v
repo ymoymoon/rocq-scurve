@@ -1,5 +1,6 @@
 From Stdlib Require Export List.
 From Stdlib Require Import Arith.
+From Stdlib Require Import Lia.
 Require Import Dec.
 Import ListNotations.
 
@@ -218,6 +219,26 @@ Lemma list_hd_tl : forall {A} (dummy: A) (l: list A),
 Proof. 
 	intros A dummy l H. 
 	induction l; firstorder.
+Qed.
+
+Lemma nth_error_hd : forall {A} (dummy: A) (l: list A) (x: A),
+	nth_error l 0 = Some x -> hd dummy l = x.
+Proof.
+	intros A dummy l x H. destruct l; simpl in *; congruence.
+Qed.
+
+Lemma nth_error_last : forall {A} (l: list A) (dummy: A),
+	l <> [] -> nth_error l (length l - 1) = Some (last l dummy).
+Proof.
+	induction l as [| a l' IH]; intros dummy Hne; [contradiction |].
+	destruct l' as [| b l''].
+	- reflexivity.
+	- change (length (a :: b :: l'')) with (S (length (b :: l''))).
+		assert (Hpos: length (b :: l'') <> 0) by (simpl; lia).
+		replace (S (length (b :: l'')) - 1) with (S (length (b :: l'') - 1)) by lia.
+		simpl nth_error.
+		change (last (a :: b :: l'') dummy) with (last (b :: l'') dummy).
+		apply IH. discriminate.
 Qed.
 
 Lemma list_map_hd : forall {A B} (dummy: A) (x: B) (l: list A) (l': list B) f,
