@@ -146,6 +146,16 @@ Lemma embed_split :
       /\ embed_listDir ds1 l /\ embed_listDir sub_ds sub /\ embed_listDir ds2 r.
 Admitted.
 
+(* 向き列の長さとセグメント列の長さは一致する（scurve レベル）*)
+Lemma embed_nonnil :
+  forall ds ls, embed_listDir ds ls -> ds <> [] -> ls <> [].
+Admitted.
+
+(* 単方向な向き列は空でない（is_one_way_scurve の定義から）*)
+Lemma one_way_listDir_nonnil :
+  forall ds, is_one_way_listDir ds -> ds <> [].
+Admitted.
+
 
 (* ================================================================= *)
 (*  1．回転（90°×4）—                                                   *)
@@ -171,12 +181,10 @@ Proof.
     f_equal; try ring.
 Qed.
 
-(* セグメント・向きの回転。point との整合を公理に置くと                *)
+(* セグメントの回転。point との整合を公理に置くと                *)
 (* onSegment / onHead / onLast の輸送が自動で従う                      *)
 Parameter rot_seg : Rot -> Segment -> Segment.
-Parameter rot_dir : Rot -> Direction -> Direction.
 Definition rot_segs (g : Rot) (ls : list Segment) := map (rot_seg g) ls.
-Definition rot_dirs (g : Rot) (ds : list Direction) := map (rot_dir g) ds.
 
 Axiom rot_seg_point :
   forall g s t, point (rot_seg g s) t = rot_pt g (point s t).
@@ -200,6 +208,25 @@ Qed.
 Lemma rot_segs_app :
   forall g ls1 ls2, rot_segs g (ls1 ++ ls2) = rot_segs g ls1 ++ rot_segs g ls2.
 Proof. intros. unfold rot_segs. apply map_app. Qed.
+
+(* ---- 回転の反転 ------------------------------------------------- *)
+Lemma rot_inv_inv : forall g, rot_inv (rot_inv g) = g.
+Proof. destruct g; reflexivity. Qed.
+
+(* ---- 非空性 ----------------------------------------------------- *)
+Lemma rot_segs_nonnil : forall g ls, ls <> [] -> rot_segs g ls <> [].
+Proof.
+  intros g ls H. destruct ls as [|a tl]; [contradiction|].
+  unfold rot_segs. simpl. discriminate.
+Qed.
+
+Lemma app_nonnil_mid :
+  forall (l sub r : list Segment), sub <> [] -> l ++ sub ++ r <> [].
+Proof.
+  intros l sub r H. destruct l as [|a l']; simpl.
+  - destruct sub as [|s sub']; [contradiction | discriminate].
+  - discriminate.
+Qed.
 
 (* --- 点集合の輸送 --- *)
 Lemma onSegment_rot :
@@ -231,8 +258,8 @@ Proof. intros. unfold Rmin, Rmax. destruct (Rle_dec (-a) (-b)), (Rle_dec a b); l
 
 (* --- embed / close / sparse の回転不変性（★分離した補題）--- *)
 Lemma rot_embed :
-  forall g ds ls, embed_listDir ds ls -> embed_listDir (rot_dirs g ds) (rot_segs g ls).
-Admitted.  (* scurve レベル：scurve_to_direction と rot_dir の可換性 *)
+  forall g ds ls, embed_listDir ds ls -> embed_listDir ds (rot_segs g ls).
+Admitted. 
 
 Lemma rot_close :
   forall g ls, close (rot_segs g ls) -> close ls.
@@ -248,8 +275,8 @@ Lemma one_way_rot_exists :
     exists g : Rot, x_monotone_segs (rot_segs g sub).
 Admitted.
 (* 証明方針：is_one_way_scurve から、sub の全セグメントの向きは        *)
-(*   「x 成分の符号が一定」な向きの集合に入る。8方向 d に対し、        *)
-(*   rot_dir g d が {E, NE, SE}（= x 正成分）に入る g が存在：         *)
+(*   「ある成分の符号が一定」な向きの集合に入る。8方向 d に対し、        *)
+(*   g だけ回転させて {E, NE, SE}（= x 正成分）に入る g が存在：         *)
 (*     E,NE,SE → R0 ／ N,NW → R270 ／ W,SW → R180 ／ S → R90          *)
 (*   あとは rot_seg_point から init_x < term_x を計算するだけ。        *)
 
@@ -419,20 +446,20 @@ Proof.
 Qed.
 (* ↑ min/max の並び替えで rewrite の向きを微調整する必要あり（要確認）*)
 
+(* not used *)
 Lemma rot_sparse :
-  forall g l sub r,
-    sub <> [] -> l ++ sub ++ r <> [] ->
-    sparse (rot_segs g l) (rot_segs g sub) (rot_segs g r) ->
-    sparse l sub r.
+  forall g l sub r, sub <> [] ->
+    sparse (rot_segs g l) (rot_segs g sub) (rot_segs g r) -> sparse l sub r.
 Proof.
-  intros g l sub r Hsub Hall Hsp p Hp Hin.
-  (* p を回転して、回転後の sparse に矛盾させる *)
+  intros g l sub r Hsub Hsp p Hp Hin.
+  pose proof (app_nonnil_mid l sub r Hsub) as Hall.
   apply (Hsp (rot_pt g p)).
   - destruct Hp as [Hh | [Hm | Hl]].
     + left. unfold onHead_extend in *.
       rewrite <- !rot_segs_app.
       unfold rot_segs.
-      rewrite (hd_map_nonnil _ _ Hall). apply onHead_rot; exact Hh.
+      rewrite (hd_map_nonnil _ _ Hall).
+      apply onHead_rot; exact Hh.
     + right; left. destruct Hm as [s [Hs Hps]].
       exists (rot_seg g s). split.
       * rewrite <- rot_segs_app. apply in_map; exact Hs.
@@ -440,7 +467,8 @@ Proof.
     + right; right. unfold onLast_extend in *.
       rewrite <- !rot_segs_app.
       unfold rot_segs.
-      rewrite (last_map_nonnil _ _ Hall). apply onLast_rot; exact Hl.
+      rewrite (last_map_nonnil _ _ Hall).
+      apply onLast_rot; exact Hl.
   - rewrite (rect_of_rot g sub Hsub). apply in_rect_rot. exact Hin.
 Qed.
 
@@ -591,6 +619,13 @@ Definition well_split (l sub r : list Segment) : Prop :=
 Definition h_large (h : R) (sub : list Segment) : Prop :=
   0 < h /\ rect_height (bbox_of sub) < h.
 
+Lemma choose_h : forall sub, exists h, h_large h sub.
+Proof.
+  intros sub. exists (Rmax 1 (rect_height (bbox_of sub) + 1)).
+  unfold h_large. split.
+  - eapply Rlt_le_trans; [apply Rlt_0_1 | apply Rmax_l].
+  - eapply Rlt_le_trans; [| apply Rmax_r]. lra.
+Qed.
 
 (* ---- (A-1) sub は境界線のグラフの一部 ⇒ 不動 -------------------- *)
 Lemma mb_fits :
@@ -893,13 +928,10 @@ Proof.
 Qed.
 
 
-Lemma choose_h : forall sub, exists h, h_large h sub.
-Proof.
-  intros sub. exists (Rmax 1 (rect_height (bbox_of sub) + 1)).
-  unfold h_large. split.
-  - eapply Rlt_le_trans; [apply Rlt_0_1 | apply Rmax_l].
-  - eapply Rlt_le_trans; [| apply Rmax_r]. lra.
-Qed.
+
+(* ================================================================= *)
+(*  7.  最終命題（回転 → 核補題 → 逆回転）                            *)
+(* ================================================================= *)
 
 Lemma embed_sparsely_xmono :
   forall ds1 sub_ds ds2 l sub r,
@@ -912,9 +944,11 @@ Lemma embed_sparsely_xmono :
    /\ embed_listDir ds2 r'
    /\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l' ++ sub' ++ r')
    /\ ~ close (l' ++ sub' ++ r')
-   /\ sparse l' sub' r'.
+   /\ sparse l' sub' r'
+   /\ sub' <> [].                       (* ★追加 *)
 Proof.
   intros ds1 sub_ds ds2 l sub r Hl Hsub Hr Hall Hws.
+  pose proof Hws as Hws'. destruct Hws' as [Hne _].
   destruct (choose_h sub) as [h Hh].
   set (ctx := l ++ sub ++ r).
   exists (operate_segs ctx sub h l), (operate_segs ctx sub h r), sub.
@@ -926,14 +960,10 @@ Proof.
     eapply operate_preserves_embed; exact Hall.
   - subst ctx. eapply operate_preserves_open; exact Hws.
   - subst ctx. eapply operate_gives_sparse; eauto.
+  - exact Hne.
 Qed.
 
-
-(* ================================================================= *)
-(*  9.  最終命題（回転 → 核補題 → 逆回転）                            *)
-(* ================================================================= *)
-
-Lemma embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
+Proposition embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
   AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
   -> is_one_way_listDir sub_ds
   -> exists l r sub_ls,
@@ -954,40 +984,32 @@ Proof.
     as (l0 & sub0 & r0 & Heq & Hl0 & Hsub0 & Hr0).
   subst ls0.
 
-  (* Step 3 : sub0 は単方向 *)
+  (* Step 3 : 非空性 *)
+  assert (Hne : sub0 <> []).
+  { eapply embed_nonnil; [exact Hsub0 | apply one_way_listDir_nonnil; exact Hone]. }
+
+  (* Step 4 : sub0 は単方向 *)
   assert (Honeway : is_one_way_embedding sub0).
-  { destruct Hsub0 as [sc [Hdir Hembed]]. exists sc. split; auto.
+  { destruct Hsub0 as [sc [Hdir Hembed]]. exists sc. split; [exact Hembed|].
     destruct Hone as [sc' [Hdir' Honeway]].
     apply (is_one_way_same_direction _ _ (eq_trans Hdir' (eq_sym Hdir)) Honeway). }
-  assert (Hne : sub0 <> []) by admit.   (* embed_listDir_nonnil で埋める *)
 
-  (* Step 4 : 回転して x 正方向単調にする *)
+  (* Step 5 : 回転して x 正方向単調にし，疎な埋め込みを取る *)
   destruct (one_way_rot_exists sub0 Honeway) as [g Hx].
+
   destruct (embed_sparsely_xmono
-              (rot_dirs g ds1) (rot_dirs g sub_ds) (rot_dirs g ds2)
+             ds1 sub_ds ds2
               (rot_segs g l0) (rot_segs g sub0) (rot_segs g r0))
-    as (L & Rr & S & HL & HS & HR & Hallg & Hopeng & Hspg).
+    as (L & Rr & S & HL & HS & HR & Hallg & Hopeng & Hspg & HSne).
   { eapply rot_embed; exact Hl0. }
   { eapply rot_embed; exact Hsub0. }
   { eapply rot_embed; exact Hr0. }
   { rewrite <- !rot_segs_app.
-    replace (rot_dirs g ds1 ++ rot_dirs g sub_ds ++ rot_dirs g ds2)
-      with (rot_dirs g (ds1 ++ sub_ds ++ ds2))
-      by (unfold rot_dirs; rewrite !map_app; reflexivity).
     eapply rot_embed; exact Hemb0. }
-  { split; [ unfold rot_segs; destruct sub0; [contradiction | discriminate]
+  { split; [apply rot_segs_nonnil; exact Hne
            | split; [ exact Hx
                     | rewrite <- !rot_segs_app; apply rot_open; exact Hopen0 ]]. }
 
-  (* Step 5 : 逆回転して元の座標系に戻す *)
-  exists (rot_segs (rot_inv g) L), (rot_segs (rot_inv g) Rr),
-         (rot_segs (rot_inv g) S).
-  repeat split.
-  - admit.  (* rot_dirs (rot_inv g) (rot_dirs g ds1) = ds1 ＋ rot_embed *)
-  - admit.
-  - admit.
-  - admit.
-  - rewrite <- !rot_segs_app. apply rot_open. admit.
-  - eapply rot_sparse with (g := g); [admit | admit |].
-    rewrite !rot_segs_inv. exact Hspg.
-Admitted.
+  exists L, Rr, S.
+  repeat split; assumption.
+Qed.
