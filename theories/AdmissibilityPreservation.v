@@ -73,7 +73,6 @@ Proof.
 Qed.
 
 (* extend した延長部分の先頭だけで交差は起こらない *)
-(* TODO : この辺りは， segment_border が単調増加という公理などから示せるかもしれない *)
 Lemma extend_head_not_cross : forall ls t1 t2 border_first,
 	ls <> []
 	-> nth_error (segment_border ls) 0 = Some border_first
@@ -169,6 +168,10 @@ Qed.
 		可能性を今の公理系だけでは排除できず，反例が作れてしまう．embed_scurve 由来の連結性
 		（Embed.v の consist_init_term 等）を仮定に加えれば示せるはずだが，この補題自体にはその
 		仮定がないため，現状は Admitted のままにしている． *)
+(* -> TODO : 解決法
+		端点の連結を仮定に入れる 
+		or 埋め込み用に「端点が接続しているセグメント列」という型を作る（ナイーブに行うと変更が大量になる）
+		or extend ないしこの補題での不等号を調整する *)
 Lemma extend_one_seg_not_cross : forall ls n t1 t2 border1 border2,
 	nth_error (segment_border ls) n = Some border1
 	-> nth_error (segment_border ls) (S n) = Some border2
@@ -610,7 +613,7 @@ Definition slope_two (rr1 rr2 : Point) :=
 (* embed_sparsely_listDir を強めたもの
 		sub_ds の埋め込みについて，その部分の埋め込みの終点が始点の右上側にあり，
 		始点での傾きが終点での傾き（どちらも正）よりも大きいようにできる *)
-(* TODO：上の補題に統合しても良い *)
+(* TODO：embed_sparsely_listDir に統合しても良い *)
 Lemma embed_sparsely_listDir_PMP (ds1 ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ [Plus; Minus; Plus] ++ ds2)
 	-> exists l r seg1 seg2 seg3,

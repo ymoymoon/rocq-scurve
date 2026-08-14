@@ -67,7 +67,7 @@ Definition is_one_way_listDir (ds: list Direction) : Prop :=
 		必要があれば証明 *)
 
 
-(* リスト補助（hd / last と map の交換。空リスト回避のため非空を仮定）*)
+(* リスト補助（hd / last と map の交換．空リスト回避のため非空を仮定）*)
 Lemma hd_map_nonnil :
   forall (f : Segment -> Segment) ls,
     ls <> [] -> hd_segment (map f ls) = f (hd_segment ls).
@@ -165,7 +165,7 @@ Admitted.
 
 (* ================================================================= *)
 (*  1．回転（90°×4）—                                                   *)
-(*      8方向はどれも 90°の4回転のどれかで x 正成分を持つ向きに入る。    *)
+(*      8方向はどれも 90°の4回転のどれかで x 正成分を持つ向きに入る．    *)
 (* ================================================================= *)
 
 Inductive Rot : Type := R0 | R90 | R180 | R270.
@@ -178,6 +178,7 @@ Definition rot_pt (g : Rot) (p : Point) : Point :=
   | R270 => (snd p, - fst p)
   end.
 
+(* TODO : 反転は不要かもしれない *)
 Definition rot_inv (g : Rot) : Rot :=
   match g with R0 => R0 | R90 => R270 | R180 => R180 | R270 => R90 end.
 
@@ -187,7 +188,7 @@ Proof.
     f_equal; try ring.
 Qed.
 
-(* セグメントの回転。point との整合を公理に置くと                *)
+(* セグメントの回転．point との整合を公理に置くと                *)
 (* onSegment / onHead / onLast の輸送が自動で従う                      *)
 Parameter rot_seg : Rot -> Segment -> Segment.
 Definition rot_segs (g : Rot) (ls : list Segment) := map (rot_seg g) ls.
@@ -262,29 +263,29 @@ Proof. intros. unfold Rmin, Rmax. destruct (Rle_dec (-a) (-b)), (Rle_dec a b); l
 Lemma Rmax_opp : forall a b, Rmax (- a) (- b) = - Rmin a b.
 Proof. intros. unfold Rmin, Rmax. destruct (Rle_dec (-a) (-b)), (Rle_dec a b); lra. Qed.
 
-(* --- embed / close / sparse の回転不変性（★分離した補題）--- *)
+(* --- embed / close / sparse の回転不変性 --- *)
 Lemma rot_embed :
   forall g ds ls, embed_listDir ds ls -> embed_listDir ds (rot_segs g ls).
 Admitted. 
 
 Lemma rot_close :
   forall g ls, close (rot_segs g ls) -> close ls.
-Admitted.  (* rot_pt が単射なので、交点は交点に対応 *)
+Admitted.  (* rot_pt が単射なので，交点は交点に対応 *)
 
 Lemma rot_open :
   forall g ls, ~ close ls -> ~ close (rot_segs g ls).
 Proof. intros g ls H Hc. apply H. eapply rot_close; exact Hc. Qed.
 
-(* --- ★本命：単方向なら回転で x 正方向単調にできる --- *)
+(* --- 単方向なら回転で x 正方向単調にできる --- *)
 Lemma one_way_rot_exists :
   forall sub, is_one_way_embedding sub ->
     exists g : Rot, x_monotone_segs (rot_segs g sub).
 Admitted.
-(* 証明方針：is_one_way_scurve から、sub の全セグメントの向きは        *)
-(*   「ある成分の符号が一定」な向きの集合に入る。8方向 d に対し、        *)
+(* 証明方針：is_one_way_scurve から，sub の全セグメントの向きは        *)
+(*   「ある成分の符号が一定」な向きの集合に入る．8方向 d に対し，        *)
 (*   g だけ回転させて {E, NE, SE}（= x 正成分）に入る g が存在：         *)
 (*     E,NE,SE → R0 ／ N,NW → R270 ／ W,SW → R180 ／ S → R90          *)
-(*   あとは rot_seg_point から init_x < term_x を計算するだけ。        *)
+(*   あとは rot_seg_point から init_x < term_x を計算するだけ．        *)
 
     
 (* --------------------------------------------------------------------------- *)
@@ -425,7 +426,7 @@ Proof.
 Qed.
 
 
-(* --- 長方形の輸送（★sparse の回転不変性の核）--- *)
+(* --- 長方形の輸送（ sparse の回転不変性の核）--- *)
 Definition rot_rect (g : Rot) (Rc : Rect) : Rect :=
   match g with
   | R0   => Rc
@@ -483,8 +484,10 @@ Qed.
 (*  3.  境界線と移動                *)
 (* ================================================================= *)
 
-Definition Border := R -> R. (* これは良い？確かに境界線ならば関数だが，関数ならば境界線ではないので
-   Border に関する変な補題などがなければ良い *)
+(* 境界線ならば関数だが，関数ならば境界線ではないので
+   Border に関する変な補題をつくらないよう注意．
+   特に [forall b : Border, ...] は原則としてつくらない *)
+Definition Border := R -> R. 
 Definition on_border (b : Border) (p : Point) : Prop := snd p = b (fst p).
 
 Inductive Region : Type := RegFix | RegUp | RegDown.
@@ -541,8 +544,8 @@ Parameter make_border : list Segment -> list Segment -> Border.
 Definition border_of (l sub r : list Segment) : Border :=
   make_border (l ++ sub ++ r) sub.
 
-(* 基本はセグメント全体を一定量だけ上下させる。                        *)
-(* 境界線に接するセグメントは、自分の可変域の中だけで形を変える。       *)
+(* 基本はセグメント全体を一定量だけ上下させる．                        *)
+(* 境界線に接するセグメントは，自分の可変域の中だけで形を変える．       *)
 Parameter operate_seg : list Segment -> list Segment -> R -> Segment -> Segment.
 
 Definition operate_segs (ctx sub : list Segment) (h : R) (ls : list Segment)
@@ -552,13 +555,13 @@ Definition operate_segs (ctx sub : list Segment) (h : R) (ls : list Segment)
 Definition Zone := Point -> Prop.
 Parameter dzone : list Segment -> list Segment -> Segment -> Zone.
 
-(* 曲線 P が境界線より上／下（以上／以下） *)
+(* 点集合 P が境界線より上／下（以上／以下） *)
 Definition weakly_above (b : Border) (P : Point -> Prop) : Prop :=
   forall p, P p -> b (fst p) <= snd p.
 Definition weakly_below (b : Border) (P : Point -> Prop) : Prop :=
   forall p, P p -> snd p <= b (fst p).
 
-(* --- operate_seg の仕様（境界線は make_border ctx sub で固定）--- *)
+(* --- operate_seg の仕様 --- *)
 
 (* 仕様1：境界線上に完全に乗るセグメントは不動（簡約部分） *)
 Axiom operate_seg_fix :
@@ -617,11 +620,11 @@ Axiom bbox_of_bounds :
 Definition outside_rect_x (sub : list Segment) (x : R) : Prop :=
   x < rx0 (rect_of sub) \/ rx1 (rect_of sub) < x.
 
-(* 境界線を作れる前提（これ以外の仮定は使わない）*)
+(* 境界線を作るための前提（これ以外の仮定は使わない）*)
 Definition well_split (l sub r : list Segment) : Prop :=
   sub <> [] /\ x_monotone_segs sub /\ ~ close (l ++ sub ++ r).
 
-(* h の条件（sub のみに依存。境界線に依存しない）*)
+(* h の条件（sub のみに依存．境界線に依存しない）*)
 Definition h_large (h : R) (sub : list Segment) : Prop :=
   0 < h /\ rect_height (bbox_of sub) < h.
 
@@ -633,13 +636,13 @@ Proof.
   - eapply Rlt_le_trans; [| apply Rmax_r]. lra.
 Qed.
 
-(* ---- (A-1) sub は境界線のグラフの一部 ⇒ 不動 -------------------- *)
+(* ---- (A-1) sub は境界線のグラフの一部 -------------------- *)
 Lemma mb_fits :
   forall l sub r, well_split l sub r ->
     forall p, onSegmentlist sub p -> on_border (border_of l sub r) p.
 Admitted.
 
-(* ---- (A-2) 長方形の x 範囲では、境界線は sub のグラフそのもの ----- *)
+(* ---- (A-2) 長方形の x 範囲では，境界線は sub のグラフそのもの ----- *)
 (*      x 単調性＋連結性＋中間値定理（mb_fits から従う独立補題）      *)
 Lemma mb_cover :
   forall l sub r, well_split l sub r ->
@@ -727,6 +730,8 @@ Qed.
 (*  5.  移動先が長方形に入らないこと                                   *)
 (* ================================================================= *)
 
+(* 境界線と交わる点がどれも，簡約部分の長方形の外側にあるような点集合 P について，
+    P の点 p0 を動かしたら，簡約部分の長方形の外側に行く *)
 Lemma operate_pt_not_in_rect :
   forall l sub r h (P : Point -> Prop) p0,
     well_split l sub r -> h_large h sub ->
@@ -743,14 +748,14 @@ Proof.
   unfold operate_point in Hin.
   destruct (classify (border_of l sub r) p0) eqn:Hg; unfold shift in Hin.
 
-  - (* RegFix : 不動。境界線に触るので接触点 ⇒ x 範囲の外 ⇒ 矛盾 *)
+  - (* RegFix : 不動．境界線に触るので接触点 ⇒ x 範囲の外 ⇒ 矛盾 *)
     destruct Hin as [[Hx0 Hx1] _].
     assert (Hc : contact_x (border_of l sub r) P (fst p0)).
     { exists p0. repeat split;
       [exact HP | apply (classify_RegFix_char _ p0 Hg)]. }
     destruct (Hct _ Hc); unfold outside_rect_x in *; lra.
 
-  - (* RegUp : 上へ h。b(x) は bbox の中 ＆ h > bbox の高さ ⇒ 矛盾 *)
+  - (* RegUp : 上へ h．b(x) は bbox の中 ＆ h > bbox の高さ ⇒ 矛盾 *)
     pose proof (classify_RegUp_char _ p0 Hg) as Hup.
     destruct Hin as [[Hx0 Hx1] [Hy0 Hy1]]. cbn [fst snd] in *.
     destruct (mb_cover l sub r Hws (fst p0)) as [q [Hq [Hqx Hqy]]]; [lra|].
@@ -758,7 +763,7 @@ Proof.
     (* rewrite Hqx in Hqy. lra. *)
     admit.
 
-  - (* RegDown : 下へ h。対称 *)
+  - (* RegDown : 下へ h．対称 *)
     pose proof (classify_RegDown_char _ p0 Hg) as Hdn.
     destruct Hin as [[Hx0 Hx1] [Hy0 Hy1]]. cbn [fst snd] in *.
     destruct (mb_cover l sub r Hws (fst p0)) as [q [Hq [Hqx Hqy]]]; [lra|].
@@ -766,11 +771,6 @@ Proof.
     (* rewrite Hqx in Hqy. lra. *)
     admit.
 Admitted.
-
-
-(* ================================================================= *)
-(*  6.  operate の構造補題                                            *)
-(* ================================================================= *)
 
 Lemma operate_segs_fix :
   forall l sub r h, well_split l sub r ->
@@ -841,26 +841,29 @@ Proof.
 Qed.
 
 
-(* ---- Lemma C : 接続の丸め（★独立の難所）------------------------- *)
-(* 境界線と交わるセグメントは、可変域の中だけで形を変えて向きを保つ    *)
-Lemma reconnect_one_segment :
+(* ================================================================= *)
+(*  6.  核となる補題                                            *)
+(* ================================================================= *)
+
+(* 境界線と交わるセグメントは，可変域の中だけで形を変えて向きを保つ    *)
+(* Lemma reconnect_one_segment :
   forall ctx sub h s,
     ~ weakly_above (make_border ctx sub) (onSegment s) ->
     ~ weakly_below (make_border ctx sub) (onSegment s) ->
     orn_seg (operate_seg ctx sub h s) = orn_seg s.
-Admitted.
+Admitted. *)
 
-(* ---- Lemma D : 埋め込みの保存 ----------------------------------- *)
+(* ---- Lemma A : 埋め込みの保存 ----------------------------------- *)
 Lemma operate_preserves_embed :
   forall ctx sub h ds ls,
     embed_listDir ds ls -> embed_listDir ds (operate_segs ctx sub h ls).
 Admitted.
 
-(* ---- Lemma E : 開の保存 ----------------------------------------- *)
+(* ---- Lemma B : 開の保存 ----------------------------------------- *)
 (*  [1] セグメント×セグメント：同領域なら同じ h 平行移動 ⇒ 移動前も    *)
 (*      交差して矛盾／可変域に入る場合は mb_dz_local より隣接 ⇒       *)
 (*      共有端点であって自己交差ではない                              *)
-(*  [2] セグメント×延長線、[3] 延長線×延長線：同様に帰着              *)
+(*  [2] セグメント×延長線，[3] 延長線×延長線：同様に帰着              *)
 Lemma operate_preserves_open :
   forall l sub r h, well_split l sub r ->
     ~ close (operate_segs (l ++ sub ++ r) sub h l
@@ -868,7 +871,7 @@ Lemma operate_preserves_open :
              ++ operate_segs (l ++ sub ++ r) sub h r).
 Admitted.
 
-(* ---- Lemma F : 疎になる（3ケースすべて証明済み）------------------ *)
+(* ---- Lemma C : 移動すると疎になる ------------------ *)
 Lemma operate_gives_sparse :
   forall l sub r h, well_split l sub r -> h_large h sub ->
     sparse (operate_segs (l ++ sub ++ r) sub h l)
@@ -936,7 +939,7 @@ Qed.
 
 
 (* ================================================================= *)
-(*  7.  最終命題（回転 → 核補題 → 逆回転）                            *)
+(*  7.  最終命題                          *)
 (* ================================================================= *)
 
 Lemma embed_sparsely_xmono :
@@ -951,7 +954,7 @@ Lemma embed_sparsely_xmono :
    /\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l' ++ sub' ++ r')
    /\ ~ close (l' ++ sub' ++ r')
    /\ sparse l' sub' r'
-   /\ sub' <> [].                       (* ★追加 *)
+   /\ sub' <> []. 
 Proof.
   intros ds1 sub_ds ds2 l sub r Hl Hsub Hr Hall Hws.
   pose proof Hws as Hws'. destruct Hws' as [Hne _].
