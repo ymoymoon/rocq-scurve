@@ -26,6 +26,12 @@ Definition rightabove (rr1 rr2 : Point) :=
   let (x1, y1) := rr1 in
   let (x2, y2) := rr2 in x1 < x2 /\ y1 < y2.
 
+(* Minus 側 (下向きに進む一方向曲線) の埋め込みで rightabove の代わりに使う，
+    x 軸に関する鏡映版：終点が始点の右下側にある *)
+Definition rightbelow (rr1 rr2 : Point) :=
+  let (x1, y1) := rr1 in
+  let (x2, y2) := rr2 in x1 < x2 /\ y2 < y1.
+
 (* x 単調 = x 軸正の向きに進み続ける（y は無関係） *)
 Definition x_monotone_seg  (s : Segment) : Prop := init_x s < term_x s.
 Definition x_monotone_segs (ls : list Segment) : Prop :=

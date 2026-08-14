@@ -12,18 +12,12 @@ From Stdlib Require Import Lia.
 
 
 (* --------------------------------------------------------------------------- *)
-(* Parameter extend に関する補題． SegmentList.v 等を新設しても *)
+(* extend に関する補題．extend / segment_border 本体の定義と公理は Segment.v 参照 *)
 
 (* 引数のリスト ls を extend した時に， ls の n 番目のセグメントの上を指すのは
 		nth (segment_border ls) <= t <= (n+1)th (segment_border ls)
 		また segment_border ls の先頭要素より小さい t では先頭の延長線上を指し，
 		segment_border ls の最後の要素より大きい t では末尾の延長線上を指す *)
-(* TODO : 空リストの扱い *)
-Parameter segment_border : list Segment -> list R.
-Axiom border_length : forall ls, length (segment_border ls) = S (length ls).
-
-(* extend の満たすべき性質．単調性を公理として導ける？ *)
-(* TODO : 後の定理を示すため，[t] の大小関係に関する縛りも結論に入れる *)
 Lemma extention_split : forall t ls,
 	let p := extend ls t in
 	ls <> []
@@ -38,32 +32,143 @@ Lemma extention_split : forall t ls,
 	\/ (exists border_last t', (* 末尾の延長線上 *)
 			nth_error (segment_border ls) (length ls) = Some border_last /\
 			border_last <= t /\ 1 <= t' /\ p = point (last_segment ls) t').
-Proof. 
-Admitted.
+Proof.
+	intros t ls p Hne.
+	destruct (extend_pick_spec ls t Hne) as [n [s [bn [bn1 [Hs [Hbn [Hbn1 [Hcase Heq]]]]]]]].
+	assert (Hp: p = point s ((t - bn) / (bn1 - bn))).
+	{ unfold p, extend. rewrite Heq. reflexivity. }
+	assert (Hlt: bn < bn1) by (eapply border_increasing; eauto).
+	destruct Hcase as [[Hn0 Ht] | [Hmid | [Hlast Ht]]].
+	- (* 先頭の延長線上 *) left. subst n.
+		exists bn, ((t - bn) / (bn1 - bn)).
+		split; [exact Hbn |].
+		split; [exact Ht |].
+		split.
+		+ apply (proj2 (affine_param_iff_le bn bn1 t 0 Hlt)). lra.
+		+ rewrite Hp. unfold hd_segment.
+			pose proof (nth_error_hd default_segment ls Hs) as Hhd.
+			rewrite Hhd. reflexivity.
+	- (* セグメント上 *) right; left.
+		exists n, bn, bn1, ((t - bn) / (bn1 - bn)), s.
+		split; [exact Hs |].
+		split; [exact Hbn |].
+		split; [exact Hbn1 |].
+		split; [lra |].
+		split; [split |].
+		+ apply (proj2 (affine_param_iff_ge bn bn1 t 0 Hlt)). lra.
+		+ apply (proj2 (affine_param_iff_le bn bn1 t 1 Hlt)). lra.
+		+ exact Hp.
+	- (* 末尾の延長線上 *) right; right.
+		assert (Hlen: (length ls - 1)%nat = n) by lia.
+		assert (Hs': nth_error ls (length ls - 1)%nat = Some s) by (rewrite Hlen; exact Hs).
+		pose proof (nth_error_last default_segment Hne) as Hlast_eq.
+		rewrite Hs' in Hlast_eq.
+		assert (Hbn1' : nth_error (segment_border ls) (length ls) = Some bn1) by (rewrite <- Hlast, Hbn1; reflexivity).
+		exists bn1, ((t - bn) / (bn1 - bn)).
+		split; [exact Hbn1' |].
+		split; [exact Ht |].
+		split.
+		+ apply (proj2 (affine_param_iff_ge bn bn1 t 1 Hlt)). lra.
+		+ rewrite Hp. unfold last_segment. congruence.
+Qed.
 
 (* extend した延長部分の先頭だけで交差は起こらない *)
 (* TODO : この辺りは， segment_border が単調増加という公理などから示せるかもしれない *)
 Lemma extend_head_not_cross : forall ls t1 t2 border_first,
-	nth_error (segment_border ls) 0 = Some border_first
+	ls <> []
+	-> nth_error (segment_border ls) 0 = Some border_first
 	-> t1 <= border_first
 	-> t2 <= border_first
 	-> extend ls t1 = extend ls t2
 	-> t1 = t2.
 Proof.
-Admitted.
+	intros ls t1 t2 b0 Hne Hb0 Ht1 Ht2 Hext.
+	destruct (extend_pick_spec ls t1 Hne) as [n1 [s1 [bn1a [bn1b [Hs1 [Hbn1a [Hbn1b [Hcase1 Heq1]]]]]]]].
+	destruct (extend_pick_spec ls t2 Hne) as [n2 [s2 [bn2a [bn2b [Hs2 [Hbn2a [Hbn2b [Hcase2 Heq2]]]]]]]].
+	assert (Hn1: n1 = O).
+	{ destruct n1 as [|n1']; [reflexivity | exfalso].
+		assert (Hb0lt: b0 < bn1a).
+		{ apply (Increasing_lt (segment_border ls) O (S n1') b0 bn1a (segment_border_increasing ls));
+				[lia | exact Hb0 | exact Hbn1a]. }
+		destruct Hcase1 as [[Hz _] | [Hmid | [Hlast Ht]]]; [discriminate Hz | lra |].
+		assert (Hlt1: bn1a < bn1b) by (eapply border_increasing; eauto). lra. }
+	assert (Hn2: n2 = O).
+	{ destruct n2 as [|n2']; [reflexivity | exfalso].
+		assert (Hb0lt: b0 < bn2a).
+		{ apply (Increasing_lt (segment_border ls) O (S n2') b0 bn2a (segment_border_increasing ls));
+				[lia | exact Hb0 | exact Hbn2a]. }
+		destruct Hcase2 as [[Hz _] | [Hmid | [Hlast Ht]]]; [discriminate Hz | lra |].
+		assert (Hlt2: bn2a < bn2b) by (eapply border_increasing; eauto). lra. }
+	subst n1 n2.
+	rewrite Hb0 in Hbn1a, Hbn2a.
+	injection Hbn1a as Hbn1a. injection Hbn2a as Hbn2a. subst bn1a bn2a.
+	assert (Hbb: bn1b = bn2b) by congruence. subst bn2b.
+	assert (Hs: s1 = s2) by congruence. subst s2.
+	assert (Hlt: b0 < bn1b) by (eapply border_increasing; eauto).
+	assert (Hp1: extend ls t1 = point s1 ((t1 - b0) / (bn1b - b0))) by (unfold extend; rewrite Heq1; reflexivity).
+	assert (Hp2: extend ls t2 = point s1 ((t2 - b0) / (bn1b - b0))) by (unfold extend; rewrite Heq2; reflexivity).
+	rewrite Hp1, Hp2 in Hext.
+	assert (Haff: (t1 - b0) / (bn1b - b0) = (t2 - b0) / (bn1b - b0)) by (eapply point_injective; eauto).
+	eapply affine_inj; eauto.
+Qed.
 
 (* extend した延長部分の末尾だけで交差は起こらない *)
 Lemma extend_last_not_cross : forall ls t1 t2 border_last,
-	nth_error (segment_border ls) (length ls) = Some border_last
+	ls <> []
+	-> nth_error (segment_border ls) (length ls) = Some border_last
 	-> border_last <= t1
 	-> border_last <= t2
 	-> extend ls t1 = extend ls t2
 	-> t1 = t2.
 Proof.
-Admitted.
+	intros ls t1 t2 blast Hne Hblast Ht1 Ht2 Hext.
+	destruct (extend_pick_spec ls t1 Hne) as [n1 [s1 [bn1a [bn1b [Hs1 [Hbn1a [Hbn1b [Hcase1 Heq1]]]]]]]].
+	destruct (extend_pick_spec ls t2 Hne) as [n2 [s2 [bn2a [bn2b [Hs2 [Hbn2a [Hbn2b [Hcase2 Heq2]]]]]]]].
+	assert (Hn1lt: (n1 < length ls)%nat) by (apply nth_error_Some; rewrite Hs1; discriminate).
+	assert (Hn2lt: (n2 < length ls)%nat) by (apply nth_error_Some; rewrite Hs2; discriminate).
+	assert (Hn1: S n1 = length ls).
+	{ destruct (Nat.eq_dec (S n1) (length ls)) as [Heqn|Hneqn]; [exact Heqn | exfalso].
+		assert (Hb: bn1b < blast).
+		{ apply (Increasing_lt (segment_border ls) (S n1) (length ls) bn1b blast (segment_border_increasing ls));
+				[lia | exact Hbn1b | exact Hblast]. }
+		destruct Hcase1 as [[Hz Ht] | [Hmid | [Hlast Ht]]].
+		- assert (Hlt1: bn1a < bn1b) by (eapply border_increasing; eauto). lra.
+		- lra.
+		- lia. }
+	assert (Hn2: S n2 = length ls).
+	{ destruct (Nat.eq_dec (S n2) (length ls)) as [Heqn|Hneqn]; [exact Heqn | exfalso].
+		assert (Hb: bn2b < blast).
+		{ apply (Increasing_lt (segment_border ls) (S n2) (length ls) bn2b blast (segment_border_increasing ls));
+				[lia | exact Hbn2b | exact Hblast]. }
+		destruct Hcase2 as [[Hz Ht] | [Hmid | [Hlast Ht]]].
+		- assert (Hlt2: bn2a < bn2b) by (eapply border_increasing; eauto). lra.
+		- lra.
+		- lia. }
+	assert (Hn1n2: n1 = n2) by lia. subst n2.
+	assert (Hbn1b_alt: nth_error (segment_border ls) (S n1) = Some blast) by (rewrite Hn1; exact Hblast).
+	assert (Ebb1: bn1b = blast) by congruence.
+	assert (Ebb2: bn2b = blast) by congruence.
+	subst bn1b bn2b.
+	assert (Hbb: bn1a = bn2a) by congruence. subst bn2a.
+	assert (Hs: s1 = s2) by congruence. subst s2.
+	assert (Hlt: bn1a < blast) by (eapply border_increasing; eauto).
+	assert (Hp1: extend ls t1 = point s1 ((t1 - bn1a) / (blast - bn1a))) by (unfold extend; rewrite Heq1; reflexivity).
+	assert (Hp2: extend ls t2 = point s1 ((t2 - bn1a) / (blast - bn1a))) by (unfold extend; rewrite Heq2; reflexivity).
+	rewrite Hp1, Hp2 in Hext.
+	assert (Haff: (t1 - bn1a) / (blast - bn1a) = (t2 - bn1a) / (blast - bn1a)) by (eapply point_injective; eauto).
+	eapply affine_inj; eauto.
+Qed.
 
 (* extend した時も１つのセグメントの中で交差は起こらない *)
 (* TODO : extend しない時の定理とまとめられないか *)
+(* 注意：これは隣接するセグメントが端点で接続している（term(nth n ls) = init(nth (S n) ls)）
+		ことを使わないと証明できない．境界 t=border1 ちょうどでは，extend の定義（手前のセグメントを
+		選ぶ）により，t1=border1, t2 が区間内部という状況で，t1 は手前のセグメントの終点，t2 は
+		このセグメントの内部点を指すことになる．ls が単なる Segment のリスト（embed_scurve での
+		連結性を仮定しない）である限り，両者がたまたま同じ点を指す（つまり extend ls t1 = extend ls t2）
+		可能性を今の公理系だけでは排除できず，反例が作れてしまう．embed_scurve 由来の連結性
+		（Embed.v の consist_init_term 等）を仮定に加えれば示せるはずだが，この補題自体にはその
+		仮定がないため，現状は Admitted のままにしている． *)
 Lemma extend_one_seg_not_cross : forall ls n t1 t2 border1 border2,
 	nth_error (segment_border ls) n = Some border1
 	-> nth_error (segment_border ls) (S n) = Some border2
@@ -232,7 +337,8 @@ Lemma one_seg_not_cross : forall t1 t2 seg,
 	point seg t1 = point seg t2
 	-> t1 = t2.
 Proof.
-Admitted.
+	intros t1 t2 seg H. exact (point_injective seg t1 t2 H).
+Qed.
 
 
 (* 傾きを想定しているが，埋め込みの延長線を一意に定義するものであればよい *)
@@ -337,11 +443,68 @@ Proof.
 	- unfold is_one_way_scurve; split.
 		+ (* not nil *) simpl. congruence.
 		+ (* Forall *) left. repeat constructor; eauto.
-	Unshelve. (* scurve であることの証明 *) 
+	Unshelve. (* scurve であることの証明 *)
 	simpl. repeat constructor.
 Qed.
 
-Lemma embedding_oneway_listDir : forall ds ls, 
+(* [Plus] 系 is_oneway 補題を，全ての PrimitiveSegment の cx/cc を反転させることで
+		[Minus] 系に写す（v は e 側では orn に無関係なので固定のままでよい） *)
+Lemma M_is_oneway : is_one_way_listDir [Minus].
+Proof.
+	exists (scurve_from_one (n,e,cc)). split.
+	- unfold scurve_to_direction. reflexivity.
+	- unfold is_one_way_scurve; split.
+		+ (* not nil *) simpl. congruence.
+		+ (* Forall *) left. constructor; eauto.
+Qed.
+
+Lemma MP_is_oneway : is_one_way_listDir [Minus; Plus].
+Proof.
+	set (p1 := scurve_from_one (n,e,cc)).
+	set (p2 := scurve_from_one (n,e,cx)).
+	eexists (exist _ [(n,e,cc); (n,e,cx)] _). split.
+	- unfold scurve_to_direction. reflexivity.
+	- unfold is_one_way_scurve; split.
+		+ (* not nil *) simpl. congruence.
+		+ (* Forall *) left. constructor; eauto.
+	Unshelve. (* scurve であることの証明 *)
+	simpl. repeat constructor.
+Qed.
+
+Lemma MPM_is_oneway : is_one_way_listDir [Minus; Plus; Minus].
+Proof.
+	set (p1 := scurve_from_one (n,e,cc)).
+	set (p2 := scurve_from_one (n,e,cx)).
+	eexists (exist _ [(n,e,cc); (n,e,cx); (n,e,cc)] _). split.
+	- unfold scurve_to_direction. reflexivity.
+	- unfold is_one_way_scurve; split.
+		+ (* not nil *) simpl. congruence.
+		+ (* Forall *) left. repeat constructor; eauto.
+	Unshelve. (* scurve であることの証明 *)
+	simpl. repeat constructor.
+Qed.
+
+(* PPMM 側は (n,e,cx);(s,e,cx);(s,e,cc);(n,e,cc) を dc で繋いでいた．
+		v(=n/s) と c(=cx/cc) を同時に反転（h=e は固定）させると dc の各規則
+		（DXtrvN <-> DXtrvS, DIfl は自己双対）はそのまま保たれ，かつ e 側では
+		orn は c のみで決まる（cx -> Plus, cc -> Minus）ので，向きは Plus/Minus が
+		入れ替わる．よって (s,e,cc);(n,e,cc);(n,e,cx);(s,e,cx) が MMPP の埋め込みになる． *)
+Lemma MMPP_is_oneway : is_one_way_listDir [Minus; Minus; Plus; Plus].
+Proof.
+	set (p1 := scurve_from_one (s,e,cc)).
+	set (p2 := scurve_from_one (n,e,cc)).
+	set (p3 := scurve_from_one (n,e,cx)).
+	set (p4 := scurve_from_one (s,e,cx)).
+	eexists (exist _ [(s,e,cc); (n,e,cc); (n,e,cx); (s,e,cx)] _). split.
+	- unfold scurve_to_direction. reflexivity.
+	- unfold is_one_way_scurve; split.
+		+ (* not nil *) simpl. congruence.
+		+ (* Forall *) left. repeat constructor; eauto.
+	Unshelve. (* scurve であることの証明 *)
+	simpl. repeat constructor.
+Qed.
+
+Lemma embedding_oneway_listDir : forall ds ls,
 	embed_listDir ds ls -> is_one_way_listDir ds -> is_one_way_embedding ls.
 Proof.
 	intros ds ls H1 H2.
@@ -461,6 +624,22 @@ Lemma embed_sparsely_listDir_PMP (ds1 ds2 : list Direction) :
 		/\ sparse l [seg1; seg2; seg3] r.
 Proof. Admitted.
 
+(* embed_sparsely_listDir_PMP の Minus 版．x 軸に関する鏡映により，
+		rightabove は rightbelow に，傾きの大小・符号はすべて反転する
+		（0 < slope_term seg3 < slope_init seg1 は slope_init seg1 < slope_term seg3 < 0 になる） *)
+Lemma embed_sparsely_listDir_MPM (ds1 ds2 : list Direction) :
+	AdmissibleDirs (ds1 ++ [Minus; Plus; Minus] ++ ds2)
+	-> exists l r seg1 seg2 seg3,
+		rightbelow (init seg1) (term seg3)
+	  /\ slope_init seg1 < slope_term seg3 < 0
+		/\ embed_listDir ds1 l
+		/\ embed_listDir [Minus; Plus; Minus] [seg1; seg2; seg3]
+		/\ embed_listDir ds2 r
+		/\ embed_listDir (ds1 ++ [Minus; Plus; Minus] ++ ds2) (l ++ [seg1; seg2; seg3] ++ r)
+		/\ ~ close (l ++ [seg1; seg2; seg3] ++ r)
+		/\ sparse l [seg1; seg2; seg3] r.
+Proof. Admitted.
+
 Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2)
 	-> exists l r seg1 seg2 seg3 seg4, 
@@ -473,7 +652,23 @@ Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
 		/\ embed_listDir (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) (l ++ [seg1; seg2; seg3; seg4] ++ r)
 		/\ ~ close (l ++ [seg1; seg2; seg3; seg4] ++ r)
 		/\ sparse l [seg1; seg2; seg3; seg4] r.
-Proof. Admitted.	
+Proof. Admitted.
+
+(* embed_sparsely_listDir_PPMM の Minus 版．鏡映により rightabove -> rightbelow，
+		slope_two（傾き）や slope_init/slope_term の大小関係もすべて符号・向きが反転する *)
+Lemma embed_sparsely_listDir_MMPP (ds1 ds2 : list Direction) :
+	AdmissibleDirs (ds1 ++ [Minus; Minus; Plus; Plus] ++ ds2)
+	-> exists l r seg1 seg2 seg3 seg4,
+		rightbelow (init seg1) (term seg4)
+		/\ slope_init seg1 < slope_two (init seg1) (term seg4)
+		/\ slope_term seg4 < slope_two (init seg1) (term seg4)
+		/\ embed_listDir ds1 l
+		/\ embed_listDir [Minus; Minus; Plus; Plus] [seg1; seg2; seg3; seg4]
+		/\ embed_listDir ds2 r
+		/\ embed_listDir (ds1 ++ [Minus; Minus; Plus; Plus] ++ ds2) (l ++ [seg1; seg2; seg3; seg4] ++ r)
+		/\ ~ close (l ++ [seg1; seg2; seg3; seg4] ++ r)
+		/\ sparse l [seg1; seg2; seg3; seg4] r.
+Proof. Admitted.
 
 (* Plus (の向きを持つ Primitive Segment) の埋め込みを，端点とそこでの傾きを保存したまま
 		[Plus; Minus; Plus] の埋め込みとなる３つに矩形内で分割できる *)
@@ -487,6 +682,17 @@ Lemma embedding_P_to_PMP_in_rect : forall (seg : Segment),
 		/\ same_slope_init_and_term [seg] [seg1; seg2; seg3].
 Proof. Admitted.
 
+(* embedding_P_to_PMP_in_rect の Minus 版 *)
+Lemma embedding_M_to_MPM_in_rect : forall (seg : Segment),
+	embed_listDir [Minus] [seg]
+	-> exists seg1 seg2 seg3,
+		embed_listDir [Minus; Plus; Minus] [seg1; seg2; seg3]
+		/\ (forall rr, onSegmentlist [seg1; seg2; seg3] rr
+				-> in_rect (rect_of [seg]) rr)
+		/\ same_init_and_term [seg] [seg1; seg2; seg3]
+		/\ same_slope_init_and_term [seg] [seg1; seg2; seg3].
+Proof. Admitted.
+
 (* [Plus; Minus] の埋め込みを，端点とそこでの傾きを保存したまま
 		[Plus; Plus; Minus; Minus] の埋め込みとなる4つに矩形内で分割できる *)
 Lemma embedding_PM_to_PPMM_in_rect : forall (seg1 seg2 : Segment),
@@ -495,6 +701,17 @@ Lemma embedding_PM_to_PPMM_in_rect : forall (seg1 seg2 : Segment),
 		embed_listDir [Plus; Plus; Minus; Minus] [seg1'; seg2'; seg3'; seg4'] (* この内部で seg1-3 が連結していることは示されてほしい *)
 		/\ (forall rr, onSegmentlist [seg1'; seg2'; seg3'; seg4'] rr
 				-> in_rect (rect_of [seg1; seg2]) rr) (* seg が張る矩形の内部で分割できている *)
+		/\ same_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4']
+		/\ same_slope_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4'].
+Proof. Admitted.
+
+(* embedding_PM_to_PPMM_in_rect の Minus 版 *)
+Lemma embedding_MP_to_MMPP_in_rect : forall (seg1 seg2 : Segment),
+	embed_listDir [Minus; Plus] [seg1; seg2]
+	-> exists seg1' seg2' seg3' seg4',
+		embed_listDir [Minus; Minus; Plus; Plus] [seg1'; seg2'; seg3'; seg4']
+		/\ (forall rr, onSegmentlist [seg1'; seg2'; seg3'; seg4'] rr
+				-> in_rect (rect_of [seg1; seg2]) rr)
 		/\ same_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4']
 		/\ same_slope_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4'].
 Proof. Admitted.
@@ -515,9 +732,23 @@ Lemma embedding_PMP_to_P_in_rect : forall (seg1 seg2 seg3 : Segment),
 				-> in_rect (rect_of [seg1; seg2; seg3]) rr ) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3] [seg]
 		/\ same_slope_init_and_term [seg1; seg2; seg3] [seg].
-Proof. 
+Proof.
 	(* 始点・終点・それぞれでの傾きが固定されているので，具体的に Plus の埋め込みが取れるはず *)
 Admitted.
+
+(* embedding_PMP_to_P_in_rect の Minus 版 *)
+Lemma embedding_MPM_to_M_in_rect : forall (seg1 seg2 seg3 : Segment),
+	rightbelow (init seg1) (term seg3)
+	-> slope_init seg1 < slope_term seg3 < 0
+	-> embed_listDir [Minus; Plus; Minus] [seg1; seg2; seg3]
+	->
+	exists seg,
+		embed_listDir [Minus] [seg]
+		/\ (forall rr, onSegment seg rr
+				-> in_rect (rect_of [seg1; seg2; seg3]) rr )
+		/\ same_init_and_term [seg1; seg2; seg3] [seg]
+		/\ same_slope_init_and_term [seg1; seg2; seg3] [seg].
+Proof. Admitted.
 
 (* [Plus; Plus; Minus; Minus] の埋め込みは，その部分の埋め込みの終点が始点の右上側にあり，
 		始点・終点での傾きがどちらも十分大きいならば，
@@ -535,9 +766,24 @@ Lemma embedding_PPMM_to_PM_in_rect : forall (seg1 seg2 seg3 seg4 : Segment),
 				-> in_rect (rect_of [seg1; seg2; seg3; seg4]) rr) (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2']
 		/\ same_slope_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2'].
-Proof. 
+Proof.
 	(* 始点から中心へ，終点から中心へそれぞれ Plus, Minus の埋め込みをとり，繋げれば良さそう *)
 Admitted.
+
+(* embedding_PPMM_to_PM_in_rect の Minus 版 *)
+Lemma embedding_MMPP_to_MP_in_rect : forall (seg1 seg2 seg3 seg4 : Segment),
+	rightbelow (init seg1) (term seg4)
+	-> slope_init seg1 < slope_two (init seg1) (term seg4)
+	-> slope_term seg4 < slope_two (init seg1) (term seg4)
+	-> embed_listDir [Minus; Minus; Plus; Plus] [seg1; seg2; seg3; seg4]
+	->
+	exists seg1' seg2',
+		embed_listDir [Minus; Plus] [seg1'; seg2']
+		/\ (forall rr, onSegmentlist [seg1'; seg2'] rr
+				-> in_rect (rect_of [seg1; seg2; seg3; seg4]) rr)
+		/\ same_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2']
+		/\ same_slope_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2'].
+Proof. Admitted.
 
 (*  向き ds1 ++ ds2 ++ ds3 の ds2 (の向きを持つ scurve) の埋め込みを，端点の条件を満たしつつ
 		ds2' の埋め込みに変えたら，向き ds1 ++ ds2' ++ ds3 の埋め込みである *)
@@ -926,7 +1172,44 @@ Qed.
 Lemma AdmissibleDirs_r1_Minus: forall l r,
   AdmissibleDirs (l ++ [Minus; Plus; Minus] ++ r) -> AdmissibleDirs (l ++ [Minus] ++ r).
 Proof.
-Admitted.
+	intros l r admds.
+	(* 疎な開埋め込みをとる *)
+	pose proof (embed_sparsely_listDir_MPM _ _ admds) as H.
+	destruct H as [ls1 [ls3 [seg1 [seg2 [seg3 [Hrightbelow [Hslope [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]]]]]];
+	try lra; simpl in *.
+	assert (Hdir: hd Minus (l ++ Minus :: r) = orn (hd_scurve sc)). {
+		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
+		destruct l; simpl in *;
+		symmetry; eapply list_map_hd; apply Hdir_sc.
+	}
+	(* AdmissibleDirs ds の証明では，向きが ds であり許容可能な scurve を1つつくればよい *)
+	apply AdmissibleDirs_exist.
+	pose proof (direction_scurve_correspondence (tl (l ++ Minus :: r)) (hd_scurve sc))
+		as [sc' [Hhead Hdir_sc']].
+	exists sc'. split.
+	- (* 向きが l ++ [Minus; Plus; Minus] ++ r であること *)
+		rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
+	- (* 許容可能であること *)
+		pose proof (embedding_MPM_to_M_in_rect seg1 seg2 seg3 Hrightbelow Hslope Hls2) as [segM [HM [Hin_rect [Hinit_term Hsame_slope]]]].
+		(* 欲しかった埋め込み *)
+		exists (ls1 ++ [segM] ++ ls3).
+		unfold admissible.
+		split.
+		+ (* 埋め込みになっていること *)
+			apply (embbeding_inner_change sc sc' l [Minus; Plus; Minus] [Minus] r ls1 [seg1; seg2; seg3] [segM] ls3);
+				try assumption; try discriminate.
+			(* 仮定を満たすことはほぼ作業的に示せる *)
+			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
+			* symmetry. assumption.
+		+ (* その埋め込みが開であること *)
+			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2; seg3] [segM]);
+				try assumption; try (symmetry; assumption); try congruence.
+			(* 残った subgoal もほぼ自明 *)
+			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus]); try assumption.
+				apply M_is_oneway.
+			* intros rr [seg' [H1 H2]]. apply Hin_rect.
+				destruct H1; [subst; assumption | exfalso; assumption].
+Qed.
 
 (* [+-+ => +] での簡約で，簡約先が許容可能ならもともと許容可能 *)
 Lemma AdmissibleDirs_r1_Plus_inv: forall l r,
@@ -974,7 +1257,44 @@ Qed.
 Lemma AdmissibleDirs_r1_Minus_inv: forall l r,
   AdmissibleDirs (l ++ [Minus] ++ r) -> AdmissibleDirs (l ++ [Minus; Plus; Minus] ++ r).
 Proof.
-Admitted.
+	intros l r admds.
+	(* 疎な開埋め込みをとる *)
+	pose proof (embed_sparsely_listDir _ _ _ admds M_is_oneway)
+		as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]];
+	simpl in *.
+	assert (Hdir: hd Minus (l ++ Minus :: Plus :: Minus :: r) = orn (hd_scurve sc)). {
+		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
+		destruct l; simpl in *;
+		symmetry; eapply list_map_hd; apply Hdir_sc.
+	}
+	(* AdmissibleDirs ds の証明では，向きが ds であり許容可能な scurve を1つつくればよい *)
+	apply AdmissibleDirs_exist.
+	pose proof (direction_scurve_correspondence (tl (l ++ Minus :: Plus :: Minus :: r)) (hd_scurve sc))
+		as [sc' [Hhead Hdir_sc']].
+	exists sc'. split.
+	- (* 向きが l ++ [Minus; Plus; Minus] ++ r であること *)
+		rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
+	- (* 許容可能であること *)
+		assert (H: embed_listDir (l ++ [Minus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
+			unfold embed_listDir. exists sc. split; assumption.
+		}
+		pose proof (embedding_one_dir Minus ls2 Hls2) as [segM HM]; subst.
+		pose proof (embedding_M_to_MPM_in_rect segM Hls2)
+			as [seg1 [seg2 [seg3 [HMPM [Hin_rect [Hinit_term Hslope]]]]]].
+		(* 欲しかった埋め込み *)
+		exists (ls1 ++ [seg1; seg2; seg3] ++ ls3).
+		unfold admissible.
+		split.
+		+ (* 埋め込みになっていること *)
+			apply (embbeding_inner_change sc sc' l [Minus] [Minus; Plus; Minus] r ls1 [segM] [seg1; seg2; seg3] ls3);
+				try assumption; try discriminate.
+			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
+			* symmetry. assumption.
+		+ (* その埋め込みが開であること *)
+			apply (seg_in_rectangle_keep_openness _ _ [segM] _ ); try assumption; try congruence.
+			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus; Plus; Minus]); try assumption.
+				apply MPM_is_oneway.
+Qed.
 
 Lemma AdmissibleDirs_r2_Plus: forall l r,
   AdmissibleDirs (l ++ [Plus; Plus; Minus; Minus] ++ r) -> AdmissibleDirs (l ++ [Plus; Minus] ++ r).
@@ -1018,7 +1338,41 @@ Qed.
 Lemma AdmissibleDirs_r2_Minus: forall l r,
   AdmissibleDirs (l ++ [Minus; Minus; Plus; Plus] ++ r) -> AdmissibleDirs (l ++ [Minus; Plus] ++ r).
 Proof.
-Admitted.
+	intros l r admds.
+	(* 疎な開埋め込みをとる *)
+	pose proof (embed_sparsely_listDir_MMPP _ _ admds) as H.
+	destruct H as [ls1 [ls3 [seg1 [seg2 [seg3 [seg4 [Hrightbelow [Hslope1 [Hslope2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]]]]]]]];
+	try lra; simpl in *.
+	assert (Hdir: hd Minus (l ++ Minus :: Plus :: r) = orn (hd_scurve sc)). {
+		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
+		destruct l; simpl in *;
+		symmetry; eapply list_map_hd; apply Hdir_sc.
+	}
+	(* AdmissibleDirs ds の証明では，向きが ds であり許容可能な scurve を1つつくればよい *)
+	apply AdmissibleDirs_exist.
+	pose proof (direction_scurve_correspondence (tl (l ++ Minus :: Plus :: r)) (hd_scurve sc))
+		as [sc' [Hhead Hdir_sc']].
+	exists sc'. split.
+	- (* 向きが l ++ [Minus; Plus; Minus] ++ r であること *)
+		rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
+	- (* 許容可能であること *)
+		pose proof (embedding_MMPP_to_MP_in_rect seg1 seg2 seg3 seg4 Hrightbelow Hslope1 Hslope2 Hls2)
+			as [seg1' [seg2' [HMP [Hin_rect [Hinit_term Hslope]]]]].
+		(* 欲しかった埋め込み *)
+		exists (ls1 ++ [seg1'; seg2'] ++ ls3).
+		unfold admissible.
+		split.
+		+ (* 埋め込みになっていること *)
+			apply (embbeding_inner_change sc sc' l [Minus; Minus; Plus; Plus] [Minus; Plus] r ls1 [seg1; seg2; seg3; seg4] [seg1'; seg2'] ls3);
+				try assumption; try discriminate.
+			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
+			* symmetry. assumption.
+		+ (* その埋め込みが開であること *)
+			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2; seg3; seg4] [seg1'; seg2']);
+				try assumption; try (symmetry; assumption); try congruence.
+			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus; Plus]); try assumption.
+			apply MP_is_oneway.
+Qed.
 
 Lemma AdmissibleDirs_r2_Plus_inv: forall l r,
   AdmissibleDirs (l ++ [Plus; Minus] ++ r) -> AdmissibleDirs (l ++ [Plus; Plus; Minus; Minus] ++ r).
@@ -1065,7 +1419,44 @@ Qed.
 Lemma AdmissibleDirs_r2_Minus_inv: forall l r,
   AdmissibleDirs (l ++ [Minus; Plus] ++ r) -> AdmissibleDirs (l ++ [Minus; Minus; Plus; Plus] ++ r).
 Proof.
-Admitted.
+	intros l r admds.
+	(* 疎な開埋め込みをとる *)
+	pose proof (embed_sparsely_listDir _ _ _ admds MP_is_oneway)
+		as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]];
+	simpl in *.
+	assert (Hdir: hd Minus (l ++ Minus :: Minus :: Plus :: Plus :: r) = orn (hd_scurve sc)). {
+		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
+		destruct l; simpl in *;
+		symmetry; eapply list_map_hd; apply Hdir_sc.
+	}
+	(* AdmissibleDirs ds の証明では，向きが ds であり許容可能な scurve を1つつくればよい *)
+	apply AdmissibleDirs_exist.
+	pose proof (direction_scurve_correspondence (tl (l ++ Minus :: Minus :: Plus :: Plus :: r)) (hd_scurve sc))
+		as [sc' [Hhead Hdir_sc']].
+	exists sc'. split.
+	- (* 向きが l ++ [Minus; Plus; Minus] ++ r であること *)
+		rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
+	- (* 許容可能であること *)
+		assert (H: embed_listDir (l ++ [Minus; Plus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
+			unfold embed_listDir. exists sc. split; assumption.
+		}
+		pose proof (embedding_two_dir Minus Plus ls2 Hls2) as [seg1 [seg2 HMP]]; subst.
+		pose proof (embedding_MP_to_MMPP_in_rect _ _ Hls2)
+			as [seg1' [seg2' [seg3' [seg4' [HMMPP [Hin_rect [Hinit_term Hslope]]]]]]].
+		(* 欲しかった埋め込み *)
+		exists (ls1 ++ [seg1'; seg2'; seg3'; seg4'] ++ ls3).
+		unfold admissible.
+		split.
+		+ (* 埋め込みになっていること *)
+			apply (embbeding_inner_change sc sc' l [Minus; Plus] [Minus; Minus; Plus; Plus] r ls1 [seg1; seg2] [seg1'; seg2'; seg3'; seg4'] ls3);
+				try assumption; try discriminate.
+			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
+			* symmetry. assumption.
+		+ (* その埋め込みが開であること *)
+			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2] _ ); try assumption; try congruence.
+			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus; Minus; Plus; Plus]); try assumption.
+				apply MMPP_is_oneway.
+Qed.
 
 Lemma AdmissibleDirs_preserve_Rule : forall l ds ds' r,
   Rule ds ds' 

@@ -1,6 +1,7 @@
 Require Import Stdlib.Reals.Reals.
 Require Import Stdlib.Lists.List.
 From Stdlib Require Import Lra.
+From Stdlib Require Import Lia.
 Open Scope R_scope.
 Import ListNotations.
 
@@ -49,6 +50,10 @@ Definition term_y (s: Segment) : R := snd (term s).
 Axiom neq_init_term_x : forall seg, init_x seg <> term_x seg.
 Axiom neq_init_term_y : forall seg, init_y seg <> term_y seg.
 Axiom neq_init_term : forall seg, init seg <> term seg.
+
+(* 1つのセグメントは（延長部分も含め）自己交差しない，つまり point seg は単射
+    （point の満たすべき性質，仕様） *)
+Axiom point_injective : forall seg t1 t2, point seg t1 = point seg t2 -> t1 = t2.
 
 Definition head_seg (ls: list Segment) (def: Segment):= hd def ls.
 
@@ -119,7 +124,179 @@ Lemma exist_between_x_neg_ex: forall (ls: list Segment) (seg: Segment) (x1 x2 y1
 Admitted.
 
 
-Parameter extend : list Segment -> (R -> R * R).
+(* ls の各セグメントの境界を表す媒介変数値の列．ls の長さが n なら n+1 個あり，
+    i 番目と i+1 番目の要素の間が ls の i 番目のセグメントの区間に対応する．
+    先頭要素より小さい／末尾要素より大きい部分は，それぞれ先頭／末尾セグメントの延長線に対応する． *)
+Parameter segment_border : list Segment -> list R.
+
+Axiom border_length : forall ls, length (segment_border ls) = S (length ls).
+
+(* 単調増加であるという仕様．連続する要素についてだけ述べれば十分 *)
+Axiom border_increasing : forall ls i bi bi1,
+  nth_error (segment_border ls) i = Some bi ->
+  nth_error (segment_border ls) (S i) = Some bi1 ->
+  bi < bi1.
+
+(* segs の i 番目のセグメントの区間が bs の i 番目・(i+1) 番目の要素の間になるように，
+    t の位置から該当するセグメントとその中でのローカルな媒介変数（アフィン変換で [0,1] に写したもの）を選ぶ．
+    区間の端点（共有される境界）ちょうどでは，手前のセグメント側を採用する．
+    最後のセグメントについては，区間の外側でもそのまま同じアフィン変換の式を使うことで，
+    延長線（先頭は t' <= 0，末尾は t' >= 1）を表す． *)
+Fixpoint extend_pick (segs : list Segment) (bs : list R) (t : R) : Segment * R :=
+  match segs, bs with
+  | s :: nil, b0 :: b1 :: nil => (s, (t - b0) / (b1 - b0))
+  | s :: ((_ :: _) as segs'), b0 :: ((b1 :: _) as bs') =>
+      if Rle_dec t b1 then (s, (t - b0) / (b1 - b0)) else extend_pick segs' bs' t
+  | _, _ => (default_segment, 0)
+  end.
+
+Definition extend (ls : list Segment) (t : R) : R * R :=
+  let (s, t') := extend_pick ls (segment_border ls) t in point s t'.
+
+(* --------------------------------------------------------------------------- *)
+(* extend_pick の特徴づけ．extention_split 等の証明のための下請け補題群 *)
+
+Definition Increasing (bs : list R) : Prop :=
+  forall i bi bi1, nth_error bs i = Some bi -> nth_error bs (S i) = Some bi1 -> bi < bi1.
+
+Lemma Increasing_tl : forall b bs, Increasing (b :: bs) -> Increasing bs.
+Proof.
+  intros b bs H i bi bi1 Hi Hi1.
+  apply (H (S i) bi bi1); simpl; assumption.
+Qed.
+
+Lemma Increasing_lt : forall bs i j a b,
+  Increasing bs -> (i < j)%nat -> nth_error bs i = Some a -> nth_error bs j = Some b -> a < b.
+Proof.
+  intros bs i j. revert i.
+  induction j as [| j' IH]; intros i a b Hinc Hij Hi Hj; [lia |].
+  destruct (Nat.eq_dec i j') as [->|Hneq].
+  - eapply Hinc; eauto.
+  - assert (Hij': (i < j')%nat) by lia.
+    destruct (nth_error bs j') as [c|] eqn:Hc.
+    + assert (Hac: a < c) by (eapply IH; eauto).
+      assert (Hcb: c < b) by (eapply Hinc; eauto).
+      lra.
+    + exfalso. apply nth_error_None in Hc.
+      assert (Hlen: (length bs <= S j')%nat) by lia.
+      apply nth_error_None in Hlen. congruence.
+Qed.
+
+Lemma segment_border_increasing : forall ls, Increasing (segment_border ls).
+Proof. intros ls i bi bi1. apply border_increasing. Qed.
+
+(* アフィン変換 t -> (t-b0)/(b1-b0) に関する基本性質 *)
+Lemma affine_param_iff_le : forall b0 b1 t k,
+  b0 < b1 -> ((t - b0) / (b1 - b0) <= k <-> t <= b0 + k * (b1 - b0)).
+Proof.
+  intros b0 b1 t k Hb.
+  assert (Hd: 0 < b1 - b0) by lra.
+  assert (Heq: (t - b0) / (b1 - b0) * (b1 - b0) = t - b0) by (field; lra).
+  split; intro H.
+  - assert (H2: (t - b0) / (b1 - b0) * (b1 - b0) <= k * (b1 - b0))
+      by (apply Rmult_le_compat_r; lra).
+    lra.
+  - apply (Rmult_le_reg_r (b1 - b0)); [lra |]. lra.
+Qed.
+
+Lemma affine_param_iff_ge : forall b0 b1 t k,
+  b0 < b1 -> (k <= (t - b0) / (b1 - b0) <-> b0 + k * (b1 - b0) <= t).
+Proof.
+  intros b0 b1 t k Hb.
+  assert (Hd: 0 < b1 - b0) by lra.
+  assert (Heq: (t - b0) / (b1 - b0) * (b1 - b0) = t - b0) by (field; lra).
+  split; intro H.
+  - assert (H2: k * (b1 - b0) <= (t - b0) / (b1 - b0) * (b1 - b0))
+      by (apply Rmult_le_compat_r; lra).
+    lra.
+  - apply (Rmult_le_reg_r (b1 - b0)); [lra |]. lra.
+Qed.
+
+Lemma affine_inj : forall b0 b1 t1 t2,
+  b0 < b1 -> (t1 - b0) / (b1 - b0) = (t2 - b0) / (b1 - b0) -> t1 = t2.
+Proof.
+  intros b0 b1 t1 t2 Hb Heq.
+  assert (Hd: 0 < b1 - b0) by lra.
+  assert (E1: (t1 - b0) / (b1 - b0) * (b1 - b0) = t1 - b0) by (field; lra).
+  assert (E2: (t2 - b0) / (b1 - b0) * (b1 - b0) = t2 - b0) by (field; lra).
+  assert (t1 - b0 = t2 - b0) by (rewrite <- E1, <- E2, Heq; reflexivity).
+  lra.
+Qed.
+
+(* extend_pick の特徴づけ：どの区間を選んでいるか，およびその中でのアフィン変換の式 *)
+Lemma extend_pick_spec_aux : forall segs bs t,
+  segs <> [] ->
+  length bs = S (length segs) ->
+  Increasing bs ->
+  exists n s bn bn1,
+    nth_error segs n = Some s /\
+    nth_error bs n = Some bn /\
+    nth_error bs (S n) = Some bn1 /\
+    ((n = O /\ t <= bn) \/ (bn <= t <= bn1) \/ (S n = length segs /\ bn1 <= t)) /\
+    extend_pick segs bs t = (s, (t - bn) / (bn1 - bn)).
+Proof.
+  induction segs as [| s0 segs' IH]; intros bs t Hne Hlen Hinc; [congruence |].
+  destruct segs' as [| s1 segs''].
+  - (* segs = [s0], bs は長さ2 *)
+    destruct bs as [| b0 [| b1 [| b2 bs2]]]; simpl in Hlen; try lia.
+    exists O, s0, b0, b1.
+    assert (Hb01: b0 < b1) by (eapply (Hinc O); simpl; reflexivity).
+    assert (Hcase: (O = O /\ t <= b0) \/ (b0 <= t <= b1) \/ (S O = length [s0] /\ b1 <= t)). {
+      destruct (Rle_or_lt t b0) as [Ht | Ht]; [left; auto |].
+      destruct (Rle_or_lt t b1) as [Ht1 | Ht1]; [right; left; lra |].
+      right; right; split; [reflexivity | lra].
+    }
+    split; [reflexivity |].
+    split; [reflexivity |].
+    split; [reflexivity |].
+    split; [exact Hcase |].
+    simpl. reflexivity.
+  - (* segs = s0 :: s1 :: segs'' *)
+    destruct bs as [| b0 [| b1 bs'']]; simpl in Hlen; try lia.
+    assert (Hb01: b0 < b1) by (eapply (Hinc O); simpl; reflexivity).
+    assert (Hlen': length (b1 :: bs'') = S (length (s1 :: segs''))) by (simpl in *; lia).
+    assert (Hinc': Increasing (b1 :: bs'')) by (eapply Increasing_tl; eauto).
+    destruct (Rle_dec t b1) as [Htb1 | Htb1].
+    + (* このセグメントを選ぶ *)
+      exists O, s0, b0, b1.
+      assert (Hcase: (O = O /\ t <= b0) \/ (b0 <= t <= b1) \/ (S O = length (s0::s1::segs'') /\ b1 <= t)).
+      { destruct (Rle_or_lt t b0) as [Ht | Ht]; [left; auto | right; left; lra]. }
+      split; [reflexivity |].
+      split; [reflexivity |].
+      split; [reflexivity |].
+      split; [exact Hcase |].
+      simpl. destruct (Rle_dec t b1); [reflexivity | contradiction].
+    + (* 再帰 *)
+      assert (Hne': s1 :: segs'' <> []) by discriminate.
+      destruct (IH (b1 :: bs'') t Hne' Hlen' Hinc')
+        as [n' [s' [bn' [bn1' [Hs' [Hbn' [Hbn1' [Hcase Heq]]]]]]]].
+      exists (S n'), s', bn', bn1'.
+      assert (Hcase': (S n' = O /\ t <= bn') \/ (bn' <= t <= bn1') \/ (S (S n') = length (s0::s1::segs'') /\ bn1' <= t)).
+      { destruct Hcase as [[Hn0 Ht] | [Hmid | [Hlast Ht]]].
+        - exfalso. subst n'. simpl in Hbn'. injection Hbn' as ->. lra.
+        - right; left; assumption.
+        - right; right; split; [simpl in Hlast |- *; lia | assumption]. }
+      split; [simpl; assumption |].
+      split; [simpl; assumption |].
+      split; [simpl; assumption |].
+      split; [exact Hcase' |].
+      simpl. destruct (Rle_dec t b1); [contradiction |]. assumption.
+Qed.
+
+Lemma extend_pick_spec : forall ls t,
+  ls <> [] ->
+  exists n s bn bn1,
+    nth_error ls n = Some s /\
+    nth_error (segment_border ls) n = Some bn /\
+    nth_error (segment_border ls) (S n) = Some bn1 /\
+    ((n = O /\ t <= bn) \/ (bn <= t <= bn1) \/ (S n = length ls /\ bn1 <= t)) /\
+    extend_pick ls (segment_border ls) t = (s, (t - bn) / (bn1 - bn)).
+Proof.
+  intros ls t Hne.
+  apply extend_pick_spec_aux; auto.
+  - apply border_length.
+  - apply segment_border_increasing.
+Qed.
 
 Definition close_extended (c: R -> R * R):=
   exists (t1 t2: R), t1 <> t2 /\ c t1 = c t2.
