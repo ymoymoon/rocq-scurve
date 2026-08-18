@@ -28,10 +28,10 @@ Lemma extention_split : forall t ls,
 			nth_error ls n = Some seg /\
 			nth_error (segment_border ls) n = Some border1 /\
 			nth_error (segment_border ls) (S n) = Some border2 /\
-			border1 <= t <= border2 /\ 0 <= t' <= 1 /\ p = point seg t')
+			border1 < t <= border2 /\ 0 < t' <= 1 /\ p = point seg t')
 	\/ (exists border_last t', (* 末尾の延長線上 *)
 			nth_error (segment_border ls) (length ls) = Some border_last /\
-			border_last <= t /\ 1 <= t' /\ p = point (last_segment ls) t').
+			border_last < t /\ 1 < t' /\ p = point (last_segment ls) t').
 Proof.
 	intros t ls p Hne.
 	destruct (extend_pick_spec ls t Hne) as [n [s [bn [bn1 [Hs [Hbn [Hbn1 [Hcase Heq]]]]]]]].
@@ -55,7 +55,7 @@ Proof.
 		split; [exact Hbn1 |].
 		split; [lra |].
 		split; [split |].
-		+ apply (proj2 (affine_param_iff_ge bn bn1 t 0 Hlt)). lra.
+		+ apply (proj2 (affine_param_iff_gt bn bn1 t 0 Hlt)). lra.
 		+ apply (proj2 (affine_param_iff_le bn bn1 t 1 Hlt)). lra.
 		+ exact Hp.
 	- (* 末尾の延長線上 *) right; right.
@@ -68,7 +68,7 @@ Proof.
 		split; [exact Hbn1' |].
 		split; [exact Ht |].
 		split.
-		+ apply (proj2 (affine_param_iff_ge bn bn1 t 1 Hlt)). lra.
+		+ apply (proj2 (affine_param_iff_gt bn bn1 t 1 Hlt)). lra.
 		+ rewrite Hp. unfold last_segment. congruence.
 Qed.
 
@@ -115,8 +115,8 @@ Qed.
 Lemma extend_last_not_cross : forall ls t1 t2 border_last,
 	ls <> []
 	-> nth_error (segment_border ls) (length ls) = Some border_last
-	-> border_last <= t1
-	-> border_last <= t2
+	-> border_last < t1
+	-> border_last < t2
 	-> extend ls t1 = extend ls t2
 	-> t1 = t2.
 Proof.
@@ -160,23 +160,11 @@ Qed.
 
 (* extend した時も１つのセグメントの中で交差は起こらない *)
 (* TODO : extend しない時の定理とまとめられないか *)
-(* 注意：これは隣接するセグメントが端点で接続している（term(nth n ls) = init(nth (S n) ls)）
-		ことを使わないと証明できない．境界 t=border1 ちょうどでは，extend の定義（手前のセグメントを
-		選ぶ）により，t1=border1, t2 が区間内部という状況で，t1 は手前のセグメントの終点，t2 は
-		このセグメントの内部点を指すことになる．ls が単なる Segment のリスト（embed_scurve での
-		連結性を仮定しない）である限り，両者がたまたま同じ点を指す（つまり extend ls t1 = extend ls t2）
-		可能性を今の公理系だけでは排除できず，反例が作れてしまう．embed_scurve 由来の連結性
-		（Embed.v の consist_init_term 等）を仮定に加えれば示せるはずだが，この補題自体にはその
-		仮定がないため，現状は Admitted のままにしている． *)
-(* -> TODO : 解決法
-		端点の連結を仮定に入れる 
-		or 埋め込み用に「端点が接続しているセグメント列」という型を作る（ナイーブに行うと変更が大量になる）
-		or extend ないしこの補題での不等号を調整する *)
 Lemma extend_one_seg_not_cross : forall ls n t1 t2 border1 border2,
 	nth_error (segment_border ls) n = Some border1
 	-> nth_error (segment_border ls) (S n) = Some border2
-	-> border1 <= t1 <= border2
-	-> border1 <= t2 <= border2
+	-> border1 < t1 <= border2
+	-> border1 < t2 <= border2
 	-> extend ls t1 = extend ls t2
 	-> t1 = t2.
 Proof.
@@ -191,34 +179,34 @@ Lemma extention_split_2 : forall t1 t2 ls,
 			t1' <= 0 /\ t2' <= 0 /\ t1' <> t2' /\
 				p1 = point (hd_segment ls) t1' /\ p2 = point (hd_segment ls) t2')
 	\/ (exists t1' t2' seg, (* t1 は先頭の延長線上， t2 はセグメント上 *)
-			t1' <= 0 /\ 0 <= t2' <= 1 /\ In seg ls /\
+			t1' <= 0 /\ 0 < t2' <= 1 /\ In seg ls /\
 				p1 = point (hd_segment ls) t1' /\ p2 = point seg t2')
 	\/ (exists t1' t2', (* t1 は先頭の延長線上， t2 は末尾の延長線上 *)
-			t1' <= 0 /\ 1 <= t2' /\ 
+			t1' <= 0 /\ 1 < t2' /\ 
 				p1 = point (hd_segment ls) t1' /\ p2 = point (last_segment ls) t2')
 	\/ (exists t1' t2' seg, (* t1 はセグメント上， t2 は先頭の延長線上 *)
-			0 <= t1' <= 1 /\ t2' <= 0 /\ In seg ls /\
+			0 < t1' <= 1 /\ t2' <= 0 /\ In seg ls /\
 				p1 = point seg t1' /\ p2 = point (hd_segment ls) t2')
 	\/ (exists t1' t2' seg, (* t1, t2 とも同じセグメント上 *)
-			0 <= t1' <= 1 /\ 0 <= t2' <= 1 /\ t1' <> t2' /\ In seg ls /\
+			0 < t1' <= 1 /\ 0 < t2' <= 1 /\ t1' <> t2' /\ In seg ls /\
 				p1 = point seg t1' /\ p2 = point seg t2')
 	\/ (exists t1' t2' seg1 seg2, (* t1, t2 が異なるセグメント上 (t1 < t2) *)
-			0 <= t1' <= 1 /\ 0 <= t2' <= 1 /\ In_order seg1 seg2 ls /\
+			0 < t1' <= 1 /\ 0 < t2' <= 1 /\ In_order seg1 seg2 ls /\
 				p1 = point seg1 t1' /\ p2 = point seg2 t2')
 	\/ (exists t1' t2' seg1 seg2, (* t1, t2 が異なるセグメント上 (t1 > t2) *)
-			0 <= t1' <= 1 /\ 0 <= t2' <= 1 /\ In_order seg2 seg1 ls /\
+			0 < t1' <= 1 /\ 0 < t2' <= 1 /\ In_order seg2 seg1 ls /\
 				p1 = point seg1 t1' /\ p2 = point seg2 t2')
 	\/ (exists t1' t2' seg, (* t1 はセグメント上， t2 は末尾の延長線上 *)
-			0 <= t1' <= 1 /\ 1 <= t2' /\ In seg ls /\
+			0 < t1' <= 1 /\ 1 < t2' /\ In seg ls /\
 				p1 = point seg t1' /\ p2 = point (last_segment ls) t2')
 	\/ (exists t1' t2', (* t1 は末尾の延長線上， t2 は先頭の延長線上 *)
-			1 <= t1' /\ t2' <= 0 /\ 
+			1 < t1' /\ t2' <= 0 /\ 
 				p1 = point (last_segment ls) t1' /\ p2 = point (hd_segment ls) t2')
 	\/ (exists t1' t2' seg, (* t1 は末尾の延長線上， t2 はセグメント上 *)
-			1 <= t1' /\ 0 <= t2' <= 1 /\ In seg ls /\
+			1 < t1' /\ 0 < t2' <= 1 /\ In seg ls /\
 				p1 = point (last_segment ls) t1' /\ p2 = point seg t2')
 	\/ (exists t1' t2', (* t1, t2 とも末尾の延長線上 *)
-			1 <= t1' /\ 1 <= t2' /\ t1' <> t2' /\
+			1 < t1' /\ 1 < t2' /\ t1' <> t2' /\
 				p1 = point (last_segment ls) t1' /\ p2 = point (last_segment ls) t2').
 Proof. 
 	intros t1 t2 ls p1 p2 Hls H12.
@@ -908,11 +896,11 @@ Proof.
 				apply Hopen.
 				apply (head_seg_cross_close intersection seg post); auto. 
 				-- exists t1'. split; subst post intersection; congruence. 
-				-- exists t2'. split; subst post intersection; congruence. 
+				-- exists t2'. split; subst post intersection; try lra; congruence. 
 			+ (* 先頭の延長線と sub_ls' が交わっている場合： pre が疎であることに矛盾 *) 
 				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					apply Hin_rect. exists seg. split; auto.
-					exists t2'. split; subst post intersection; congruence. 
+					exists t2'. split; subst post intersection; try lra; congruence. 
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					apply Hsparse.
@@ -926,7 +914,7 @@ Proof.
 			apply Hopen. 
 			apply (head_last_cross_close intersection post); auto.
 			* exists t1'. split; subst post intersection; congruence. 
-			* exists t2'. split; subst post intersection; congruence. 
+			* exists t2'. split; subst post intersection; try lra; congruence. 
 
 		- (* t1 がセグメント上の点を， t2 が先頭の延長線上の点を指す場合：セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) 
 			assert (Hin : In seg pre \/ In seg sub_ls'). {
@@ -940,11 +928,11 @@ Proof.
 				apply Hopen.
 				apply (head_seg_cross_close intersection seg post); auto. 
 				-- exists t2'. split; subst post intersection; congruence. 
-				-- exists t1'. split; subst post intersection; congruence. 
+				-- exists t1'. split; subst post intersection; try lra; congruence. 
 			+ (* 先頭の延長線と sub_ls' が交わっている場合： pre が疎であることに矛盾 *) 
 				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					apply Hin_rect. exists seg. split; auto.
-					exists t1'. split; subst post intersection; congruence. 
+					exists t1'. split; subst post intersection; try lra; congruence. 
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					apply Hsparse.
@@ -970,14 +958,14 @@ Proof.
 			+ (* 両方 sub_ls' 上の点である場合： sub_ls' が開であることに矛盾 *) 
 				apply Hopen'.
 				apply (two_segs_have_same_point_close seg1 seg2 intersection). 
-				-- exists t1'. split; subst post intersection; congruence. 
-				-- exists t2'. split; subst post intersection; congruence. 
+				-- exists t1'. split; subst post intersection; try lra; congruence. 
+				-- exists t2'. split; subst post intersection; try lra; congruence. 
 				-- auto.
 			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合１： pre が疎であることに矛盾 *) 
 				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
 					apply Hin_rect. exists seg1. split; auto.
-					exists t1'. split; subst post intersection; congruence. 
+					exists t1'. split; subst post intersection; try lra; congruence. 
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
@@ -985,14 +973,14 @@ Proof.
 					right. left.
 					exists seg2. split.
 					* apply in_or_app. auto.
-					* exists t2'. split; auto. subst post intersection; congruence. 
+					* exists t2'. split; auto; subst post intersection; try lra; congruence. 
 				} 
 				auto.
 			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合２： pre が疎であることに矛盾 *) 
 				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
 					apply Hin_rect. exists seg2. split; auto.
-					exists t2'. split; subst post intersection; congruence. 
+					exists t2'. split; subst post intersection; try lra; congruence. 
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
@@ -1001,13 +989,14 @@ Proof.
 					exists seg1. split.
 					* apply in_or_app. auto.
 					* exists t1'. split; auto.
+					lra.
 				} 
 				auto.
 			+ (* 両方 pre 上の点である場合： pre が開であることに矛盾 *) 
 				apply Hopen.
 				apply (two_segs_have_same_point_close seg1 seg2 intersection). 
-				-- exists t1'. split; subst post intersection; congruence. 
-				-- exists t2'. split; subst post intersection; congruence. 
+				-- exists t1'. split; subst post intersection; try lra; congruence. 
+				-- exists t2'. split; subst post intersection; try lra; congruence. 
 				-- apply In_order_append_mid. auto.
 
 		- (* t1, t2 が異なるセグメント上の点を指す場合２：２つのセグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *) 
@@ -1022,14 +1011,14 @@ Proof.
 			+ (* 両方 sub_ls' 上の点である場合： sub_ls' が開であることに矛盾 *) 
 				apply Hopen'.
 				apply (two_segs_have_same_point_close seg2 seg1 intersection). 
-				-- exists t2'. split; subst post intersection; congruence. 
-				-- exists t1'. split; subst post intersection; congruence. 
+				-- exists t2'. split; subst post intersection; try lra; congruence. 
+				-- exists t1'. split; subst post intersection; try lra; congruence. 
 				-- auto.
 			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合１： pre が疎であることに矛盾 *) 
 				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
 					apply Hin_rect. exists seg2. split; auto.
-					exists t2'. split; subst post intersection; congruence. 
+					exists t2'. split; subst post intersection; try lra; congruence. 
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
@@ -1038,13 +1027,14 @@ Proof.
 					exists seg1. split.
 					* apply in_or_app. auto.
 					* exists t1'. split; auto. 
+					lra.
 				} 
 				auto.
 			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合２： pre が疎であることに矛盾 *) 
 				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
 					apply Hin_rect. exists seg1. split; auto.
-					exists t1'. split; subst post intersection; congruence. 
+					exists t1'. split; subst post intersection; try lra; congruence. 
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
@@ -1052,14 +1042,14 @@ Proof.
 					right. left.
 					exists seg2. split.
 					* apply in_or_app. auto.
-					* exists t2'. split; auto. subst post intersection; congruence.
+					* exists t2'. split; auto; subst post intersection; try lra; congruence.
 				} 
 				auto.
 			+ (* 両方 pre 上の点である場合： pre が開であることに矛盾 *) 
 				apply Hopen.
 				apply (two_segs_have_same_point_close seg2 seg1 intersection). 
-				-- exists t2'. split; subst post intersection; congruence. 
-				-- exists t1'. split; subst post intersection; congruence. 
+				-- exists t2'. split; subst post intersection; try lra; congruence. 
+				-- exists t1'. split; subst post intersection; try lra; congruence. 
 				-- apply In_order_append_mid. auto.
 
 		- (* t1 がセグメント上の点を， t2 が末尾の延長線上の点を指す場合：セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *)
@@ -1073,18 +1063,18 @@ Proof.
 			* (* 末尾の延長線と ls(rs) が交わっている場合： pre が開であることに矛盾 *) 
 				apply Hopen.
 				apply (last_seg_cross_close intersection seg post); auto. 
-				-- exists t2'. split; subst post intersection; congruence. 
-				-- exists t1'. split; subst post intersection; congruence. 
+				-- exists t2'. split; subst post intersection; try lra; congruence. 
+				-- exists t1'. split; subst post intersection; try lra; congruence. 
 			* (* 末尾の延長線と sub_ls' が交わっている場合： pre が疎であることに矛盾 *) 
 				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					apply Hin_rect. exists seg. split; auto.
-					exists t1'. split; subst post intersection; congruence. 
+					exists t1'. split; subst post intersection; try lra; congruence. 
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					apply Hsparse.
 					repeat right.
 					apply Hsame_ex_last. 
-					exists t2'. split; subst post intersection; congruence. 
+					exists t2'. split; subst post intersection; try lra; congruence. 
 				} 
 				auto.
 
@@ -1092,7 +1082,7 @@ Proof.
 			apply Hopen. 
 			apply (head_last_cross_close intersection post); auto.
 			* exists t2'. split; subst post intersection; congruence. 
-			* exists t1'. split; subst post intersection; congruence. 
+			* exists t1'. split; subst post intersection; try lra; congruence. 
 
 		- (* t1 が末尾の延長線上の点を， t2 がセグメント上の点を指す場合：セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *)
 		  assert (Hin : In seg pre \/ In seg sub_ls'). {
@@ -1105,18 +1095,18 @@ Proof.
 			* (* 末尾の延長線と ls(rs) が交わっている場合： pre が開であることに矛盾 *) 
 				apply Hopen.
 				apply (last_seg_cross_close intersection seg post); auto. 
-				-- exists t1'. split; subst post intersection; congruence. 
-				-- exists t2'. split; subst post intersection; congruence. 
+				-- exists t1'. split; subst post intersection; try lra; congruence. 
+				-- exists t2'. split; subst post intersection; try lra; congruence. 
 			* (* 末尾の延長線と sub_ls' が交わっている場合： pre が疎であることに矛盾 *) 
 				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
 					apply Hin_rect. exists seg. split; auto.
-					exists t2'. split; subst post intersection; congruence. 
+					exists t2'. split; subst post intersection; try lra; congruence. 
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					apply Hsparse.
 					repeat right.
 					apply Hsame_ex_last. 
-					exists t1'. split; subst post intersection; congruence. 
+					exists t1'. split; subst post intersection; try lra; congruence. 
 				} 
 				auto.
 

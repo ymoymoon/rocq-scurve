@@ -137,15 +137,19 @@ Axiom border_increasing : forall ls i bi bi1,
   nth_error (segment_border ls) (S i) = Some bi1 ->
   bi < bi1.
 
-(* segs の i 番目のセグメントの区間が bs の i 番目・(i+1) 番目の要素の間になるように，
+(* t がどのセグメントの担当か & そこでのローカル媒介変数 を返却．
+    segs の i 番目のセグメントの区間が bs の i 番目・(i+1) 番目の要素の間になるように，
     t の位置から該当するセグメントとその中でのローカルな媒介変数（アフィン変換で [0,1] に写したもの）を選ぶ．
     区間の端点（共有される境界）ちょうどでは，手前のセグメント側を採用する．
     最後のセグメントについては，区間の外側でもそのまま同じアフィン変換の式を使うことで，
     延長線（先頭は t' <= 0，末尾は t' >= 1）を表す． *)
 Fixpoint extend_pick (segs : list Segment) (bs : list R) (t : R) : Segment * R :=
   match segs, bs with
-  | s :: nil, b0 :: b1 :: nil => (s, (t - b0) / (b1 - b0))
+  | s :: nil, b0 :: b1 :: nil => 
+    (* 最後のセグメント *)
+    (s, (t - b0) / (b1 - b0))
   | s :: ((_ :: _) as segs'), b0 :: ((b1 :: _) as bs') =>
+    (* t <= b1 ならセグメント s の担当（先頭セグメントに関しては t - b0 < 0 となりうる） *)
       if Rle_dec t b1 then (s, (t - b0) / (b1 - b0)) else extend_pick segs' bs' t
   | _, _ => (default_segment, 0)
   end.
@@ -199,17 +203,17 @@ Proof.
   - apply (Rmult_le_reg_r (b1 - b0)); [lra |]. lra.
 Qed.
 
-Lemma affine_param_iff_ge : forall b0 b1 t k,
-  b0 < b1 -> (k <= (t - b0) / (b1 - b0) <-> b0 + k * (b1 - b0) <= t).
+Lemma affine_param_iff_gt : forall b0 b1 t k,
+  b0 < b1 -> (k < (t - b0) / (b1 - b0) <-> b0 + k * (b1 - b0) < t).
 Proof.
   intros b0 b1 t k Hb.
   assert (Hd: 0 < b1 - b0) by lra.
   assert (Heq: (t - b0) / (b1 - b0) * (b1 - b0) = t - b0) by (field; lra).
   split; intro H.
-  - assert (H2: k * (b1 - b0) <= (t - b0) / (b1 - b0) * (b1 - b0))
-      by (apply Rmult_le_compat_r; lra).
+  - assert (H2: k * (b1 - b0) < (t - b0) / (b1 - b0) * (b1 - b0))
+      by (apply Rmult_lt_compat_r; lra).
     lra.
-  - apply (Rmult_le_reg_r (b1 - b0)); [lra |]. lra.
+  - apply (Rmult_lt_reg_r (b1 - b0)); [lra |]. lra.
 Qed.
 
 Lemma affine_inj : forall b0 b1 t1 t2,
@@ -232,7 +236,7 @@ Lemma extend_pick_spec_aux : forall segs bs t,
     nth_error segs n = Some s /\
     nth_error bs n = Some bn /\
     nth_error bs (S n) = Some bn1 /\
-    ((n = O /\ t <= bn) \/ (bn <= t <= bn1) \/ (S n = length segs /\ bn1 <= t)) /\
+    ((n = O /\ t <= bn) \/ (bn < t <= bn1) \/ (S n = length segs /\ bn1 < t)) /\
     extend_pick segs bs t = (s, (t - bn) / (bn1 - bn)).
 Proof.
   induction segs as [| s0 segs' IH]; intros bs t Hne Hlen Hinc; [congruence |].
@@ -241,7 +245,7 @@ Proof.
     destruct bs as [| b0 [| b1 [| b2 bs2]]]; simpl in Hlen; try lia.
     exists O, s0, b0, b1.
     assert (Hb01: b0 < b1) by (eapply (Hinc O); simpl; reflexivity).
-    assert (Hcase: (O = O /\ t <= b0) \/ (b0 <= t <= b1) \/ (S O = length [s0] /\ b1 <= t)). {
+    assert (Hcase: (O = O /\ t <= b0) \/ (b0 < t <= b1) \/ (S O = length [s0] /\ b1 < t)). {
       destruct (Rle_or_lt t b0) as [Ht | Ht]; [left; auto |].
       destruct (Rle_or_lt t b1) as [Ht1 | Ht1]; [right; left; lra |].
       right; right; split; [reflexivity | lra].
@@ -259,7 +263,7 @@ Proof.
     destruct (Rle_dec t b1) as [Htb1 | Htb1].
     + (* このセグメントを選ぶ *)
       exists O, s0, b0, b1.
-      assert (Hcase: (O = O /\ t <= b0) \/ (b0 <= t <= b1) \/ (S O = length (s0::s1::segs'') /\ b1 <= t)).
+      assert (Hcase: (O = O /\ t <= b0) \/ (b0 < t <= b1) \/ (S O = length (s0::s1::segs'') /\ b1 < t)).
       { destruct (Rle_or_lt t b0) as [Ht | Ht]; [left; auto | right; left; lra]. }
       split; [reflexivity |].
       split; [reflexivity |].
@@ -271,7 +275,7 @@ Proof.
       destruct (IH (b1 :: bs'') t Hne' Hlen' Hinc')
         as [n' [s' [bn' [bn1' [Hs' [Hbn' [Hbn1' [Hcase Heq]]]]]]]].
       exists (S n'), s', bn', bn1'.
-      assert (Hcase': (S n' = O /\ t <= bn') \/ (bn' <= t <= bn1') \/ (S (S n') = length (s0::s1::segs'') /\ bn1' <= t)).
+      assert (Hcase': (S n' = O /\ t <= bn') \/ (bn' < t <= bn1') \/ (S (S n') = length (s0::s1::segs'') /\ bn1' < t)).
       { destruct Hcase as [[Hn0 Ht] | [Hmid | [Hlast Ht]]].
         - exfalso. subst n'. simpl in Hbn'. injection Hbn' as ->. lra.
         - right; left; assumption.
@@ -289,7 +293,7 @@ Lemma extend_pick_spec : forall ls t,
     nth_error ls n = Some s /\
     nth_error (segment_border ls) n = Some bn /\
     nth_error (segment_border ls) (S n) = Some bn1 /\
-    ((n = O /\ t <= bn) \/ (bn <= t <= bn1) \/ (S n = length ls /\ bn1 <= t)) /\
+    ((n = O /\ t <= bn) \/ (bn < t <= bn1) \/ (S n = length ls /\ bn1 < t)) /\
     extend_pick ls (segment_border ls) t = (s, (t - bn) / (bn1 - bn)).
 Proof.
   intros ls t Hne.
