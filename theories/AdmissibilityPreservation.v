@@ -305,7 +305,7 @@ Admitted.
 Lemma head_seg_cross_close : forall p seg ls1 ls2,
 	onHead_extend ls1 p
 	-> In seg ls1
-	-> onSegment seg p
+	-> onSegment' seg p
 	-> same_extention_head ls1 ls2
 	-> In seg ls2
 	-> close ls2.
@@ -316,7 +316,7 @@ Admitted.
 Lemma last_seg_cross_close : forall p seg ls1 ls2,
 	onLast_extend ls1 p
 	-> In seg ls1
-	-> onSegment seg p
+	-> onSegment' seg p
 	-> same_extention_last ls1 ls2
 	-> In seg ls2
 	-> close ls2.
@@ -1063,7 +1063,7 @@ Proof.
 			* (* 末尾の延長線と ls(rs) が交わっている場合： pre が開であることに矛盾 *) 
 				apply Hopen.
 				apply (last_seg_cross_close intersection seg post); auto. 
-				-- exists t2'. split; subst post intersection; try lra; congruence. 
+				-- exists t2'. split; subst post intersection; congruence. 
 				-- exists t1'. split; subst post intersection; try lra; congruence. 
 			* (* 末尾の延長線と sub_ls' が交わっている場合： pre が疎であることに矛盾 *) 
 				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {

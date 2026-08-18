@@ -38,10 +38,11 @@ Definition x_monotone_segs (ls : list Segment) : Prop :=
   forall s, In s ls -> x_monotone_seg s.
 
 
+Definition onSegment' (seg: Segment) (rr : R * R) := exists (t:R), 0 < t <= 1 /\ point seg t = rr.
 (* TODO: 空リストを省く *)
 Definition onHead (seg: Segment) (rr : Point) := exists (t:R), t <= 0 /\ point seg t = rr.
 Definition onHead_extend (ls: list Segment) (rr : Point) := onHead (hd_segment ls) rr.
-Definition onLast (seg: Segment) (rr : Point) := exists (t:R), 1 <= t /\ point seg t = rr.
+Definition onLast (seg: Segment) (rr : Point) := exists (t:R), 1 < t /\ point seg t = rr.
 Definition onLast_extend (ls: list Segment) (rr : Point) := onLast (last_segment ls) rr.
 Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
 (* TODO: extend に関する公理を完成させた後， onExtendSegment と整合することを確認
