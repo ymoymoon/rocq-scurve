@@ -553,13 +553,14 @@ Definition operate_segs (ctx sub : list Segment) (h : R) (ls : list Segment)
   : list Segment := map (operate_seg ctx sub h) ls.
 
 (* 可変域：曲線 ctx の中でセグメント s が形を変えてよい領域 *)
-Definition Zone := Point -> Prop.
-Parameter dzone : list Segment -> list Segment -> Segment -> Zone.
+(* TODO : 可変域が取れるのは自己交差がない場合のみ *)
+Definition Point_Set := Point -> Prop.
+Parameter dzone : list Segment -> list Segment -> Segment -> Point_Set.
 
 (* 点集合 P が境界線より上／下（以上／以下） *)
-Definition weakly_above (b : Border) (P : Point -> Prop) : Prop :=
+Definition weakly_above (b : Border) (P : Point_Set) : Prop :=
   forall p, P p -> b (fst p) <= snd p.
-Definition weakly_below (b : Border) (P : Point -> Prop) : Prop :=
+Definition weakly_below (b : Border) (P : Point_Set) : Prop :=
   forall p, P p -> snd p <= b (fst p).
 
 (* --- operate_seg の仕様 --- *)
@@ -608,7 +609,7 @@ Proof. intros. unfold operate_segs. apply map_app. Qed.
 (* ================================================================= *)
 
   (* --- 境界線との接触点の x 座標 --- *)
-Definition contact_x (b : Border) (P : Point -> Prop) (x : R) : Prop :=
+Definition contact_x (b : Border) (P : Point_Set) (x : R) : Prop :=
   exists p, P p /\ on_border b p /\ fst p = x.
 
 (* sub を完全に覆う長方形（sub のみに依存）*)
@@ -695,6 +696,7 @@ Lemma mb_ct_last :
 Admitted.
 
 (* ---- (Z-1) 可変域は長方形の内部と交わらない --- *)
+(* TODO : ここに well_split は関係ない．開であることは必要だが． *)
 Lemma mb_dz_rect :
   forall l sub r, well_split l sub r ->
     forall s p, In s (l ++ sub ++ r) ->
@@ -703,6 +705,7 @@ Admitted.
 
 (* ---- (Z-2) 可変域には自分と隣接セグメント以外は入らない ---------- *)
 (*      「端点近くで隣のセグメントが入り込む」問題への対応            *)
+(* TODO : 可変域は端点を含まないようにしても良い（可変域＋端点，の中でセグメントを変形する） *)
 Parameter adjacent : list Segment -> Segment -> Segment -> Prop.
 
 Lemma mb_dz_local :
@@ -734,7 +737,7 @@ Qed.
 (* 境界線と交わる点がどれも，簡約部分の長方形の外側にあるような点集合 P について，
     P の点 p0 を動かしたら，簡約部分の長方形の外側に行く *)
 Lemma operate_pt_not_in_rect :
-  forall l sub r h (P : Point -> Prop) p0,
+  forall l sub r h (P : Point_Set) p0,
     well_split l sub r -> h_large h sub ->
     (forall x, contact_x (border_of l sub r) P x -> outside_rect_x sub x) ->
     P p0 ->
@@ -761,17 +764,15 @@ Proof.
     destruct Hin as [[Hx0 Hx1] [Hy0 Hy1]]. cbn [fst snd] in *.
     destruct (mb_cover l sub r Hws (fst p0)) as [q [Hq [Hqx Hqy]]]; [lra|].
     pose proof (bbox_of_bounds sub q Hq) as [Hql Hqr].
-    (* rewrite Hqx in Hqy. lra. *)
-    admit.
+    lra.
 
   - (* RegDown : 下へ h．対称 *)
     pose proof (classify_RegDown_char _ p0 Hg) as Hdn.
     destruct Hin as [[Hx0 Hx1] [Hy0 Hy1]]. cbn [fst snd] in *.
     destruct (mb_cover l sub r Hws (fst p0)) as [q [Hq [Hqx Hqy]]]; [lra|].
     pose proof (bbox_of_bounds sub q Hq) as [Hql Hqr].
-    (* rewrite Hqx in Hqy. lra. *)
-    admit.
-Admitted.
+    lra.
+Qed.
 
 Lemma operate_segs_fix :
   forall l sub r h, well_split l sub r ->
@@ -855,6 +856,7 @@ Qed.
 Admitted. *)
 
 (* ---- Lemma A : 埋め込みの保存 ----------------------------------- *)
+(* 向きが変わらないことと，連結性が保存されることから *)
 Lemma operate_preserves_embed :
   forall ctx sub h ds ls,
     embed_listDir ds ls -> embed_listDir ds (operate_segs ctx sub h ls).
