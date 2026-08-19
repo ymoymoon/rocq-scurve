@@ -16,6 +16,7 @@ From Stdlib Require Import Lia.
 (* ================================================================= *)
 
 Definition Point := (R * R)%type.
+Definition Point_Set := Point -> Prop.
 
 Definition hd_segment ls := hd default_segment ls.
 Definition last_segment ls := last ls default_segment.
@@ -25,9 +26,6 @@ Parameter orn_seg   : Segment -> Direction.
 Definition rightabove (rr1 rr2 : Point) :=
   let (x1, y1) := rr1 in
   let (x2, y2) := rr2 in x1 < x2 /\ y1 < y2.
-
-(* Minus 側 (下向きに進む一方向曲線) の埋め込みで rightabove の代わりに使う，
-    x 軸に関する鏡映版：終点が始点の右下側にある *)
 Definition rightbelow (rr1 rr2 : Point) :=
   let (x1, y1) := rr1 in
   let (x2, y2) := rr2 in x1 < x2 /\ y2 < y1.
@@ -37,6 +35,9 @@ Definition x_monotone_seg  (s : Segment) : Prop := init_x s < term_x s.
 Definition x_monotone_segs (ls : list Segment) : Prop :=
   forall s, In s ls -> x_monotone_seg s.
 
+Definition connected (ls : list Segment) : Prop :=
+  forall i s1 s2, nth_error ls i = Some s1 -> nth_error ls (S i) = Some s2 ->
+    term s1 = init s2.
 
 Definition onSegment' (seg: Segment) (rr : R * R) := exists (t:R), 0 < t <= 1 /\ point seg t = rr.
 (* TODO: 空リストを省く *)
@@ -126,6 +127,17 @@ Proof.
   constructor.
   reflexivity.
 Qed.
+
+Lemma nth_error_map_inv :
+  forall (f : Segment -> Segment) ls n s,
+    nth_error (map f ls) n = Some s ->
+    exists s0, nth_error ls n = Some s0 /\ s = f s0.
+Proof.
+  intros f ls n s H. rewrite nth_error_map in H.
+  destruct (nth_error ls n) as [s0|] eqn:E; simpl in H; [|discriminate].
+  injection H as H. exists s0. split; [reflexivity | now symmetry].
+Qed.
+
 
 (* onSegmentlist に関する補題 *)
 Lemma onSegmentlist_init_hd :
@@ -482,7 +494,7 @@ Qed.
 
 
 (* ================================================================= *)
-(*  3.  境界線と移動                *)
+(*  3.  境界線                *)
 (* ================================================================= *)
 
 (* 境界線ならば関数だが，関数ならば境界線ではないので
@@ -491,53 +503,6 @@ Qed.
 Definition Border := R -> R. 
 Definition on_border (b : Border) (p : Point) : Prop := snd p = b (fst p).
 
-Inductive Region : Type := RegFix | RegUp | RegDown.
-
-(* 境界線との上下比較だけで決まる *)
-Definition classify (b : Border) (p : Point) : Region :=
-  if Rlt_dec (b (fst p)) (snd p) then RegUp
-  else if Rlt_dec (snd p) (b (fst p)) then RegDown
-  else RegFix.
-
-Definition shift (h : R) (g : Region) (p : Point) : Point :=
-  match g with
-  | RegFix  => p
-  | RegUp   => (fst p, snd p + h)
-  | RegDown => (fst p, snd p - h)
-  end.
-
-Definition operate_point (b : Border) (h : R) (p : Point) : Point :=
-  shift h (classify b p) p.
-
-Lemma classify_RegFix_char :
-  forall b p, classify b p = RegFix -> on_border b p.
-Proof.
-  intros b p H. unfold classify in H. unfold on_border.
-  destruct (Rlt_dec (b (fst p)) (snd p)); [discriminate|].
-  destruct (Rlt_dec (snd p) (b (fst p))); [discriminate|]. lra.
-Qed.
-
-Lemma classify_RegUp_char :
-  forall b p, classify b p = RegUp -> b (fst p) < snd p.
-Proof.
-  intros b p H. unfold classify in H.
-  destruct (Rlt_dec (b (fst p)) (snd p)); [assumption|].
-  destruct (Rlt_dec (snd p) (b (fst p))); discriminate.
-Qed.
-
-Lemma classify_RegDown_char :
-  forall b p, classify b p = RegDown -> snd p < b (fst p).
-Proof.
-  intros b p H. unfold classify in H.
-  destruct (Rlt_dec (b (fst p)) (snd p)); [discriminate|].
-  destruct (Rlt_dec (snd p) (b (fst p))); [assumption|discriminate].
-Qed.
-
-Lemma op_fixes_RegFix :
-  forall b h p, classify b p = RegFix -> operate_point b h p = p.
-Proof. intros b h p H. unfold operate_point. rewrite H. reflexivity. Qed.
-
-
 (* 曲線全体と簡約対象 sub から境界線を1つ決める *)
 Parameter make_border : list Segment -> list Segment -> Border.
 
@@ -545,68 +510,15 @@ Parameter make_border : list Segment -> list Segment -> Border.
 Definition border_of (l sub r : list Segment) : Border :=
   make_border (l ++ sub ++ r) sub.
 
-(* 基本はセグメント全体を一定量だけ上下させる．                        *)
-(* 境界線に接するセグメントは，自分の可変域の中だけで形を変える．       *)
-Parameter operate_seg : list Segment -> list Segment -> R -> Segment -> Segment.
-
-Definition operate_segs (ctx sub : list Segment) (h : R) (ls : list Segment)
-  : list Segment := map (operate_seg ctx sub h) ls.
-
-(* 可変域：曲線 ctx の中でセグメント s が形を変えてよい領域 *)
-(* TODO : 可変域が取れるのは自己交差がない場合のみ *)
-Definition Point_Set := Point -> Prop.
-Parameter dzone : list Segment -> list Segment -> Segment -> Point_Set.
-
 (* 点集合 P が境界線より上／下（以上／以下） *)
 Definition weakly_above (b : Border) (P : Point_Set) : Prop :=
   forall p, P p -> b (fst p) <= snd p.
 Definition weakly_below (b : Border) (P : Point_Set) : Prop :=
   forall p, P p -> snd p <= b (fst p).
 
-(* --- operate_seg の仕様 --- *)
-
-(* 仕様1：境界線上に完全に乗るセグメントは不動（簡約部分） *)
-Axiom operate_seg_fix :
-  forall ctx sub h s,
-    (forall p, onSegment s p -> on_border (make_border ctx sub) p) ->
-    operate_seg ctx sub h s = s.
-
-(* 仕様2：向き（凸性を含む）の保存 *)
-Axiom operate_seg_orn :
-  forall ctx sub h s, orn_seg (operate_seg ctx sub h s) = orn_seg s.
-
-(* 仕様3：移動後の点は「厳密な上下移動の像」か「自分の可変域の中」 *)
-Axiom operate_seg_zone :
-  forall ctx sub h s p, In s ctx ->
-    onSegment (operate_seg ctx sub h s) p ->
-      (exists p0, onSegment s p0
-                  /\ p = operate_point (make_border ctx sub) h p0)
-      \/ dzone ctx sub s p.
-
-Axiom operate_seg_zone_head :
-  forall ctx sub h s p, In s ctx ->
-    onHead (operate_seg ctx sub h s) p ->
-      (exists p0, onHead s p0
-                  /\ p = operate_point (make_border ctx sub) h p0)
-      \/ dzone ctx sub s p.
-
-Axiom operate_seg_zone_last :
-  forall ctx sub h s p, In s ctx ->
-    onLast (operate_seg ctx sub h s) p ->
-      (exists p0, onLast s p0
-                  /\ p = operate_point (make_border ctx sub) h p0)
-      \/ dzone ctx sub s p.
-
-Lemma operate_segs_app :
-  forall ctx sub h ls1 ls2,
-    operate_segs ctx sub h (ls1 ++ ls2)
-    = operate_segs ctx sub h ls1 ++ operate_segs ctx sub h ls2.
-Proof. intros. unfold operate_segs. apply map_app. Qed.
-
-
-  (* ================================================================= *)
-(*  4.  make_border の性質                                            *)
-(* ================================================================= *)
+(* 可変域：曲線 ctx の中でセグメント s が形を変えてよい領域 *)
+(* TODO : 可変域が取れるのは自己交差がない場合のみ *)
+Parameter dzone : list Segment -> list Segment -> Segment -> Point_Set.
 
   (* --- 境界線との接触点の x 座標 --- *)
 Definition contact_x (b : Border) (P : Point_Set) (x : R) : Prop :=
@@ -731,6 +643,256 @@ Qed.
 
 
 (* ================================================================= *)
+(*  4.  上下移動                                   *)
+(* ================================================================= *)
+
+Inductive Region : Type := RegFix | RegUp | RegDown.
+
+(* 境界線との上下比較だけで決まる *)
+Definition classify (b : Border) (p : Point) : Region :=
+  if Rlt_dec (b (fst p)) (snd p) then RegUp
+  else if Rlt_dec (snd p) (b (fst p)) then RegDown
+  else RegFix.
+
+Definition shift (h : R) (g : Region) (p : Point) : Point :=
+  match g with
+  | RegFix  => p
+  | RegUp   => (fst p, snd p + h)
+  | RegDown => (fst p, snd p - h)
+  end.
+
+Definition operate_point (b : Border) (h : R) (p : Point) : Point :=
+  shift h (classify b p) p.
+
+Lemma classify_RegFix_char :
+  forall b p, classify b p = RegFix -> on_border b p.
+Proof.
+  intros b p H. unfold classify in H. unfold on_border.
+  destruct (Rlt_dec (b (fst p)) (snd p)); [discriminate|].
+  destruct (Rlt_dec (snd p) (b (fst p))); [discriminate|]. lra.
+Qed.
+
+Lemma classify_RegUp_char :
+  forall b p, classify b p = RegUp -> b (fst p) < snd p.
+Proof.
+  intros b p H. unfold classify in H.
+  destruct (Rlt_dec (b (fst p)) (snd p)); [assumption|].
+  destruct (Rlt_dec (snd p) (b (fst p))); discriminate.
+Qed.
+
+Lemma classify_RegDown_char :
+  forall b p, classify b p = RegDown -> snd p < b (fst p).
+Proof.
+  intros b p H. unfold classify in H.
+  destruct (Rlt_dec (b (fst p)) (snd p)); [discriminate|].
+  destruct (Rlt_dec (snd p) (b (fst p))); [assumption|discriminate].
+Qed.
+
+Lemma op_fixes_RegFix :
+  forall b h p, classify b p = RegFix -> operate_point b h p = p.
+Proof. intros b h p H. unfold operate_point. rewrite H. reflexivity. Qed.
+
+
+(* 基本はセグメント全体を一定量だけ上下させる．                        *)
+(* 境界線に接するセグメントは，自分の可変域の中だけで形を変える．       *)
+Parameter operate_seg : list Segment -> list Segment -> R -> Segment -> Segment.
+
+Definition operate_segs (ctx sub : list Segment) (h : R) (ls : list Segment)
+  : list Segment := map (operate_seg ctx sub h) ls.
+
+(* --- operate_seg の仕様 --- *)
+
+(* 仕様1：境界線上に完全に乗るセグメントは不動（簡約部分） *)
+Axiom operate_seg_fix :
+  forall ctx sub h s,
+    (forall p, onSegment s p -> on_border (make_border ctx sub) p) ->
+    operate_seg ctx sub h s = s.
+
+(* 仕様2：移動後の点は「厳密な上下移動の像」か「自分の可変域の中」 *)
+Axiom operate_seg_zone :
+  forall ctx sub h s p, In s ctx ->
+    onSegment (operate_seg ctx sub h s) p ->
+      (exists p0, onSegment s p0
+                  /\ p = operate_point (make_border ctx sub) h p0)
+      \/ dzone ctx sub s p.
+
+Axiom operate_seg_zone_head :
+  forall ctx sub h s p, In s ctx ->
+    onHead (operate_seg ctx sub h s) p ->
+      (exists p0, onHead s p0
+                  /\ p = operate_point (make_border ctx sub) h p0)
+      \/ dzone ctx sub s p.
+
+Axiom operate_seg_zone_last :
+  forall ctx sub h s p, In s ctx ->
+    onLast (operate_seg ctx sub h s) p ->
+      (exists p0, onLast s p0
+                  /\ p = operate_point (make_border ctx sub) h p0)
+      \/ dzone ctx sub s p.
+
+Lemma operate_segs_app :
+  forall ctx sub h ls1 ls2,
+    operate_segs ctx sub h (ls1 ++ ls2)
+    = operate_segs ctx sub h ls1 ++ operate_segs ctx sub h ls2.
+Proof. intros. unfold operate_segs. apply map_app. Qed.
+
+(* ---- 長さの保存 ---------------------------------------- *)
+Lemma operate_segs_length : forall ctx sub h ls,
+  length (operate_segs ctx sub h ls) = length ls.
+Proof. intros. unfold operate_segs. apply length_map. Qed.
+
+(* 添字アクセスの可換性 *)
+Lemma operate_segs_nth_error : forall ctx sub h ls i s,
+  nth_error ls i = Some s ->
+  nth_error (operate_segs ctx sub h ls) i = Some (operate_seg ctx sub h s).
+Proof.
+  intros ctx sub h ls i s H. unfold operate_segs.
+  rewrite nth_error_map, H. reflexivity.
+Qed.
+
+Lemma operate_segs_nth : forall ctx sub h ls i,
+  (i < length ls)%nat ->
+  nth i (operate_segs ctx sub h ls) default_segment
+  = operate_seg ctx sub h (nth i ls default_segment).
+Proof.
+  intros ctx sub h ls i Hi. unfold operate_segs.
+  rewrite (nth_indep _ default_segment (operate_seg ctx sub h default_segment)).
+  - apply map_nth.
+  - rewrite length_map. exact Hi.
+Qed.
+
+
+(* 鉛直平行移動（向きの不変性を持つ） *)
+(* TODO : これを用いて operate_seg を実装 *)
+Parameter vshift_seg : R -> Segment -> Segment.
+
+Axiom vshift_seg_point : forall d s t,
+  point (vshift_seg d s) t = (fst (point s t), snd (point s t) + d).
+Axiom orn_vshift : forall d s, orn_seg (vshift_seg d s) = orn_seg s.
+
+Definition shift_amount (g : Region) (h : R) : R :=
+  match g with RegFix => 0 | RegUp => h | RegDown => -h end.
+
+(* 単一領域に収まるセグメントは「丸ごと鉛直平行移動」   *)
+(*   これがあると operate_seg_zone の第1枝も等式から従う             *)
+Definition seg_in_region (b : Border) (g : Region) (s : Segment) : Prop :=
+  forall p, onSegment s p -> classify b p = g.
+
+Axiom operate_seg_uniform :
+  forall ctx sub h g s,
+    seg_in_region (make_border ctx sub) g s ->
+    operate_seg ctx sub h s = vshift_seg (shift_amount g h) s.
+
+(* 単一領域の場合 *)
+Lemma operate_seg_orn_uniform :
+  forall ctx sub h g s,
+    seg_in_region (make_border ctx sub) g s ->
+    orn_seg (operate_seg ctx sub h s) = orn_seg s.
+Proof.
+  intros ctx sub h g s Hg.
+  rewrite (operate_seg_uniform ctx sub h g s Hg). apply orn_vshift.
+Qed.
+
+(* 境界線を横断する場合 *)
+(* 境界線と交わるセグメントは，可変域の中だけで形を変えて向きを保つ    *)
+Lemma reconnect_one_segment :
+  forall ctx sub h s,
+    ~ weakly_above (make_border ctx sub) (onSegment s) ->
+    ~ weakly_below (make_border ctx sub) (onSegment s) ->
+    orn_seg (operate_seg ctx sub h s) = orn_seg s.
+Admitted.
+
+(* セグメントと境界線の位置関係の場合分け（排中律ベース，決定不能なので Classical が必要？）*)
+(* TODO : make_border の性質 の節のものとまとめる *)
+Lemma classify_cases : forall b s,
+  (exists g, seg_in_region b g s)
+  \/ (~ weakly_above b (onSegment s) /\ ~ weakly_below b (onSegment s)).
+Admitted.
+
+(* ---- 統合（場合分けを尽くす）--------------------------- *)
+Lemma operate_seg_orn' : forall ctx sub h s,
+  orn_seg (operate_seg ctx sub h s) = orn_seg s.
+Proof.
+  intros ctx sub h s.
+  destruct (classify_cases (make_border ctx sub) s) as [[g Hg] | [Ha Hb]].
+  - eapply operate_seg_orn_uniform; exact Hg.
+  - apply (reconnect_one_segment ctx sub h s Ha Hb).
+Qed.
+
+(* ---- 仕様3：向きの保存 ----------------- *)
+Lemma operate_segs_orn_map : forall ctx sub h ls,
+  map orn_seg (operate_segs ctx sub h ls) = map orn_seg ls.
+Proof.
+  intros. unfold operate_segs. rewrite map_map.
+  apply map_ext. intros s. apply operate_seg_orn'.
+Qed.
+
+Lemma operate_segs_orn_nth_error : forall ctx sub h ls i s s',
+  nth_error ls i = Some s ->
+  nth_error (operate_segs ctx sub h ls) i = Some s' ->
+  orn_seg s' = orn_seg s.
+Proof.
+  intros ctx sub h ls i s s' Hs Hs'.
+  rewrite (operate_segs_nth_error ctx sub h ls i s Hs) in Hs'.
+  injection Hs' as Hs'. subst s'. apply operate_seg_orn'.
+Qed.
+
+(* 端点は「点だけで決まる写像」で動く。                              *)
+(* 境界線上の端点は classify = RegFix なので不動、それ以外は ±h。      *)
+(* いずれにせよ operate_point で書ける ＝ 端点の像はセグメントに依存しない *)
+Axiom operate_seg_init : forall ctx sub h s,
+  init (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (init s).
+Axiom operate_seg_term : forall ctx sub h s,
+  term (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (term s).
+
+(* 単一領域の場合は operate_seg_uniform から実際に出る *)
+Lemma operate_seg_init_uniform : forall ctx sub h g s,
+  seg_in_region (make_border ctx sub) g s ->
+  init (operate_seg ctx sub h s)
+  = operate_point (make_border ctx sub) h (init s).
+Proof.
+  intros ctx sub h g s Hg.
+  rewrite (operate_seg_uniform ctx sub h g s Hg).
+  unfold init. rewrite vshift_seg_point.
+  unfold operate_point, shift.
+  assert (Hcl : classify (make_border ctx sub) (init s) = g)
+    by (apply Hg; unfold init; apply onInit).
+  unfold init in Hcl; rewrite Hcl. 
+  destruct g; unfold shift_amount; simpl; f_equal. 
+  rewrite Rplus_0_r.
+  destruct (point s 0); reflexivity.
+Qed.
+
+(* 連結性の保存 *)
+Lemma operate_segs_connected : forall ctx sub h ls,
+  connected ls -> connected (operate_segs ctx sub h ls).
+Proof.
+  intros ctx sub h ls Hc n s1 s2 H1 H2.
+  unfold operate_segs in H1, H2.
+  destruct (nth_error_map_inv _ _ _ _ H1) as [a [Ha Ea]].
+  destruct (nth_error_map_inv _ _ _ _ H2) as [b [Hb Eb]].
+  subst s1 s2.
+  rewrite operate_seg_term, operate_seg_init.
+  f_equal. exact (Hc n a b Ha Hb).
+Qed.
+
+(*  「向き列が同じで、長さが同じで、連結なら、同じ scurve の埋め込み」 *)
+Lemma embed_scurve_transfer : forall ds ls ls',
+  embed_listDir ds ls ->
+  length ls' = length ls ->
+  (forall i s s', nth_error ls i = Some s -> nth_error ls' i = Some s' ->
+                  orn_seg s' = orn_seg s) ->
+  connected ls' ->
+  embed_listDir ds ls'.
+Admitted.
+
+(* ---- 連結性は埋め込みから出る（Embed.v の consist_init_term）---- *)
+Lemma embed_listDir_connected : forall ds ls, embed_listDir ds ls -> connected ls.
+Admitted.
+
+
+
+(* ================================================================= *)
 (*  5.  移動先が長方形に入らないこと                                   *)
 (* ================================================================= *)
 
@@ -847,20 +1009,17 @@ Qed.
 (*  6.  核となる補題                                            *)
 (* ================================================================= *)
 
-(* 境界線と交わるセグメントは，可変域の中だけで形を変えて向きを保つ    *)
-(* Lemma reconnect_one_segment :
-  forall ctx sub h s,
-    ~ weakly_above (make_border ctx sub) (onSegment s) ->
-    ~ weakly_below (make_border ctx sub) (onSegment s) ->
-    orn_seg (operate_seg ctx sub h s) = orn_seg s.
-Admitted. *)
-
 (* ---- Lemma A : 埋め込みの保存 ----------------------------------- *)
 (* 向きが変わらないことと，連結性が保存されることから *)
-Lemma operate_preserves_embed :
-  forall ctx sub h ds ls,
-    embed_listDir ds ls -> embed_listDir ds (operate_segs ctx sub h ls).
-Admitted.
+Lemma operate_preserves_embed : forall ctx sub h ds ls,
+  embed_listDir ds ls -> embed_listDir ds (operate_segs ctx sub h ls).
+Proof.
+  intros ctx sub h ds ls Hemb.
+  eapply embed_scurve_transfer; [exact Hemb | | |].
+  - apply operate_segs_length.
+  - intros i s s' Hs Hs'. eapply operate_segs_orn_nth_error; eauto.
+  - apply operate_segs_connected. eapply embed_listDir_connected; exact Hemb.
+Qed.
 
 (* ---- Lemma B : 開の保存 ----------------------------------------- *)
 (*  [1] セグメント×セグメント：同領域なら同じ h 平行移動 ⇒ 移動前も    *)
