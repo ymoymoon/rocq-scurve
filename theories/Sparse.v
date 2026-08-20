@@ -55,6 +55,10 @@ Definition same_extention_head ls1 ls2 :=
 Definition same_extention_last ls1 ls2 := 
 	(forall rr, onLast_extend ls1 rr <-> onLast_extend ls2 rr).
 
+(* 2つのセグメントが隣り合っている *)
+(* TODO : 同じセグメントが入っている時に備え，位置ベースにする *)
+Parameter adjacent : list Segment -> Segment -> Segment -> Prop.
+
 
 Definition embed_listDir (ds: list Direction) (ls: list Segment) : Prop :=
 	exists sc: scurve, scurve_to_direction sc = ds
@@ -205,6 +209,22 @@ Admitted.
 Lemma one_way_listDir_nonnil :
   forall ds, is_one_way_listDir ds -> ds <> [].
 Admitted.
+
+
+(*  「向き列が同じで、長さが同じで、連結なら、同じ scurve の埋め込み」 *)
+Lemma embed_scurve_transfer : forall ds ls ls',
+  embed_listDir ds ls ->
+  length ls' = length ls ->
+  (forall i s s', nth_error ls i = Some s -> nth_error ls' i = Some s' ->
+                  orn_seg s' = orn_seg s) ->
+  connected ls' ->
+  embed_listDir ds ls'.
+Admitted.
+
+(* ---- 連結性は埋め込みから出る（Embed.v の consist_init_term）---- *)
+Lemma embed_listDir_connected : forall ds ls, embed_listDir ds ls -> connected ls.
+Admitted.
+
 
 
 (* ================================================================= *)
@@ -649,7 +669,6 @@ Admitted.
 (* ---- (Z-2) 可変域には自分と隣接セグメント以外は入らない ---------- *)
 (*      「端点近くで隣のセグメントが入り込む」問題への対応            *)
 (* TODO : 可変域は端点を含まないようにしても良い（可変域＋端点，の中でセグメントを変形する） *)
-Parameter adjacent : list Segment -> Segment -> Segment -> Prop.
 
 Lemma mb_dz_local :
   forall l sub r, well_split l sub r ->
@@ -892,6 +911,14 @@ Proof.
     + apply Rle_trans with 0; [apply Hn; lra | lra].
 Qed.
 
+(* 端点は「点だけで決まる写像」で動く。                              *)
+(* 境界線上の端点は classify = RegFix なので不動、それ以外は ±h。      *)
+(* いずれにせよ operate_point で書ける ＝ 端点の像はセグメントに依存しない *)
+Axiom operate_seg_init : forall ctx sub h s,
+  init (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (init s).
+Axiom operate_seg_term : forall ctx sub h s,
+  term (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (term s).
+
 
 (* 鉛直平行移動（向きの不変性を持つ） *)
 (* TODO : これを用いて operate_seg を実装 *)
@@ -913,6 +940,23 @@ Axiom operate_seg_uniform :
   forall ctx sub h g s,
     seg_in_region (make_border ctx sub) g s ->
     operate_seg ctx sub h s = vshift_seg (shift_amount g h) s.
+
+Lemma operate_seg_init_uniform : forall ctx sub h g s,
+  seg_in_region (make_border ctx sub) g s ->
+  init (operate_seg ctx sub h s)
+  = operate_point (make_border ctx sub) h (init s).
+Proof.
+  intros ctx sub h g s Hg.
+  rewrite (operate_seg_uniform ctx sub h g s Hg).
+  unfold init. rewrite vshift_seg_point.
+  unfold operate_point, shift.
+  assert (Hcl : classify (make_border ctx sub) (init s) = g)
+    by (apply Hg; unfold init; apply onInit).
+  unfold init in Hcl; rewrite Hcl. 
+  destruct g; unfold shift_amount; simpl; f_equal. 
+  rewrite Rplus_0_r.
+  destruct (point s 0); reflexivity.
+Qed.
 
 (* 単一領域の場合 *)
 Lemma operate_seg_orn_uniform :
@@ -953,7 +997,7 @@ Lemma operate_adjacent_junction : forall ctx sub h q1 q2,
 Proof.
 Admitted.
 
-(* セグメントと境界線の位置関係の場合分け（排中律ベース，決定不能なので Classical が必要？）*)
+(* セグメントと境界線の位置関係の場合分け（排中律 Classical が必要？）*)
 (* TODO : make_border の性質 の節のものとまとめる *)
 Lemma classify_cases : forall b s,
   (exists g, seg_in_region b g s)
@@ -988,32 +1032,6 @@ Proof.
   injection Hs' as Hs'. subst s'. apply operate_seg_orn'.
 Qed.
 
-(* 端点は「点だけで決まる写像」で動く。                              *)
-(* 境界線上の端点は classify = RegFix なので不動、それ以外は ±h。      *)
-(* いずれにせよ operate_point で書ける ＝ 端点の像はセグメントに依存しない *)
-Axiom operate_seg_init : forall ctx sub h s,
-  init (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (init s).
-Axiom operate_seg_term : forall ctx sub h s,
-  term (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (term s).
-
-(* 単一領域の場合は operate_seg_uniform から実際に出る *)
-Lemma operate_seg_init_uniform : forall ctx sub h g s,
-  seg_in_region (make_border ctx sub) g s ->
-  init (operate_seg ctx sub h s)
-  = operate_point (make_border ctx sub) h (init s).
-Proof.
-  intros ctx sub h g s Hg.
-  rewrite (operate_seg_uniform ctx sub h g s Hg).
-  unfold init. rewrite vshift_seg_point.
-  unfold operate_point, shift.
-  assert (Hcl : classify (make_border ctx sub) (init s) = g)
-    by (apply Hg; unfold init; apply onInit).
-  unfold init in Hcl; rewrite Hcl. 
-  destruct g; unfold shift_amount; simpl; f_equal. 
-  rewrite Rplus_0_r.
-  destruct (point s 0); reflexivity.
-Qed.
-
 (* 連結性の保存 *)
 Lemma operate_segs_connected : forall ctx sub h ls,
   connected ls -> connected (operate_segs ctx sub h ls).
@@ -1026,21 +1044,6 @@ Proof.
   rewrite operate_seg_term, operate_seg_init.
   f_equal. exact (Hc n a b Ha Hb).
 Qed.
-
-(*  「向き列が同じで、長さが同じで、連結なら、同じ scurve の埋め込み」 *)
-Lemma embed_scurve_transfer : forall ds ls ls',
-  embed_listDir ds ls ->
-  length ls' = length ls ->
-  (forall i s s', nth_error ls i = Some s -> nth_error ls' i = Some s' ->
-                  orn_seg s' = orn_seg s) ->
-  connected ls' ->
-  embed_listDir ds ls'.
-Admitted.
-
-(* ---- 連結性は埋め込みから出る（Embed.v の consist_init_term）---- *)
-Lemma embed_listDir_connected : forall ds ls, embed_listDir ds ls -> connected ls.
-Admitted.
-
 
 
 (* ================================================================= *)
