@@ -12,281 +12,9 @@ From Stdlib Require Import Lia.
 
 
 (* --------------------------------------------------------------------------- *)
-(* extend に関する補題．extend / segment_border 本体の定義と公理は Segment.v 参照 *)
+(* extend に関する補題．extend の公理は Segment.v 参照 *)
 
-(* Legacy proofs for the concrete border-based implementation.  They are kept
-   as documentation only; the abstract interface below replaces them. *)
-(*
-(* 引数のリスト ls を extend した時に， ls の n 番目のセグメントの上を指すのは
-		nth (segment_border ls) <= t <= (n+1)th (segment_border ls)
-		また segment_border ls の先頭要素より小さい t では先頭の延長線上を指し，
-		segment_border ls の最後の要素より大きい t では末尾の延長線上を指す *)
-Lemma extention_split : forall t ls,
-	let p := extend ls t in
-	ls <> []
-	-> (exists border0 t', (* 先頭の延長線上 *)
-			nth_error (segment_border ls) 0 = Some border0 /\
-			t <= border0 /\ t' <= 0 /\ p = point (hd_segment ls) t')
-	\/ (exists n border1 border2 t' seg, (* セグメント上 *)
-			nth_error ls n = Some seg /\
-			nth_error (segment_border ls) n = Some border1 /\
-			nth_error (segment_border ls) (S n) = Some border2 /\
-			border1 < t <= border2 /\ 0 < t' <= 1 /\ p = point seg t')
-	\/ (exists border_last t', (* 末尾の延長線上 *)
-			nth_error (segment_border ls) (length ls) = Some border_last /\
-			border_last < t /\ 1 < t' /\ p = point (last_segment ls) t').
-Proof.
-	intros t ls p Hne.
-	destruct (extend_pick_spec ls t Hne) as [n [s [bn [bn1 [Hs [Hbn [Hbn1 [Hcase Heq]]]]]]]].
-	assert (Hp: p = point s ((t - bn) / (bn1 - bn))).
-	{ unfold p, extend. rewrite Heq. reflexivity. }
-	assert (Hlt: bn < bn1) by (eapply border_increasing; eauto).
-	destruct Hcase as [[Hn0 Ht] | [Hmid | [Hlast Ht]]].
-	- (* 先頭の延長線上 *) left. subst n.
-		exists bn, ((t - bn) / (bn1 - bn)).
-		split; [exact Hbn |].
-		split; [exact Ht |].
-		split.
-		+ apply (proj2 (affine_param_iff_le bn bn1 t 0 Hlt)). lra.
-		+ rewrite Hp. unfold hd_segment.
-			pose proof (nth_error_hd default_segment ls Hs) as Hhd.
-			rewrite Hhd. reflexivity.
-	- (* セグメント上 *) right; left.
-		exists n, bn, bn1, ((t - bn) / (bn1 - bn)), s.
-		split; [exact Hs |].
-		split; [exact Hbn |].
-		split; [exact Hbn1 |].
-		split; [lra |].
-		split; [split |].
-		+ apply (proj2 (affine_param_iff_gt bn bn1 t 0 Hlt)). lra.
-		+ apply (proj2 (affine_param_iff_le bn bn1 t 1 Hlt)). lra.
-		+ exact Hp.
-	- (* 末尾の延長線上 *) right; right.
-		assert (Hlen: (length ls - 1)%nat = n) by lia.
-		assert (Hs': nth_error ls (length ls - 1)%nat = Some s) by (rewrite Hlen; exact Hs).
-		pose proof (nth_error_last default_segment Hne) as Hlast_eq.
-		rewrite Hs' in Hlast_eq.
-		assert (Hbn1' : nth_error (segment_border ls) (length ls) = Some bn1) by (rewrite <- Hlast, Hbn1; reflexivity).
-		exists bn1, ((t - bn) / (bn1 - bn)).
-		split; [exact Hbn1' |].
-		split; [exact Ht |].
-		split.
-		+ apply (proj2 (affine_param_iff_gt bn bn1 t 1 Hlt)). lra.
-		+ rewrite Hp. unfold last_segment. congruence.
-Qed.
-
-(* extend した延長部分の先頭だけで交差は起こらない *)
-Lemma extend_head_not_cross : forall ls t1 t2 border_first,
-	ls <> []
-	-> nth_error (segment_border ls) 0 = Some border_first
-	-> t1 <= border_first
-	-> t2 <= border_first
-	-> extend ls t1 = extend ls t2
-	-> t1 = t2.
-Proof.
-	intros ls t1 t2 b0 Hne Hb0 Ht1 Ht2 Hext.
-	destruct (extend_pick_spec ls t1 Hne) as [n1 [s1 [bn1a [bn1b [Hs1 [Hbn1a [Hbn1b [Hcase1 Heq1]]]]]]]].
-	destruct (extend_pick_spec ls t2 Hne) as [n2 [s2 [bn2a [bn2b [Hs2 [Hbn2a [Hbn2b [Hcase2 Heq2]]]]]]]].
-	assert (Hn1: n1 = O).
-	{ destruct n1 as [|n1']; [reflexivity | exfalso].
-		assert (Hb0lt: b0 < bn1a).
-		{ apply (Increasing_lt (segment_border ls) O (S n1') b0 bn1a (segment_border_increasing ls));
-				[lia | exact Hb0 | exact Hbn1a]. }
-		destruct Hcase1 as [[Hz _] | [Hmid | [Hlast Ht]]]; [discriminate Hz | lra |].
-		assert (Hlt1: bn1a < bn1b) by (eapply border_increasing; eauto). lra. }
-	assert (Hn2: n2 = O).
-	{ destruct n2 as [|n2']; [reflexivity | exfalso].
-		assert (Hb0lt: b0 < bn2a).
-		{ apply (Increasing_lt (segment_border ls) O (S n2') b0 bn2a (segment_border_increasing ls));
-				[lia | exact Hb0 | exact Hbn2a]. }
-		destruct Hcase2 as [[Hz _] | [Hmid | [Hlast Ht]]]; [discriminate Hz | lra |].
-		assert (Hlt2: bn2a < bn2b) by (eapply border_increasing; eauto). lra. }
-	subst n1 n2.
-	rewrite Hb0 in Hbn1a, Hbn2a.
-	injection Hbn1a as Hbn1a. injection Hbn2a as Hbn2a. subst bn1a bn2a.
-	assert (Hbb: bn1b = bn2b) by congruence. subst bn2b.
-	assert (Hs: s1 = s2) by congruence. subst s2.
-	assert (Hlt: b0 < bn1b) by (eapply border_increasing; eauto).
-	assert (Hp1: extend ls t1 = point s1 ((t1 - b0) / (bn1b - b0))) by (unfold extend; rewrite Heq1; reflexivity).
-	assert (Hp2: extend ls t2 = point s1 ((t2 - b0) / (bn1b - b0))) by (unfold extend; rewrite Heq2; reflexivity).
-	rewrite Hp1, Hp2 in Hext.
-	assert (Haff: (t1 - b0) / (bn1b - b0) = (t2 - b0) / (bn1b - b0)) by (eapply point_injective; eauto).
-	eapply affine_inj; eauto.
-Qed.
-
-(* extend した延長部分の末尾だけで交差は起こらない *)
-Lemma extend_last_not_cross : forall ls t1 t2 border_last,
-	ls <> []
-	-> nth_error (segment_border ls) (length ls) = Some border_last
-	-> border_last < t1
-	-> border_last < t2
-	-> extend ls t1 = extend ls t2
-	-> t1 = t2.
-Proof.
-	intros ls t1 t2 blast Hne Hblast Ht1 Ht2 Hext.
-	destruct (extend_pick_spec ls t1 Hne) as [n1 [s1 [bn1a [bn1b [Hs1 [Hbn1a [Hbn1b [Hcase1 Heq1]]]]]]]].
-	destruct (extend_pick_spec ls t2 Hne) as [n2 [s2 [bn2a [bn2b [Hs2 [Hbn2a [Hbn2b [Hcase2 Heq2]]]]]]]].
-	assert (Hn1lt: (n1 < length ls)%nat) by (apply nth_error_Some; rewrite Hs1; discriminate).
-	assert (Hn2lt: (n2 < length ls)%nat) by (apply nth_error_Some; rewrite Hs2; discriminate).
-	assert (Hn1: S n1 = length ls).
-	{ destruct (Nat.eq_dec (S n1) (length ls)) as [Heqn|Hneqn]; [exact Heqn | exfalso].
-		assert (Hb: bn1b < blast).
-		{ apply (Increasing_lt (segment_border ls) (S n1) (length ls) bn1b blast (segment_border_increasing ls));
-				[lia | exact Hbn1b | exact Hblast]. }
-		destruct Hcase1 as [[Hz Ht] | [Hmid | [Hlast Ht]]].
-		- assert (Hlt1: bn1a < bn1b) by (eapply border_increasing; eauto). lra.
-		- lra.
-		- lia. }
-	assert (Hn2: S n2 = length ls).
-	{ destruct (Nat.eq_dec (S n2) (length ls)) as [Heqn|Hneqn]; [exact Heqn | exfalso].
-		assert (Hb: bn2b < blast).
-		{ apply (Increasing_lt (segment_border ls) (S n2) (length ls) bn2b blast (segment_border_increasing ls));
-				[lia | exact Hbn2b | exact Hblast]. }
-		destruct Hcase2 as [[Hz Ht] | [Hmid | [Hlast Ht]]].
-		- assert (Hlt2: bn2a < bn2b) by (eapply border_increasing; eauto). lra.
-		- lra.
-		- lia. }
-	assert (Hn1n2: n1 = n2) by lia. subst n2.
-	assert (Hbn1b_alt: nth_error (segment_border ls) (S n1) = Some blast) by (rewrite Hn1; exact Hblast).
-	assert (Ebb1: bn1b = blast) by congruence.
-	assert (Ebb2: bn2b = blast) by congruence.
-	subst bn1b bn2b.
-	assert (Hbb: bn1a = bn2a) by congruence. subst bn2a.
-	assert (Hs: s1 = s2) by congruence. subst s2.
-	assert (Hlt: bn1a < blast) by (eapply border_increasing; eauto).
-	assert (Hp1: extend ls t1 = point s1 ((t1 - bn1a) / (blast - bn1a))) by (unfold extend; rewrite Heq1; reflexivity).
-	assert (Hp2: extend ls t2 = point s1 ((t2 - bn1a) / (blast - bn1a))) by (unfold extend; rewrite Heq2; reflexivity).
-	rewrite Hp1, Hp2 in Hext.
-	assert (Haff: (t1 - bn1a) / (blast - bn1a) = (t2 - bn1a) / (blast - bn1a)) by (eapply point_injective; eauto).
-	eapply affine_inj; eauto.
-Qed.
-
-(* extend した時も１つのセグメントの中で交差は起こらない *)
-(* TODO : extend しない時の定理とまとめられないか *)
-Lemma extend_one_seg_not_cross : forall ls n t1 t2 border1 border2,
-	nth_error (segment_border ls) n = Some border1
-	-> nth_error (segment_border ls) (S n) = Some border2
-	-> border1 < t1 <= border2
-	-> border1 < t2 <= border2
-	-> extend ls t1 = extend ls t2
-	-> t1 = t2.
-Proof.
-Admitted.
-
-Lemma extention_split_2 : forall t1 t2 ls,
-	let p1 := extend ls t1 in
-	let p2 := extend ls t2 in
-	ls <> []
-	-> t1 <> t2
-	-> (exists t1' t2', (* t1, t2 とも先頭の延長線上 *)
-			t1' <= 0 /\ t2' <= 0 /\ t1' <> t2' /\
-				p1 = point (hd_segment ls) t1' /\ p2 = point (hd_segment ls) t2')
-	\/ (exists t1' t2' seg, (* t1 は先頭の延長線上， t2 はセグメント上 *)
-			t1' <= 0 /\ 0 < t2' <= 1 /\ In seg ls /\
-				p1 = point (hd_segment ls) t1' /\ p2 = point seg t2')
-	\/ (exists t1' t2', (* t1 は先頭の延長線上， t2 は末尾の延長線上 *)
-			t1' <= 0 /\ 1 < t2' /\ 
-				p1 = point (hd_segment ls) t1' /\ p2 = point (last_segment ls) t2')
-	\/ (exists t1' t2' seg, (* t1 はセグメント上， t2 は先頭の延長線上 *)
-			0 < t1' <= 1 /\ t2' <= 0 /\ In seg ls /\
-				p1 = point seg t1' /\ p2 = point (hd_segment ls) t2')
-	\/ (exists t1' t2' seg, (* t1, t2 とも同じセグメント上 *)
-			0 < t1' <= 1 /\ 0 < t2' <= 1 /\ t1' <> t2' /\ In seg ls /\
-				p1 = point seg t1' /\ p2 = point seg t2')
-	\/ (exists t1' t2' seg1 seg2, (* t1, t2 が異なるセグメント上 (t1 < t2) *)
-			0 < t1' <= 1 /\ 0 < t2' <= 1 /\ In_order seg1 seg2 ls /\
-				p1 = point seg1 t1' /\ p2 = point seg2 t2')
-	\/ (exists t1' t2' seg1 seg2, (* t1, t2 が異なるセグメント上 (t1 > t2) *)
-			0 < t1' <= 1 /\ 0 < t2' <= 1 /\ In_order seg2 seg1 ls /\
-				p1 = point seg1 t1' /\ p2 = point seg2 t2')
-	\/ (exists t1' t2' seg, (* t1 はセグメント上， t2 は末尾の延長線上 *)
-			0 < t1' <= 1 /\ 1 < t2' /\ In seg ls /\
-				p1 = point seg t1' /\ p2 = point (last_segment ls) t2')
-	\/ (exists t1' t2', (* t1 は末尾の延長線上， t2 は先頭の延長線上 *)
-			1 < t1' /\ t2' <= 0 /\ 
-				p1 = point (last_segment ls) t1' /\ p2 = point (hd_segment ls) t2')
-	\/ (exists t1' t2' seg, (* t1 は末尾の延長線上， t2 はセグメント上 *)
-			1 < t1' /\ 0 < t2' <= 1 /\ In seg ls /\
-				p1 = point (last_segment ls) t1' /\ p2 = point seg t2')
-	\/ (exists t1' t2', (* t1, t2 とも末尾の延長線上 *)
-			1 < t1' /\ 1 < t2' /\ t1' <> t2' /\
-				p1 = point (last_segment ls) t1' /\ p2 = point (last_segment ls) t2').
-Proof. 
-	intros t1 t2 ls p1 p2 Hls H12.
-	pose proof (extention_split t1 ls Hls) as H1.
-	pose proof (extention_split t2 ls Hls) as H2.
-	destruct H1 as [[border_first1 [t1' [Hnth1 [Ht1 [Ht1' Heq1]]]]] | [[n1 [border11 [border12 [t1' [seg1 [Hnth1 [Hnth11 [Hnth12 [Ht1 [Ht1' Heq1]]]]]]]]]] | [border_last1 [t1' [Hnth1 [Ht1 [Ht1' Heq1]]]]]]];
-	destruct H2 as [[border_first2 [t2' [Hnth2 [Ht2 [Ht2' Heq2]]]]] | [[n2 [border21 [border22 [t2' [seg2 [Hnth2 [Hnth21 [Hnth22 [Ht2 [Ht2' Heq2]]]]]]]]]] | [border_last2 [t2' [Hnth2 [Ht2 [Ht2' Heq2]]]]]]].
-	- (* t1, t2 とも先頭の延長線上 *) left. 
-		exists t1', t2'. repeat split; try tauto.
-		assert (border_first1 = border_first2) by congruence.
-		subst.
-		intros contra; subst.
-		apply H12.
-		eapply extend_head_not_cross; try eassumption. 
-		congruence.
-	- (* t1 は先頭の延長線上， t2 はセグメント上 *) right; left. 
-		exists t1', t2', seg2. 
-		apply nth_error_In in Hnth2. tauto.
-	- (* t1 は先頭の延長線上， t2 は末尾の延長線上 *) do 2 right; left.
-		exists t1', t2'. tauto.
-	- (* t1 はセグメント上， t2 は先頭の延長線上 *) do 3 right; left.
-		exists t1', t2', seg1.
-		apply nth_error_In in Hnth1. tauto.
-	- (* t1, t2 ともセグメント上 *)
-		destruct (Nat.eqb n1 n2) eqn: E.
-		+ (* t1, t2 とも同じセグメント上 *) do 4 right; left.
-			apply Nat.eqb_eq in E.
-			subst. 
-			assert (seg1 = seg2) by congruence.
-			assert (border11 = border21) by congruence.
-			assert (border12 = border22) by congruence.
-			subst.
-			apply nth_error_In in Hnth1.
-		  exists t1', t2', seg2. repeat split; try tauto.
-			(* 補題が必要 *)
-			intros contra; subst.
-			apply H12.
-			eapply (extend_one_seg_not_cross _ n2); try eassumption. 
-		 	congruence.
-		+ destruct (Nat.leb n1 n2) eqn: E1.
-			* (* t1, t2 が異なるセグメント上 (t1 < t2) *) do 5 right; left.
-				assert ((n1 < n2)%nat). {
-					apply Nat.leb_le in E1.
-					destruct E1; try (rewrite Nat.eqb_refl in E; congruence).
-					lia.
-				}
-				exists t1', t2', seg1, seg2. 
-				assert (In_order seg1 seg2 ls) by (eapply In_order_nth; eassumption). 
-				tauto.
-			* (* t1, t2 が異なるセグメント上 (t1 > t2) *) do 6 right; left.
-				assert ((n2 < n1)%nat). {
-					apply Nat.leb_gt in E1.
-					assumption.
-				}
-				exists t1', t2', seg1, seg2. 
-				assert (In_order seg2 seg1 ls) by (eapply In_order_nth; eassumption). 
-				tauto.
-	- (* t1 はセグメント上， t2 は末尾の延長線上 *) do 7 right; left.
-		exists t1', t2', seg1. 
-		apply nth_error_In in Hnth1. tauto.
-	- (* t1 は末尾の延長線上， t2 は先頭の延長線上 *) do 8 right; left.
-		exists t1', t2'. tauto.
-	- (* t1 は末尾の延長線上， t2 はセグメント上 *) do 9 right; left.
-		exists t1', t2', seg2. 
-		apply nth_error_In in Hnth2. tauto.
-	- (* t1, t2 とも末尾の延長線上 *) repeat right.
-		exists t1', t2'. repeat split; try tauto.
-		assert (border_last1 = border_last2) by congruence.
-		subst.
-		intros contra; subst.
-		apply H12.
-		eapply extend_last_not_cross; try eassumption. 
-		congruence.
-Qed.
-*)
-
-Lemma extention_split_2 : forall t1 t2 ls,
+Lemma extention_split : forall t1 t2 ls,
   let p1 := extend ls t1 in let p2 := extend ls t2 in
   ls <> [] -> t1 <> t2 ->
   (exists u1 u2, u1 <= 0 /\ u2 <= 0 /\ u1 <> u2 /\ p1 = point (hd_segment ls) u1 /\ p2 = point (hd_segment ls) u2)
@@ -335,7 +63,7 @@ Proof.
   - left. assert (A : s1 = hd_segment ls). { rewrite H1 in N1. unfold hd_segment. symmetry. eapply nth_error_hd; eauto. }
     assert (B : s2 = hd_segment ls). { rewrite H2 in N2. unfold hd_segment. symmetry. eapply nth_error_hd; eauto. }
     subst s1; subst s2. exists (extend_param ls t1), (extend_param ls t2).
-    assert (U : extend_param ls t1 <> extend_param ls t2). { intro U. apply Hneq. eapply extend_same_piece_injective; [rewrite H1, H2; reflexivity | exact U]. }
+    assert (U : extend_param ls t1 <> extend_param ls t2). { intro U. apply Hneq. eapply extend_same_piece_injective; [apply Hne | rewrite H1, H2; reflexivity | exact U]. }
     tauto.
   - do 2 right; left. assert (A : s1 = hd_segment ls). { rewrite H1 in N1. unfold hd_segment. symmetry. eapply nth_error_hd; eauto. }
     assert (B : s2 = last_segment ls). { unfold last_segment. assert (K : extend_index ls t2 = (length ls - 1)%nat) by lia.
@@ -355,7 +83,7 @@ Proof.
       rewrite K in N2. pose proof (@nth_error_last Segment ls default_segment Hne) as Q. rewrite N2 in Q. injection Q as Q. exact Q. }
     subst s1; subst s2. exists (extend_param ls t1), (extend_param ls t2).
     assert (I : extend_index ls t1 = extend_index ls t2) by lia.
-    assert (U : extend_param ls t1 <> extend_param ls t2). { intro U. apply Hneq. eapply extend_same_piece_injective; [exact I | exact U]. }
+    assert (U : extend_param ls t1 <> extend_param ls t2). { intro U. apply Hneq. eapply extend_same_piece_injective; [apply Hne | exact I | exact U]. }
     tauto.
 Qed.
 
@@ -949,7 +677,7 @@ Proof.
 	}
 
 	(* t1, t2 の表す位置について場合分け *)
-	destruct (extention_split_2 t1 t2 post H_notnil H12) as [
+	destruct (extention_split t1 t2 post H_notnil H12) as [
 			(* t1 が先頭を指す場合 *)
 				[t1' [t2' [H1' [H2' [H12' [Heq1 Heq2]]]]]]
 			| [[t1' [t2' [seg [H1' [H2' [Hin_post [Heq1 Heq2]]]]]]]
