@@ -14,6 +14,9 @@ From Stdlib Require Import Lia.
 (* --------------------------------------------------------------------------- *)
 (* extend に関する補題．extend / segment_border 本体の定義と公理は Segment.v 参照 *)
 
+(* Legacy proofs for the concrete border-based implementation.  They are kept
+   as documentation only; the abstract interface below replaces them. *)
+(*
 (* 引数のリスト ls を extend した時に， ls の n 番目のセグメントの上を指すのは
 		nth (segment_border ls) <= t <= (n+1)th (segment_border ls)
 		また segment_border ls の先頭要素より小さい t では先頭の延長線上を指し，
@@ -280,6 +283,80 @@ Proof.
 		apply H12.
 		eapply extend_last_not_cross; try eassumption. 
 		congruence.
+Qed.
+*)
+
+Lemma extention_split_2 : forall t1 t2 ls,
+  let p1 := extend ls t1 in let p2 := extend ls t2 in
+  ls <> [] -> t1 <> t2 ->
+  (exists u1 u2, u1 <= 0 /\ u2 <= 0 /\ u1 <> u2 /\ p1 = point (hd_segment ls) u1 /\ p2 = point (hd_segment ls) u2)
+  \/ (exists u1 u2 s, u1 <= 0 /\ 0 < u2 <= 1 /\ In s ls /\ p1 = point (hd_segment ls) u1 /\ p2 = point s u2)
+  \/ (exists u1 u2, u1 <= 0 /\ 1 < u2 /\ p1 = point (hd_segment ls) u1 /\ p2 = point (last_segment ls) u2)
+  \/ (exists u1 u2 s, 0 < u1 <= 1 /\ u2 <= 0 /\ In s ls /\ p1 = point s u1 /\ p2 = point (hd_segment ls) u2)
+  \/ (exists u1 u2 s, 0 < u1 <= 1 /\ 0 < u2 <= 1 /\ u1 <> u2 /\ In s ls /\ p1 = point s u1 /\ p2 = point s u2)
+  \/ (exists u1 u2 s1 s2, 0 < u1 <= 1 /\ 0 < u2 <= 1 /\ In_order s1 s2 ls /\ p1 = point s1 u1 /\ p2 = point s2 u2)
+  \/ (exists u1 u2 s1 s2, 0 < u1 <= 1 /\ 0 < u2 <= 1 /\ In_order s2 s1 ls /\ p1 = point s1 u1 /\ p2 = point s2 u2)
+  \/ (exists u1 u2 s, 0 < u1 <= 1 /\ 1 < u2 /\ In s ls /\ p1 = point s u1 /\ p2 = point (last_segment ls) u2)
+  \/ (exists u1 u2, 1 < u1 /\ u2 <= 0 /\ p1 = point (last_segment ls) u1 /\ p2 = point (hd_segment ls) u2)
+  \/ (exists u1 u2 s, 1 < u1 /\ 0 < u2 <= 1 /\ In s ls /\ p1 = point (last_segment ls) u1 /\ p2 = point s u2)
+  \/ (exists u1 u2, 1 < u1 /\ 1 < u2 /\ u1 <> u2 /\ p1 = point (last_segment ls) u1 /\ p2 = point (last_segment ls) u2).
+Proof.
+  intros t1 t2 ls p1 p2 Hne Hneq.
+  destruct (extend_repr ls t1 Hne) as [s1 [N1 E1]].
+  destruct (extend_repr ls t2 Hne) as [s2 [N2 E2]].
+  destruct (extend_param_region ls t1 Hne) as [M1 | [[H1 H1u] | [L1 L1u]]];
+  destruct (extend_param_region ls t2 Hne) as [M2 | [[H2 H2u] | [L2 L2u]]].
+  - destruct (Nat.eq_dec (extend_index ls t1) (extend_index ls t2)) as [I|I].
+    + do 4 right; left. subst. assert (s1 = s2) by congruence. subst s2.
+      exists (extend_param ls t1), (extend_param ls t2), s1.
+      assert (U : extend_param ls t1 <> extend_param ls t2). {
+        intro U. apply Hneq. eapply extend_same_piece_injective; eauto. }
+      assert (Hin : In s1 ls). { apply nth_error_In in N1; exact N1. }
+      tauto.
+    + destruct (Nat.lt_ge_cases (extend_index ls t1) (extend_index ls t2)) as [LT|GE].
+      * do 5 right; left. exists (extend_param ls t1), (extend_param ls t2), s1, s2.
+        assert (O : In_order s1 s2 ls) by (eapply In_order_nth; eauto).
+        tauto.
+      * do 6 right; left. exists (extend_param ls t1), (extend_param ls t2), s1, s2.
+        assert (O : In_order s2 s1 ls) by (eapply In_order_nth; eauto; lia).
+        tauto.
+  - do 3 right; left. assert (SH : s2 = hd_segment ls). { rewrite H2 in N2. unfold hd_segment. symmetry. eapply nth_error_hd; eauto. }
+    subst s2. exists (extend_param ls t1), (extend_param ls t2), s1.
+    assert (Hin : In s1 ls). { apply nth_error_In in N1; exact N1. } tauto.
+  - do 7 right; left. assert (SL : s2 = last_segment ls). {
+      unfold last_segment. assert (K : extend_index ls t2 = (length ls - 1)%nat) by lia.
+      rewrite K in N2. pose proof (@nth_error_last Segment ls default_segment Hne) as Q.
+      rewrite N2 in Q. injection Q as Q. exact Q. }
+    subst s2. exists (extend_param ls t1), (extend_param ls t2), s1.
+    assert (Hin : In s1 ls). { apply nth_error_In in N1; exact N1. } tauto.
+  - right; left. assert (SH : s1 = hd_segment ls). { rewrite H1 in N1. unfold hd_segment. symmetry. eapply nth_error_hd; eauto. }
+    subst s1. exists (extend_param ls t1), (extend_param ls t2), s2.
+    assert (Hin : In s2 ls). { apply nth_error_In in N2; exact N2. } tauto.
+  - left. assert (A : s1 = hd_segment ls). { rewrite H1 in N1. unfold hd_segment. symmetry. eapply nth_error_hd; eauto. }
+    assert (B : s2 = hd_segment ls). { rewrite H2 in N2. unfold hd_segment. symmetry. eapply nth_error_hd; eauto. }
+    subst s1; subst s2. exists (extend_param ls t1), (extend_param ls t2).
+    assert (U : extend_param ls t1 <> extend_param ls t2). { intro U. apply Hneq. eapply extend_same_piece_injective; [rewrite H1, H2; reflexivity | exact U]. }
+    tauto.
+  - do 2 right; left. assert (A : s1 = hd_segment ls). { rewrite H1 in N1. unfold hd_segment. symmetry. eapply nth_error_hd; eauto. }
+    assert (B : s2 = last_segment ls). { unfold last_segment. assert (K : extend_index ls t2 = (length ls - 1)%nat) by lia.
+      rewrite K in N2. pose proof (@nth_error_last Segment ls default_segment Hne) as Q. rewrite N2 in Q. injection Q as Q. exact Q. }
+    subst s1; subst s2. exists (extend_param ls t1), (extend_param ls t2). repeat split; assumption.
+  - do 9 right; left. assert (A : s1 = last_segment ls). { unfold last_segment. assert (K : extend_index ls t1 = (length ls - 1)%nat) by lia.
+      rewrite K in N1. pose proof (@nth_error_last Segment ls default_segment Hne) as Q. rewrite N1 in Q. injection Q as Q. exact Q. }
+    subst s1. exists (extend_param ls t1), (extend_param ls t2), s2.
+    assert (Hin : In s2 ls). { apply nth_error_In in N2; exact N2. } tauto.
+  - do 8 right; left. assert (A : s1 = last_segment ls). { unfold last_segment. assert (K : extend_index ls t1 = (length ls - 1)%nat) by lia.
+      rewrite K in N1. pose proof (@nth_error_last Segment ls default_segment Hne) as Q. rewrite N1 in Q. injection Q as Q. exact Q. }
+    assert (B : s2 = hd_segment ls). { rewrite H2 in N2. unfold hd_segment. symmetry. eapply nth_error_hd; eauto. }
+    subst s1; subst s2. exists (extend_param ls t1), (extend_param ls t2). repeat split; assumption.
+  - repeat right. assert (A : s1 = last_segment ls). { unfold last_segment. assert (K : extend_index ls t1 = (length ls - 1)%nat) by lia.
+      rewrite K in N1. pose proof (@nth_error_last Segment ls default_segment Hne) as Q. rewrite N1 in Q. injection Q as Q. exact Q. }
+    assert (B : s2 = last_segment ls). { unfold last_segment. assert (K : extend_index ls t2 = (length ls - 1)%nat) by lia.
+      rewrite K in N2. pose proof (@nth_error_last Segment ls default_segment Hne) as Q. rewrite N2 in Q. injection Q as Q. exact Q. }
+    subst s1; subst s2. exists (extend_param ls t1), (extend_param ls t2).
+    assert (I : extend_index ls t1 = extend_index ls t2) by lia.
+    assert (U : extend_param ls t1 <> extend_param ls t2). { intro U. apply Hneq. eapply extend_same_piece_injective; [exact I | exact U]. }
+    tauto.
 Qed.
 
 (* 2つ以上離れたセグメントが１点を共有していれば，それらのセグメントを含む曲線は閉 *)

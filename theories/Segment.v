@@ -143,19 +143,19 @@ Axiom border_increasing : forall ls i bi bi1,
     区間の端点（共有される境界）ちょうどでは，手前のセグメント側を採用する．
     最後のセグメントについては，区間の外側でもそのまま同じアフィン変換の式を使うことで，
     延長線（先頭は t' <= 0，末尾は t' >= 1）を表す． *)
-Fixpoint extend_pick (segs : list Segment) (bs : list R) (t : R) : Segment * R :=
+Fixpoint concrete_extend_pick (segs : list Segment) (bs : list R) (t : R) : Segment * R :=
   match segs, bs with
   | s :: nil, b0 :: b1 :: nil => 
     (* 最後のセグメント *)
     (s, (t - b0) / (b1 - b0))
   | s :: ((_ :: _) as segs'), b0 :: ((b1 :: _) as bs') =>
     (* t <= b1 ならセグメント s の担当（先頭セグメントに関しては t - b0 < 0 となりうる） *)
-      if Rle_dec t b1 then (s, (t - b0) / (b1 - b0)) else extend_pick segs' bs' t
+      if Rle_dec t b1 then (s, (t - b0) / (b1 - b0)) else concrete_extend_pick segs' bs' t
   | _, _ => (default_segment, 0)
   end.
 
-Definition extend (ls : list Segment) (t : R) : R * R :=
-  let (s, t') := extend_pick ls (segment_border ls) t in point s t'.
+Definition concrete_extend (ls : list Segment) (t : R) : R * R :=
+  let (s, t') := concrete_extend_pick ls (segment_border ls) t in point s t'.
 
 (* --------------------------------------------------------------------------- *)
 (* extend_pick の特徴づけ．extention_split 等の証明のための下請け補題群 *)
@@ -228,7 +228,7 @@ Proof.
 Qed.
 
 (* extend_pick の特徴づけ：どの区間を選んでいるか，およびその中でのアフィン変換の式 *)
-Lemma extend_pick_spec_aux : forall segs bs t,
+Lemma concrete_extend_pick_spec_aux : forall segs bs t,
   segs <> [] ->
   length bs = S (length segs) ->
   Increasing bs ->
@@ -237,7 +237,7 @@ Lemma extend_pick_spec_aux : forall segs bs t,
     nth_error bs n = Some bn /\
     nth_error bs (S n) = Some bn1 /\
     ((n = O /\ t <= bn) \/ (bn < t <= bn1) \/ (S n = length segs /\ bn1 < t)) /\
-    extend_pick segs bs t = (s, (t - bn) / (bn1 - bn)).
+    concrete_extend_pick segs bs t = (s, (t - bn) / (bn1 - bn)).
 Proof.
   induction segs as [| s0 segs' IH]; intros bs t Hne Hlen Hinc; [congruence |].
   destruct segs' as [| s1 segs''].
@@ -287,20 +287,42 @@ Proof.
       simpl. destruct (Rle_dec t b1); [contradiction |]. assumption.
 Qed.
 
-Lemma extend_pick_spec : forall ls t,
+Lemma concrete_extend_pick_spec : forall ls t,
   ls <> [] ->
   exists n s bn bn1,
     nth_error ls n = Some s /\
     nth_error (segment_border ls) n = Some bn /\
     nth_error (segment_border ls) (S n) = Some bn1 /\
     ((n = O /\ t <= bn) \/ (bn < t <= bn1) \/ (S n = length ls /\ bn1 < t)) /\
-    extend_pick ls (segment_border ls) t = (s, (t - bn) / (bn1 - bn)).
+    concrete_extend_pick ls (segment_border ls) t = (s, (t - bn) / (bn1 - bn)).
 Proof.
   intros ls t Hne.
-  apply extend_pick_spec_aux; auto.
+  apply concrete_extend_pick_spec_aux; auto.
   - apply border_length.
   - apply segment_border_increasing.
 Qed.
+
+(* `extend` is intentionally abstract.  The concrete construction above is
+   retained only as a candidate implementation of this interface. *)
+Parameter extend : list Segment -> R -> R * R.
+Parameter extend_index : list Segment -> R -> nat.
+Parameter extend_param : list Segment -> R -> R.
+
+Axiom extend_repr : forall ls t,
+  ls <> [] -> exists s,
+    nth_error ls (extend_index ls t) = Some s /\
+    extend ls t = point s (extend_param ls t).
+
+Axiom extend_param_region : forall ls t,
+  ls <> [] ->
+  (0 < extend_param ls t <= 1)
+  \/ (extend_index ls t = 0%nat /\ extend_param ls t <= 0)
+  \/ (S (extend_index ls t) = length ls /\ 1 < extend_param ls t).
+
+Axiom extend_same_piece_injective : forall ls t1 t2,
+  extend_index ls t1 = extend_index ls t2 ->
+  extend_param ls t1 = extend_param ls t2 ->
+  t1 = t2.
 
 Definition close_extended (c: R -> R * R):=
   exists (t1 t2: R), t1 <> t2 /\ c t1 = c t2.
