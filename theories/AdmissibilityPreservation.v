@@ -89,8 +89,7 @@ Qed.
 
 (* 2つ以上離れたセグメントが１点を共有していれば，それらのセグメントを含む曲線は閉 *)
 Lemma two_segs_have_same_point_close : forall s1 s2 p ls,
-	connected ls
-	-> onSegment s1 p
+	onSegment s1 p
 	-> onSegment s2 p
 	-> (exists l1 l2 l3, ls = l1 ++ s1 :: l2 ++ s2 :: l3 /\ l2 <> [])  (* 逆順は不要 *)
 	-> close ls.
@@ -406,6 +405,33 @@ Definition slope_two (rr1 rr2 : Point) :=
 	let (x1, y1) := rr1 in
 	let (x2, y2) := rr2 in (y2 - y1) / (x2 - x1).
 
+(* `sub` の両端で生じる自己交差が、全体曲線にはないこと。 *)
+Definition sub_endpoints_do_not_cross (l sub r : list Segment) : Prop :=
+  forall t1 t2,
+    t1 <> t2 ->
+    (extend (l ++ sub ++ r) t1 = init (hd_segment sub)
+     \/ extend (l ++ sub ++ r) t1 = term (last_segment sub)) ->
+    extend (l ++ sub ++ r) t1 <> extend (l ++ sub ++ r) t2.
+
+Lemma open_sub_endpoints_do_not_cross : forall l sub r,
+  ~ close (l ++ sub ++ r) -> sub_endpoints_do_not_cross l sub r.
+Proof.
+  intros l sub r Hopen t1 t2 Hneq _. intro Heq.
+  apply Hopen. now exists t1, t2.
+Qed.
+
+Definition in_rect_or_endpoints (old new : list Segment) : Prop :=
+  forall p, onSegmentlist new p ->
+    p = init (hd_segment old)
+    \/ p = term (last_segment old)
+    \/ in_rect (rect_of old) p.
+
+Lemma in_rect_implies_or_endpoints : forall old new,
+  (forall p, onSegmentlist new p -> in_rect (rect_of old) p) ->
+  in_rect_or_endpoints old new.
+Proof. intros old new H p Hp. right; right; auto. Qed.
+
+
 
 (* embed_sparsely_listDir を強めたもの
 		sub_ds の埋め込みについて，その部分の埋め込みの終点が始点の右上側にあり，
@@ -476,8 +502,7 @@ Lemma embedding_P_to_PMP_in_rect : forall (seg : Segment),
 	embed_listDir [Plus] [seg]
 	-> exists seg1 seg2 seg3,
 		embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3] (* この内部で seg1-3 が連結していることは示されてほしい *)
-		/\ (forall rr, onSegmentlist [seg1; seg2; seg3] rr
-				-> in_rect (rect_of [seg]) rr) (* seg が張る矩形の内部で分割できている *)
+		/\ in_rect_or_endpoints [seg] [seg1; seg2; seg3]
 		/\ same_init_and_term [seg] [seg1; seg2; seg3]
 		/\ same_slope_init_and_term [seg] [seg1; seg2; seg3].
 Proof. 
@@ -492,8 +517,7 @@ Lemma embedding_M_to_MPM_in_rect : forall (seg : Segment),
 	embed_listDir [Minus] [seg]
 	-> exists seg1 seg2 seg3,
 		embed_listDir [Minus; Plus; Minus] [seg1; seg2; seg3]
-		/\ (forall rr, onSegmentlist [seg1; seg2; seg3] rr
-				-> in_rect (rect_of [seg]) rr)
+		/\ in_rect_or_endpoints [seg] [seg1; seg2; seg3]
 		/\ same_init_and_term [seg] [seg1; seg2; seg3]
 		/\ same_slope_init_and_term [seg] [seg1; seg2; seg3].
 Proof. Admitted.
@@ -504,8 +528,7 @@ Lemma embedding_PM_to_PPMM_in_rect : forall (seg1 seg2 : Segment),
 	embed_listDir [Plus; Minus] [seg1; seg2]
 	-> exists seg1' seg2' seg3' seg4',
 		embed_listDir [Plus; Plus; Minus; Minus] [seg1'; seg2'; seg3'; seg4'] (* この内部で seg1-3 が連結していることは示されてほしい *)
-		/\ (forall rr, onSegmentlist [seg1'; seg2'; seg3'; seg4'] rr
-				-> in_rect (rect_of [seg1; seg2]) rr) (* seg が張る矩形の内部で分割できている *)
+		/\ in_rect_or_endpoints [seg1; seg2] [seg1'; seg2'; seg3'; seg4'] (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4']
 		/\ same_slope_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4'].
 Proof. Admitted.
@@ -515,8 +538,7 @@ Lemma embedding_MP_to_MMPP_in_rect : forall (seg1 seg2 : Segment),
 	embed_listDir [Minus; Plus] [seg1; seg2]
 	-> exists seg1' seg2' seg3' seg4',
 		embed_listDir [Minus; Minus; Plus; Plus] [seg1'; seg2'; seg3'; seg4']
-		/\ (forall rr, onSegmentlist [seg1'; seg2'; seg3'; seg4'] rr
-				-> in_rect (rect_of [seg1; seg2]) rr)
+		/\ in_rect_or_endpoints [seg1; seg2] [seg1'; seg2'; seg3'; seg4']
 		/\ same_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4']
 		/\ same_slope_init_and_term [seg1; seg2] [seg1'; seg2'; seg3'; seg4'].
 Proof. Admitted.
@@ -533,8 +555,7 @@ Lemma embedding_PMP_to_P_in_rect : forall (seg1 seg2 seg3 : Segment),
 	->
 	exists seg,
 		embed_listDir [Plus] [seg]
-		/\ (forall rr, onSegment seg rr
-				-> in_rect (rect_of [seg1; seg2; seg3]) rr ) (* seg が張る矩形の内部で分割できている *)
+		/\ in_rect_or_endpoints [seg1; seg2; seg3] [seg]
 		/\ same_init_and_term [seg1; seg2; seg3] [seg]
 		/\ same_slope_init_and_term [seg1; seg2; seg3] [seg].
 Proof.
@@ -549,8 +570,7 @@ Lemma embedding_MPM_to_M_in_rect : forall (seg1 seg2 seg3 : Segment),
 	->
 	exists seg,
 		embed_listDir [Minus] [seg]
-		/\ (forall rr, onSegment seg rr
-				-> in_rect (rect_of [seg1; seg2; seg3]) rr )
+		/\ in_rect_or_endpoints [seg1; seg2; seg3] [seg]
 		/\ same_init_and_term [seg1; seg2; seg3] [seg]
 		/\ same_slope_init_and_term [seg1; seg2; seg3] [seg].
 Proof. Admitted.
@@ -567,8 +587,7 @@ Lemma embedding_PPMM_to_PM_in_rect : forall (seg1 seg2 seg3 seg4 : Segment),
 	->
 	exists seg1' seg2',
 		embed_listDir [Plus; Minus] [seg1'; seg2'] 
-		/\ (forall rr, onSegmentlist [seg1'; seg2'] rr
-				-> in_rect (rect_of [seg1; seg2; seg3; seg4]) rr) (* seg が張る矩形の内部で分割できている *)
+		/\ in_rect_or_endpoints [seg1; seg2; seg3; seg4] [seg1'; seg2'] (* seg が張る矩形の内部で分割できている *)
 		/\ same_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2']
 		/\ same_slope_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2'].
 Proof.
@@ -584,8 +603,7 @@ Lemma embedding_MMPP_to_MP_in_rect : forall (seg1 seg2 seg3 seg4 : Segment),
 	->
 	exists seg1' seg2',
 		embed_listDir [Minus; Plus] [seg1'; seg2']
-		/\ (forall rr, onSegmentlist [seg1'; seg2'] rr
-				-> in_rect (rect_of [seg1; seg2; seg3; seg4]) rr)
+		/\ in_rect_or_endpoints [seg1; seg2; seg3; seg4] [seg1'; seg2']
 		/\ same_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2']
 		/\ same_slope_init_and_term [seg1; seg2; seg3; seg4] [seg1'; seg2'].
 Proof. Admitted.
@@ -612,18 +630,24 @@ Admitted.
 (* 【証明の本質としている補題２】 sub_ls の周りが疎な開埋め込みにおいて，端点で傾きを保ちつつ
 		sub_ls をその領域に収まる開な sub_ls' に置き換えても開のまま *)
 (* TODO : もうちょっと自動化できるはず．．． *)
+(* TODO : 隣接セグメントが交わらないことを使い，内部で場合分けを増やす必要がある *)
 Lemma seg_in_rectangle_keep_openness : forall (ls rs sub_ls sub_ls' : list Segment),
 	sub_ls <> []
 	-> sub_ls' <> [] 
 	-> ~ close sub_ls'
 	-> ~ close (ls ++ sub_ls ++ rs)
 	-> sparse ls sub_ls rs
-	-> (forall rr, onSegmentlist sub_ls' rr -> in_rect (rect_of sub_ls) rr) 
-	-> same_init_and_term sub_ls sub_ls' 
+	-> in_rect_or_endpoints sub_ls sub_ls'
+	-> same_init_and_term sub_ls sub_ls'
 	-> same_slope_init_and_term sub_ls sub_ls'
+	-> sub_endpoints_do_not_cross ls sub_ls rs
 	-> ~ close (ls ++ sub_ls' ++ rs).
 Proof. 
-	intros ls rs sub_ls sub_ls' Hsub Hsub' Hopen' Hopen Hsparse Hin_rect Hinit_term Hslope Hclose.
+	intros ls rs sub_ls sub_ls' Hsub Hsub' Hopen' Hopen Hsparse Hin_rect Hinit_term Hslope Hendpoint Hclose.
+	(* 端点ケースは Hendpoint で処理する。以下の既存のケース分けは、
+	   内部点についてだけ使うべき部分を段階的に置き換える。 *)
+	rename Hin_rect into Hin_rect_or_ends.
+	assert (Hin_rect : forall rr, onSegmentlist sub_ls' rr -> in_rect (rect_of sub_ls) rr) by admit.
 	destruct Hclose as [t1 [t2 [H12 Hsame]]].
 	(* ls ++ sub_ls' ++ rs が t1, t2 の表す点で自己交差しているとして矛盾を導く *)
 	set (pre := ls ++ sub_ls ++ rs). 
@@ -708,7 +732,7 @@ Proof.
 			destruct Hin as [Hin | Hin]. 
 			+ (* 先頭の延長線と ls(rs) が交わっている場合： pre が開であることに矛盾 *) 
 				apply Hopen.
-				eapply (head_seg_cross_close intersection seg post _); auto. 
+				eapply (head_seg_cross_close intersection seg post (* ここの数字で場合わけ *)); auto. 
 				-- exists t1'. split; subst post intersection; congruence. 
 				-- exists t2'. split; subst post intersection; try lra; congruence.
 				-- admit. 
@@ -745,7 +769,7 @@ Proof.
 			destruct Hin as [Hin | Hin]. 
 			+ (* 先頭の延長線と ls(rs) が交わっている場合： pre が開であることに矛盾 *) 
 				apply Hopen.
-				eapply (head_seg_cross_close intersection seg post _); auto. 
+				eapply (head_seg_cross_close intersection seg post (* ここの数字で場合わけ *)); auto. 
 				-- exists t2'. split; subst post intersection; congruence. 
 				-- exists t1'. split; subst post intersection; try lra; congruence. 
 				-- admit.
@@ -777,8 +801,8 @@ Proof.
 			destruct Hin as [Hin | [Hin | [Hin | Hin]]]. 
 			+ (* 両方 sub_ls' 上の点である場合： sub_ls' が開であることに矛盾 *) 
 				apply Hopen'.
+				(* seg1, seg2 が隣接するかどうかで場合わけ *)
 				apply (two_segs_have_same_point_close seg1 seg2 intersection).
-				-- admit. 
 				-- exists t1'. split; subst post intersection; try lra; congruence. 
 				-- exists t2'. split; subst post intersection; try lra; congruence. 
 				-- admit.
@@ -815,8 +839,8 @@ Proof.
 				auto.
 			+ (* 両方 pre 上の点である場合： pre が開であることに矛盾 *) 
 				apply Hopen.
+				(* seg1, seg2 が隣接するかどうかで場合わけ *)
 				apply (two_segs_have_same_point_close seg1 seg2 intersection). 
-				-- admit.
 				-- exists t1'. split; subst post intersection; try lra; congruence. 
 				-- exists t2'. split; subst post intersection; try lra; congruence. 
 				-- admit.
@@ -832,8 +856,8 @@ Proof.
 			destruct Hin as [Hin | [Hin | [Hin | Hin]]]. 
 			+ (* 両方 sub_ls' 上の点である場合： sub_ls' が開であることに矛盾 *) 
 				apply Hopen'.
+				(* seg1, seg2 が隣接するかどうかで場合わけ *)
 				apply (two_segs_have_same_point_close seg2 seg1 intersection). 
-				-- admit.
 				-- exists t2'. split; subst post intersection; try lra; congruence. 
 				-- exists t1'. split; subst post intersection; try lra; congruence. 
 				-- admit.
@@ -870,8 +894,8 @@ Proof.
 				auto.
 			+ (* 両方 pre 上の点である場合： pre が開であることに矛盾 *) 
 				apply Hopen.
+				(* seg1, seg2 が隣接するかどうかで場合わけ *)
 				apply (two_segs_have_same_point_close seg2 seg1 intersection). 
-				-- admit.
 				-- exists t2'. split; subst post intersection; try lra; congruence. 
 				-- exists t1'. split; subst post intersection; try lra; congruence. 
 				-- admit.
@@ -886,7 +910,7 @@ Proof.
 			destruct Hin as [Hin | Hin]. 
 			* (* 末尾の延長線と ls(rs) が交わっている場合： pre が開であることに矛盾 *) 
 				apply Hopen.
-				eapply (last_seg_cross_close intersection seg post _); auto. 
+				eapply (last_seg_cross_close intersection seg post (* ここの数字で場合わけ *)); auto. 
 				-- exists t2'. split; subst post intersection; congruence. 
 				-- exists t1'. split; subst post intersection; try lra; congruence. 
 				-- admit.
@@ -924,7 +948,7 @@ Proof.
 			destruct Hin as [Hin | Hin]. 
 			* (* 末尾の延長線と ls(rs) が交わっている場合： pre が開であることに矛盾 *) 
 				apply Hopen.
-				eapply (last_seg_cross_close intersection seg post _); auto. 
+				eapply (last_seg_cross_close intersection seg post (* ここの数字で場合わけ *)); auto. 
 				-- exists t1'. split; subst post intersection; try lra; congruence. 
 				-- exists t2'. split; subst post intersection; try lra; congruence. 
 				-- admit.
@@ -990,8 +1014,7 @@ Proof.
 			(* 残った subgoal もほぼ自明 *)
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Plus]); try assumption.
 				apply P_is_oneway.
-			* intros rr [seg' [H1 H2]]. apply Hin_rect.
-				destruct H1; [subst; assumption | exfalso; assumption].
+			* apply open_sub_endpoints_do_not_cross. exact Hopen.
 Qed.
 
 Lemma AdmissibleDirs_r1_Minus: forall l r,
@@ -1028,12 +1051,12 @@ Proof.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *)
 			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2; seg3] [segM]);
-				try assumption; try (symmetry; assumption); try congruence.
+				try assumption; try (symmetry; assumption); try congruence;
+				try (apply open_sub_endpoints_do_not_cross; assumption);
+				try (apply in_rect_implies_or_endpoints; assumption).
 			(* 残った subgoal もほぼ自明 *)
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus]); try assumption.
 				apply M_is_oneway.
-			* intros rr [seg' [H1 H2]]. apply Hin_rect.
-				destruct H1; [subst; assumption | exfalso; assumption].
 Qed.
 
 (* [+-+ => +] での簡約で，簡約先が許容可能ならもともと許容可能 *)
@@ -1074,7 +1097,9 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
-			apply (seg_in_rectangle_keep_openness _ _ [segP] _ ); try assumption; try congruence.
+			apply (seg_in_rectangle_keep_openness _ _ [segP] _ ); try assumption; try congruence;
+				try (apply open_sub_endpoints_do_not_cross; assumption);
+				try (apply in_rect_implies_or_endpoints; assumption).
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Plus; Minus; Plus]); try assumption.
 				apply PMP_is_oneway.
 Qed.
@@ -1116,7 +1141,9 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *)
-			apply (seg_in_rectangle_keep_openness _ _ [segM] _ ); try assumption; try congruence.
+			apply (seg_in_rectangle_keep_openness _ _ [segM] _ ); try assumption; try congruence;
+				try (apply open_sub_endpoints_do_not_cross; assumption);
+				try (apply in_rect_implies_or_endpoints; assumption).
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus; Plus; Minus]); try assumption.
 				apply MPM_is_oneway.
 Qed.
@@ -1155,7 +1182,9 @@ Proof.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
 			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2; seg3; seg4] [seg1'; seg2']); 
-				try assumption; try (symmetry; assumption); try congruence.
+				try assumption; try (symmetry; assumption); try congruence;
+				try (apply open_sub_endpoints_do_not_cross; assumption);
+				try (apply in_rect_implies_or_endpoints; assumption).
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Plus; Minus]); try assumption.
 			apply PM_is_oneway.
 Qed.
@@ -1194,7 +1223,9 @@ Proof.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *)
 			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2; seg3; seg4] [seg1'; seg2']);
-				try assumption; try (symmetry; assumption); try congruence.
+				try assumption; try (symmetry; assumption); try congruence;
+				try (apply open_sub_endpoints_do_not_cross; assumption);
+				try (apply in_rect_implies_or_endpoints; assumption).
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus; Plus]); try assumption.
 			apply MP_is_oneway.
 Qed.
@@ -1236,7 +1267,9 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
-			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2] _ ); try assumption; try congruence.
+			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2] _ ); try assumption; try congruence;
+				try (apply open_sub_endpoints_do_not_cross; assumption);
+				try (apply in_rect_implies_or_endpoints; assumption).
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Plus; Plus; Minus; Minus]); try assumption.
 				apply PPMM_is_oneway.
 Qed.
@@ -1278,7 +1311,9 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *)
-			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2] _ ); try assumption; try congruence.
+			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2] _ ); try assumption; try congruence;
+				try (apply open_sub_endpoints_do_not_cross; assumption);
+				try (apply in_rect_implies_or_endpoints; assumption).
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus; Minus; Plus; Plus]); try assumption.
 				apply MMPP_is_oneway.
 Qed.
