@@ -200,18 +200,60 @@ Lemma embed_split :
       /\ embed_listDir ds1 l /\ embed_listDir sub_ds sub /\ embed_listDir ds2 r.
 Admitted.
 
-(* 向き列の長さとセグメント列の長さは一致する（scurve レベル）*)
+
+Lemma scurve_listDir_length_consis: forall ds sc,
+  scurve_to_direction sc = ds -> length ds = length (proj1_sig sc).
+Proof.
+	intros ds. unfold scurve_to_direction. 
+	induction ds as [ | d ds' IH];  intros sc H.
+	- (* ds = [] *) 
+		destruct (proj1_sig sc); [auto | discriminate].
+	- (* ds = d::ds' *) 
+		destruct sc as [sc' Hsc].
+		destruct Hsc as [ | p ps Hps H0]; try discriminate.
+		simpl; f_equal.
+		apply (IH (exist _ _ Hps)).
+		simpl in *.
+		injection H; auto.
+Qed.
+
+(* 向き列の長さとセグメント列の長さは一致する *)
+Lemma embedding_listDir_length_consis: forall (ds: list Direction) (ls: list Segment),
+  embed_listDir ds ls -> length ds = length ls.
+Proof.
+	intros ds ls [sc [Hdir Hembed]].
+	rewrite (scurve_listDir_length_consis _ _ Hdir).
+	apply scurve_length_consis.
+	auto.
+Qed.
+
 Lemma embed_nonnil :
   forall ds ls, embed_listDir ds ls -> ds <> [] -> ls <> [].
-Admitted.
+Proof.
+  intros ds ls Hembed Hds Hls.
+  apply embedding_listDir_length_consis in Hembed.
+  apply Hds.
+  subst.
+  apply length_zero_iff_nil.
+  auto. 
+Qed.
 
 (* 単方向な向き列は空でない（is_one_way_scurve の定義から）*)
 Lemma one_way_listDir_nonnil :
   forall ds, is_one_way_listDir ds -> ds <> [].
-Admitted.
+Proof.
+  intros ds H contra.
+  destruct H as [sc [Hdir Honeway]].
+  destruct Honeway as [Hnonnil _].
+  apply Hnonnil.
+  subst.
+  apply scurve_listDir_length_consis in contra.
+  apply length_zero_iff_nil.
+  auto.
+Qed.
 
 
-(*  「向き列が同じで、長さが同じで、連結なら、同じ scurve の埋め込み」 *)
+(*  「向き列が同じで、長さが同じで、連結なら、同じ ds の埋め込み」 *)
 Lemma embed_scurve_transfer : forall ds ls ls',
   embed_listDir ds ls ->
   length ls' = length ls ->
