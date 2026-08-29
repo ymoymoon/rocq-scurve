@@ -156,6 +156,17 @@ Proof.
     + now apply IH.
 Qed.
 
+Lemma app_split_eq : forall (A : Type) (l1 l2 m1 m2 : list A),
+  l1 ++ l2 = m1 ++ m2 -> length l1 = length m1 -> l1 = m1 /\ l2 = m2.
+Proof.
+  intros A. induction l1 as [|a l1 IH]; intros l2 m1 m2 H HL.
+  - destruct m1 as [|b m1]; simpl in *; [split; [reflexivity | exact H] | discriminate].
+  - destruct m1 as [|b m1]; simpl in *; [discriminate|].
+    injection H as Hab H. injection HL as HL.
+    destruct (IH _ _ _ H HL) as [E1 E2].
+    split; [f_equal; assumption | exact E2].
+Qed.
+
 
 (* onSegmentlist に関する補題 *)
 Lemma onSegmentlist_init_hd :
@@ -263,14 +274,163 @@ Corollary open_no_crossing : forall ls, ls <> [] -> ~ close ls -> ~ crossing ls.
 Proof. intros ls Hne H Hc. apply H. apply crossing_close; assumption. Qed.
 
 
-(* ---- 分解と存在 --------------------- *)
+(* embed_scurve, listDir に関わる補題 *)
+Definition nil_scurve : scurve := exist _ nil IsScurveNil.
+
+Lemma proj1_nil_scurve : proj1_sig nil_scurve = nil.
+Proof. reflexivity. Qed.
+
+(* connect の定義（exist _ (ps :: proj1_sig lp) _）から定義的に成立 *)
+Lemma proj1_connect : forall ps lp A,
+  proj1_sig (connect ps lp A) = ps :: proj1_sig lp.
+Proof. intros. reflexivity. Qed.
+
+(* dc_pseg_hd は「相手リストの先頭だけ」を見る（DcNil / DcCons の形から）*)
+Lemma dc_pseg_hd_hd_error : forall ps l1 l2,
+  hd_error l1 = hd_error l2 -> dc_pseg_hd ps l1 -> dc_pseg_hd ps l2.
+Admitted.
+
+(* scurve_to_direction = map f ∘ proj1_sig であることの帰結2本 *)
+Lemma std_length : forall sc,
+  length (scurve_to_direction sc) = length (proj1_sig sc).
+Admitted.
+
+Lemma std_app_of_proj : forall sc sc1 sc2,
+  proj1_sig sc = proj1_sig sc1 ++ proj1_sig sc2 ->
+  scurve_to_direction sc = scurve_to_direction sc1 ++ scurve_to_direction sc2.
+Admitted.
+
+Lemma embed_scurve_length : forall sc ls,
+  embed_scurve sc ls -> length (proj1_sig sc) = length ls.
+Proof.
+  intros sc ls H. induction H as
+    [ | ps s He | ps lp A s1 s2 ls' He Hsub IH Hcon ].
+  - reflexivity.
+  - rewrite proj1_connect. fold nil_scurve; rewrite proj1_nil_scurve. reflexivity.
+  - rewrite proj1_connect. simpl. f_equal. exact IH.
+Qed.
+
+Lemma embed_scurve_split : forall n sc ls,
+  embed_scurve sc ls ->
+  exists sc1 sc2 l1 l2,
+       ls = l1 ++ l2
+    /\ proj1_sig sc = proj1_sig sc1 ++ proj1_sig sc2
+    /\ length (proj1_sig sc1) = Nat.min n (length (proj1_sig sc))
+    /\ embed_scurve sc1 l1
+    /\ embed_scurve sc2 l2.
+Proof.
+  induction n as [|n' IH]; intros sc ls H.
+
+  (* ---- n = 0 : 何も取らない ---- *)
+  - exists nil_scurve, sc, nil, ls.
+    split; [reflexivity |].
+    split; [reflexivity |].
+    split; [reflexivity |].
+    split; [exact EmbedScurveNil | exact H].
+
+  (* ---- n = S n' ---- *)
+  - destruct H as
+      [ | ps s He | ps lp A s1 s2 ls' He Hsub Hcon ].
+
+    (* 空曲線 *)
+    + exists nil_scurve, nil_scurve, nil, nil.
+      split; [reflexivity |].
+      split; [reflexivity |].
+      split; simpl; auto.
+      split; exact EmbedScurveNil.
+
+    (* 1本だけ：全部取る *)
+    + exists (connect ps nil_scurve (DcNil ps)), nil_scurve, (s :: nil), nil.
+      split; [reflexivity |].
+      split; [rewrite proj1_connect, proj1_nil_scurve; reflexivity |].
+      split.
+      { rewrite proj1_connect, proj1_nil_scurve. simpl.
+        rewrite Nat.min_r; [reflexivity | lia]. }
+      split; [exact (EmbedScurveSigle ps s He) | exact EmbedScurveNil].
+
+    (* 2本以上：先頭 ps を1つ取り、残りを IH で分割 *)
+    + destruct (IH lp (s2 :: ls') Hsub)
+        as (sc1' & sc2' & l1' & l2' & Els & Eps & Elen & Hc1 & Hc2).
+      destruct (proj1_sig sc1') as [|q rest] eqn:Eq.
+
+      (* (a) IH 側の前半が空 ⇒ 取るのは s1 だけ *)
+      * assert (Hl1 : (length l1' = 0)%nat).
+        { rewrite <- (embed_scurve_length _ _ Hc1), Eq. reflexivity. }
+        destruct l1' as [|w tl]; simpl in Hl1; [| discriminate].
+        simpl in Els. subst l2'.
+        exists (connect ps nil_scurve (DcNil ps)), lp, (s1 :: nil), (s2 :: ls').
+        split; [reflexivity |].
+        split; [rewrite !proj1_connect, proj1_nil_scurve; reflexivity |].
+        split.
+        { rewrite !proj1_connect, proj1_nil_scurve. simpl.
+          rewrite <- Elen. reflexivity. }
+        split; [exact (EmbedScurveSigle ps s1 He) | exact Hsub].
+
+      (* (b) IH 側の前半が非空 ⇒ ps を前に付け足す *)
+      * assert (Hl1 : length l1' = S (length rest)).
+        { rewrite <- (embed_scurve_length _ _ Hc1), Eq. reflexivity. }
+        destruct l1' as [|w tl]; simpl in Hl1; [discriminate |].
+        injection Els as Ew Els'. subst w.
+
+        assert (Hhd : hd_error (proj1_sig lp) = hd_error (proj1_sig sc1')).
+        { rewrite Eps, Eq. reflexivity. }
+        assert (A' : dc_pseg_hd ps (proj1_sig sc1'))
+          by (eapply dc_pseg_hd_hd_error; [exact Hhd | exact A]).
+
+        exists (connect ps sc1' A'), sc2', (s1 :: s2 :: tl), l2'.
+        split; [simpl; f_equal; f_equal; exact Els' |].
+        split; [rewrite !proj1_connect, Eps, app_comm_cons; congruence|].
+        split.
+        { rewrite !proj1_connect. simpl. rewrite Eq, Elen. reflexivity. }
+        split.
+        { exact (EmbedScurveCons ps sc1' A' s1 s2 tl He Hc1 Hcon). }
+        { exact Hc2. }
+Qed.
+
+(* ---- embed の分解 --------------------- *)
+Lemma embed_split2 : forall ds1 ds2 ls,
+  embed_listDir (ds1 ++ ds2) ls ->
+  exists l1 l2, ls = l1 ++ l2 /\ embed_listDir ds1 l1 /\ embed_listDir ds2 l2.
+Proof.
+  intros ds1 ds2 ls [sc [Hdir Hemb]].
+  destruct (embed_scurve_split (length ds1) sc ls Hemb)
+    as (sc1 & sc2 & l1 & l2 & Els & Eps & Elen & H1 & H2).
+
+  assert (Hd : scurve_to_direction sc
+               = scurve_to_direction sc1 ++ scurve_to_direction sc2)
+    by (apply std_app_of_proj; exact Eps).
+
+  assert (Htot : (length (proj1_sig sc) = length ds1 + length ds2)%nat).
+  { rewrite <- std_length, Hdir, length_app. reflexivity. }
+
+  assert (Elen1 : length (scurve_to_direction sc1) = length ds1).
+  { rewrite std_length, Elen, Htot. apply Nat.min_l, Nat.le_add_r. }
+
+  rewrite Hdir in Hd.
+  destruct (app_split_eq _ ds1 ds2 _ _ Hd (eq_sym Elen1)) as [E1 E2].
+
+  exists l1, l2.
+  split; [exact Els |].
+  split.
+  - exists sc1. split; [symmetry; exact E1 | exact H1].
+  - exists sc2. split; [symmetry; exact E2 | exact H2].
+Qed.
+
 Lemma embed_split :
   forall ds1 sub_ds ds2 ls,
     embed_listDir (ds1 ++ sub_ds ++ ds2) ls ->
     exists l sub r,
       ls = l ++ sub ++ r
       /\ embed_listDir ds1 l /\ embed_listDir sub_ds sub /\ embed_listDir ds2 r.
-Admitted.
+Proof.
+  intros ds1 sub_ds ds2 ls H.
+  destruct (embed_split2 ds1 (sub_ds ++ ds2) ls H) as (l & m & Elm & Hl & Hm).
+  destruct (embed_split2 sub_ds ds2 m Hm) as (sub & r & Em & Hsub & Hr).
+  exists l, sub, r.
+  split; [rewrite Elm, Em; reflexivity |].
+  split; [exact Hl |].
+  split; [exact Hsub | exact Hr].
+Qed.
 
 
 Lemma scurve_listDir_length_consis: forall ds sc,
