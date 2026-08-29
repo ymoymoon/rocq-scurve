@@ -127,8 +127,25 @@ Admitted.
 (* `extend` is intentionally abstract.  The concrete construction above is
    retained only as a candidate implementation of this interface. *)
 Parameter extend : list Segment -> R -> R * R.
+(* extend した後のパラメータ t がどのセグメントを指すか．2つのセグメントの共有端点なら，先頭側を返すものとする *)
 Parameter extend_index : list Segment -> R -> nat.
+(* extend した後のパラメータ t に対応するセグメントの中での局所パラメータ *)
 Parameter extend_param : list Segment -> R -> R.
+
+Definition Pos := (nat * R)%type.
+
+Definition pos_of (ls : list Segment) (t : R) : Pos :=
+  (extend_index ls t, extend_param ls t).
+
+(* 先頭だけ下限なし（先頭の延長線）、末尾だけ上限なし（末尾の延長線）*)
+Definition in_range (ls : list Segment) (q : Pos) : Prop :=
+  (fst q < length ls)%nat
+  /\ ((fst q = 0)%nat \/ 0 < snd q)
+  /\ (S (fst q) = length ls \/ snd q <= 1).
+
+(* extend は in_range のすべての位置を実現する *)
+Axiom extend_onto : forall ls q,
+  ls <> [] -> in_range ls q -> exists t, pos_of ls t = q.
 
 Axiom extend_repr : forall ls t,
   ls <> [] -> exists s,

@@ -142,6 +142,20 @@ Proof.
   injection H as H. exists s0. split; [reflexivity | now symmetry].
 Qed.
 
+Lemma nth_error_lt : forall (ls : list Segment) i s,
+  nth_error ls i = Some s -> (i < length ls)%nat.
+Proof. intros ls i s H. apply nth_error_Some. rewrite H. discriminate. Qed.
+
+Lemma nth_error_nth' : forall (ls : list Segment) i s d,
+  nth_error ls i = Some s -> nth i ls d = s.
+Proof.
+  induction ls as [|a tl IH]; intros i s d H.
+  - destruct i; simpl in H; discriminate.
+  - destruct i as [|i]; simpl in H; simpl.
+    + injection H as H; now subst.
+    + now apply IH.
+Qed.
+
 
 (* onSegmentlist に関する補題 *)
 Lemma onSegmentlist_init_hd :
@@ -160,16 +174,9 @@ Proof.
 Qed.
 
 (* ---- 位置 -------------------------------------------------------- *)
-Definition Pos := (nat * R)%type.
 
 Definition at_pos (ls : list Segment) (q : Pos) : Point :=
   point (nth (fst q) ls default_segment) (snd q).
-
-(* 先頭だけ下限なし（先頭の延長線）、末尾だけ上限なし（末尾の延長線）*)
-Definition in_range (ls : list Segment) (q : Pos) : Prop :=
-  (fst q < length ls)%nat
-  /\ ((fst q = 0)%nat \/ 0 <= snd q)
-  /\ (S (fst q) = length ls \/ snd q <= 1).
 
 Definition onExtAt (ls : list Segment) (i : nat) (p : Point) : Prop :=
   exists t, in_range ls (i, t) /\ at_pos ls (i, t) = p.
@@ -182,13 +189,78 @@ Definition junction (ls : list Segment) (q1 q2 : Pos) : Prop :=
 Definition crossing (ls : list Segment) : Prop :=
   exists q1 q2, in_range ls q1 /\ in_range ls q2
              /\ at_pos ls q1 = at_pos ls q2
-             /\ q1 <> q2 /\ ~ junction ls q1 q2.
+             /\ q1 <> q2.
+
+(* in_range な2位置は決して junction をなさない *)
+Lemma no_junction : forall ls q1 q2,
+  in_range ls q1 -> in_range ls q2 -> ~ junction ls q1 q2.
+Proof.
+  intros ls q1 q2 [_ [H1 _]] [_ [H2 _]] [(Hs & Ha & Hb) | (Hs & Ha & Hb)].
+  - destruct H2 as [H2|H2]; [rewrite H2 in Hs; discriminate | lra].
+  - destruct H1 as [H1|H1]; [rewrite H1 in Hs; discriminate | lra].
+Qed.
+
+(* extend ls t は位置 pos_of ls t の点である *)
+Lemma extend_at_pos : forall ls t,
+  ls <> [] -> extend ls t = at_pos ls (pos_of ls t).
+Proof.
+  intros ls t Hne.
+  destruct (extend_repr ls t Hne) as [s [Hnth Heq]].
+  unfold at_pos, pos_of; simpl.
+  rewrite (nth_error_nth' ls (extend_index ls t) s default_segment Hnth).
+  exact Heq.
+Qed.
+
+(* その位置は in_range に入る（3つの領域すべてで確認）*)
+Lemma pos_of_in_range : forall ls t, ls <> [] -> in_range ls (pos_of ls t).
+Proof.
+  intros ls t Hne.
+  destruct (extend_repr ls t Hne) as [s [Hnth _]].
+  unfold in_range, pos_of; simpl.
+  split; [ eapply nth_error_lt; exact Hnth |].
+  destruct (extend_param_region ls t Hne) as [Hmid | [[Hi Hle] | [Hi Hgt]]].
+  - (* 0 < param <= 1 : 本体 *)      split; [right; lra | right; lra].
+  - (* index = 0, param <= 0 : 先頭延長 *) split; [left; exact Hi | right; lra].
+  - (* 末尾, 1 < param : 末尾延長 *)  split; [right; lra | left; exact Hi].
+Qed.
 
 (* ---- close との橋渡し（既存の close の定義に依存する唯一の箇所）--- *)
-Lemma close_crossing  : forall ls, close ls -> crossing ls.
-Admitted.
-Lemma crossing_close  : forall ls, crossing ls -> close ls.
-Admitted.
+Lemma close_crossing : forall ls, ls <> [] -> close ls -> crossing ls.
+Proof.
+  intros ls Hne Hcl.
+  unfold close, close_extended in Hcl.
+  destruct Hcl as [t1 [t2 [Hne12 Heq]]].
+
+  (* ★ rewrite は仮説側で行う（ゴールの形に依存しない） *)
+  rewrite (extend_at_pos ls t1 Hne), (extend_at_pos ls t2 Hne) in Heq.
+
+  assert (Hr1 : in_range ls (pos_of ls t1)) by (apply pos_of_in_range; exact Hne).
+  assert (Hr2 : in_range ls (pos_of ls t2)) by (apply pos_of_in_range; exact Hne).
+  assert (Hq : pos_of ls t1 <> pos_of ls t2).
+  { intros Hq. apply Hne12.
+    eapply extend_same_piece_injective; [exact Hne | |].
+    - change (fst (pos_of ls t1) = fst (pos_of ls t2)). rewrite Hq; reflexivity.
+    - change (snd (pos_of ls t1) = snd (pos_of ls t2)). rewrite Hq; reflexivity. }
+
+  exists (pos_of ls t1), (pos_of ls t2).
+  split; [exact Hr1 |].
+  split; [exact Hr2 |].
+  split; [exact Heq | exact Hq].
+Qed.
+
+Lemma crossing_close : forall ls, ls <> [] -> crossing ls -> close ls.
+Proof.
+  intros ls Hne (q1 & q2 & Hr1 & Hr2 & Hpt & Hq).
+  destruct (extend_onto ls q1 Hne Hr1) as [t1 Ht1].
+  destruct (extend_onto ls q2 Hne Hr2) as [t2 Ht2].
+  unfold close, close_extended. exists t1, t2. split.
+  - intros Ht. apply Hq. rewrite <- Ht1, <- Ht2, Ht. reflexivity.
+  - rewrite (extend_at_pos ls t1 Hne), (extend_at_pos ls t2 Hne), Ht1, Ht2.
+    exact Hpt.
+Qed.
+
+Corollary open_no_crossing : forall ls, ls <> [] -> ~ close ls -> ~ crossing ls.
+Proof. intros ls Hne H Hc. apply H. apply crossing_close; assumption. Qed.
 
 
 (* ---- 分解と存在 --------------------- *)
@@ -252,6 +324,8 @@ Proof.
   auto.
 Qed.
 
+Lemma open_nonnil : forall ls, ~ close ls -> ls <> [].
+Admitted.
 
 (*  「向き列が同じで、長さが同じで、連結なら、同じ ds の埋め込み」 *)
 Lemma embed_scurve_transfer : forall ds ls ls',
@@ -874,8 +948,8 @@ Axiom operate_seg_zone_last :
 Axiom operate_seg_zone_par : forall ctx sub h s t,
   (exists t0,
       (t <= 0 -> t0 <= 0)
-   /\ (0 <= t <= 1 -> 0 <= t0 <= 1)
-   /\ (1 <= t -> 1 <= t0)
+   /\ (0 < t <= 1 -> 0 < t0 <= 1)
+   /\ (1 < t -> 1 < t0)
    /\ point (operate_seg ctx sub h s) t
       = operate_point (make_border ctx sub) h (point s t0))
   \/ dzone ctx sub s (point (operate_seg ctx sub h s) t).
@@ -946,9 +1020,9 @@ Proof.
   - destruct Hlo as [H0 | H0]; [left; exact H0 | right].
     destruct (Rle_dec (snd q) 1) as [Hle | Hgt].
     + apply Hm; lra.
-    + apply Rle_trans with 1; [lra | apply Hp; lra].
+    + apply Rlt_trans with 1; [lra | apply Hp; lra].
   - destruct Hup as [H1 | H1]; [left; exact H1 | right].
-    destruct (Rle_dec 0 (snd q)) as [Hge | Hlt].
+    destruct (Rlt_dec 0 (snd q)) as [Hge | Hlt].
     + apply Hm; lra.
     + apply Rle_trans with 0; [apply Hn; lra | lra].
 Qed.
@@ -1029,15 +1103,14 @@ Lemma dzone_private : forall ctx sub h i j p,
 Proof.
 Admitted.
 
-(* 隣接セグメント同士は共有端点でしか会わない *)
-Lemma operate_adjacent_junction : forall ctx sub h q1 q2,
+(* 隣接する操作後セグメントは、共有端点以外で交わらない。
+   共有端点は位置 (i,1) としてのみ表され、(i+1,0) は in_range でないので、
+   in_range な2位置が一致することはない。 *)
+Axiom operate_adjacent_disjoint : forall ctx sub h q1 q2,
   S (fst q1) = fst q2 ->
   in_range (operate_segs ctx sub h ctx) q1 ->
   in_range (operate_segs ctx sub h ctx) q2 ->
-  at_pos (operate_segs ctx sub h ctx) q1 = at_pos (operate_segs ctx sub h ctx) q2 ->
-  junction (operate_segs ctx sub h ctx) q1 q2.
-Proof.
-Admitted.
+  at_pos (operate_segs ctx sub h ctx) q1 <> at_pos (operate_segs ctx sub h ctx) q2.
 
 (* セグメントと境界線の位置関係の場合分け（排中律 Classical が必要？）*)
 (* TODO : make_border の性質 の節のものとまとめる *)
@@ -1235,8 +1308,20 @@ Proof.
   rewrite <- (operate_split l sub r h Hws) in Hcl.
   set (ctx := l ++ sub ++ r) in *.
 
-  apply close_crossing in Hcl.
-  destruct Hcl as (q1 & q2 & Hr1 & Hr2 & Heq & Hq12 & Hnj).
+  assert (Hnonnil :operate_segs ctx sub h ctx <> []). {
+      intros contra.
+      pose proof (operate_segs_length ctx sub h ctx) as H.
+      rewrite contra in H. 
+      subst ctx.
+      simpl in H.
+      symmetry in H.
+      apply length_zero_iff_nil in H.
+      apply app_eq_nil in H as [_ H].
+      apply app_eq_nil in H as [H _].
+      contradiction.
+    }
+  apply close_crossing in Hcl; try assumption.
+  destruct Hcl as (q1 & q2 & Hr1 & Hr2 & Heq & Hq12).
   pose proof (proj1 (in_range_operate ctx sub h q1) Hr1) as Hc1.
   pose proof (proj1 (in_range_operate ctx sub h q2) Hr2) as Hc2.
   destruct Hc1 as [Hi1 Hdummy1] eqn:E1. destruct Hc2 as [Hi2 Hdummy2] eqn:E2.
@@ -1250,12 +1335,10 @@ Proof.
 
   (* ---- ケース2：隣接セグメント ⇒ 共有端点なので junction ---- *)
   destruct (Nat.eq_dec (S (fst q1)) (fst q2)) as [Ha1 | Ha1].
-  { apply Hnj. eapply operate_adjacent_junction; eauto. }
+  { eapply operate_adjacent_disjoint; eassumption. }
   destruct (Nat.eq_dec (S (fst q2)) (fst q1)) as [Ha2 | Ha2].
-  { apply Hnj.
-    destruct (operate_adjacent_junction ctx sub h q2 q1 Ha2 Hr2 Hr1
-                (eq_sym Heq)) as [Hj | Hj];
-      [right | left]; exact Hj. }
+  { eapply operate_adjacent_disjoint; try eassumption.
+    symmetry; assumption. }
 
   (* ---- ケース3：非隣接かつ異なるセグメント ---- *)
   destruct (trace_pos ctx sub h q1 Hc1) as [[t1 [Hin1 Heq1]] | Hz1].
@@ -1273,13 +1356,14 @@ Proof.
   (* 両方が厳密な平行移動 ⇒ operate_point_inj で元の点も一致 ⇒ 元の曲線が交差 *)
   rewrite Heq1, Heq2 in Heq.
   apply (operate_point_inj (make_border ctx sub) h _ _ Hh) in Heq.
-  apply Hopen. apply crossing_close.
-  exists (fst q1, t1), (fst q2, t2). repeat split; try apply Hin1; try apply Hin2.
-  - exact Heq.
-  - intros Hcon. apply Hdiff.
-    change (fst (fst q1, t1) = fst (fst q2, t2)). rewrite Hcon. reflexivity.
-  - intros [ (H & _ & _) | (H & _ & _) ]; simpl in H;
-      [ apply Ha1; exact H | apply Ha2; exact H ].
+    apply Hopen. apply crossing_close; [exact (open_nonnil _ Hopen) |].
+  exists (fst q1, t1), (fst q2, t2). 
+  assert (Hnepair : (fst q1, t1) <> (fst q2, t2)).
+  { intros Hcon. apply Hdiff.
+    apply (f_equal fst) in Hcon. simpl in Hcon. exact Hcon. }
+  split; [exact Hin1 |].
+  split; [exact Hin2 |].
+  split; [exact Heq | exact Hnepair].
 Qed.
 
 (* ---- Lemma C : 移動すると疎になる ------------------ *)
