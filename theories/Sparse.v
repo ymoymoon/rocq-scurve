@@ -722,7 +722,6 @@ Proof.
 			assumption.
 Qed.
 
-
 Lemma admissible_gives_open_embed :
   forall ds, AdmissibleDirs ds -> exists ls, embed_listDir ds ls /\ ~ close ls.
 Proof.
@@ -1090,14 +1089,14 @@ Definition operate_segs (ctx sub : list Segment) (h : R) (ls : list Segment)
 Parameter operate_dzone : Point_Set -> R -> Point_Set.
 
 (* 移動後の可変域は，簡約部分の長方形の内部には入らない *)
-Axiom operate_dzone_avoids_rect :
+Lemma operate_dzone_avoids_rect :
   forall l sub r h i p,
     well_split l sub r -> h_large h sub ->
     operate_dzone (dzone (l ++ sub ++ r) sub i) h p ->
     ~ in_rect (rect_of sub) p.
+Admitted.
 
 (* --- operate_seg の仕様 --- *)
-
 (* 仕様1：境界線上に完全に乗るセグメントは不動（簡約部分） *)
 Axiom operate_seg_fix :
   forall ctx sub h s,
@@ -1107,28 +1106,6 @@ Axiom operate_seg_fix :
 (* 仕様2：移動後の点は「厳密な上下移動の像」か「移動後の可変域の中」。
    境界線と交わるセグメントは、端点を上下移動した後に
    operate_dzone (dzone ctx sub i) h の内部で調整される。 *)
-Axiom operate_seg_zone : forall ctx sub h s i p, 
-  nth_error ctx i = Some s ->
-    onSegment (operate_seg ctx sub h s) p ->
-      (exists p0, onSegment s p0
-                  /\ p = operate_point (make_border ctx sub) h p0)
-      \/ operate_dzone (dzone ctx sub i) h p.
-
-Axiom operate_seg_zone_head : forall ctx sub h s i p, 
-  nth_error ctx i = Some s ->
-    onHead (operate_seg ctx sub h s) p ->
-      (exists p0, onHead s p0
-                  /\ p = operate_point (make_border ctx sub) h p0)
-      \/ operate_dzone (dzone ctx sub i) h p.
-
-Axiom operate_seg_zone_last : forall ctx sub h s i p, 
-  nth_error ctx i = Some s ->
-    onLast (operate_seg ctx sub h s) p ->
-      (exists p0, onLast s p0
-                  /\ p = operate_point (make_border ctx sub) h p0)
-      \/ operate_dzone (dzone ctx sub i) h p.
-
-(* TODO : 上3つとまとめる *)
 Axiom operate_seg_zone_par : forall ctx sub h s i t,
   nth_error ctx i = Some s ->
   (exists t0,
@@ -1147,6 +1124,62 @@ Axiom operate_seg_init : forall ctx sub h s,
   init (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (init s).
 Axiom operate_seg_term : forall ctx sub h s,
   term (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (term s).
+
+Lemma operate_seg_zone : forall ctx sub h s i p,
+  nth_error ctx i = Some s ->
+    onSegment (operate_seg ctx sub h s) p ->
+      (exists p0, onSegment s p0
+                  /\ p = operate_point (make_border ctx sub) h p0)
+      \/ operate_dzone (dzone ctx sub i) h p.
+Proof.
+  intros ctx sub h s i p Hnth [t [[Ht0 Ht1] Hp]].
+  destruct (Req_dec t 0) as [Ht | Ht].
+  - subst t. left. exists (init s). split.
+    + unfold onSegment, init. exists 0. split; [lra | reflexivity].
+    + subst p. unfold init. apply operate_seg_init.
+  - destruct (operate_seg_zone_par ctx sub h s i t Hnth)
+      as [[t0 [Hhead [Hmid [Hlast Heq]]]] | Hz].
+    + left. exists (point s t0). split.
+      * exists t0. split.
+        -- assert (Hpos : 0 < t). { lra. }
+           specialize (Hmid (conj Hpos Ht1)). lra.
+        -- reflexivity.
+      * rewrite <- Hp. exact Heq.
+    + right. rewrite <- Hp. exact Hz.
+Qed.
+
+Lemma operate_seg_zone_head : forall ctx sub h s i p,
+  nth_error ctx i = Some s ->
+    onHead (operate_seg ctx sub h s) p ->
+      (exists p0, onHead s p0
+                  /\ p = operate_point (make_border ctx sub) h p0)
+      \/ operate_dzone (dzone ctx sub i) h p.
+Proof.
+  intros ctx sub h s i p Hnth [t [Ht Hp]].
+  destruct (operate_seg_zone_par ctx sub h s i t Hnth)
+    as [[t0 [Hhead [Hmid [Hlast Heq]]]] | Hz].
+  - left. exists (point s t0). split.
+    + exists t0. split; [apply Hhead; exact Ht | reflexivity].
+    + rewrite <- Hp. exact Heq.
+  - right. rewrite <- Hp. exact Hz.
+Qed.
+
+Lemma operate_seg_zone_last : forall ctx sub h s i p,
+  nth_error ctx i = Some s ->
+    onLast (operate_seg ctx sub h s) p ->
+      (exists p0, onLast s p0
+                  /\ p = operate_point (make_border ctx sub) h p0)
+      \/ operate_dzone (dzone ctx sub i) h p.
+Proof.
+  intros ctx sub h s i p Hnth [t [Ht Hp]].
+  destruct (operate_seg_zone_par ctx sub h s i t Hnth)
+    as [[t0 [Hhead [Hmid [Hlast Heq]]]] | Hz].
+  - left. exists (point s t0). split.
+    + exists t0. split; [apply Hlast; exact Ht | reflexivity].
+    + rewrite <- Hp. exact Heq.
+  - right. rewrite <- Hp. exact Hz.
+Qed.
+
 Lemma operate_segs_app :
   forall ctx sub h ls1 ls2,
     operate_segs ctx sub h (ls1 ++ ls2)
@@ -1293,11 +1326,12 @@ Admitted.
 (* 隣接する操作後セグメントは、共有端点以外で交わらない。
    共有端点は位置 (i,1) としてのみ表され、(i+1,0) は in_range でないので、
    in_range な2位置が一致することはない。 *)
-Axiom operate_adjacent_disjoint : forall ctx sub h q1 q2,
+Lemma operate_adjacent_disjoint : forall ctx sub h q1 q2,
   S (fst q1) = fst q2 ->
   in_range (operate_segs ctx sub h ctx) q1 ->
   in_range (operate_segs ctx sub h ctx) q2 ->
   at_pos (operate_segs ctx sub h ctx) q1 <> at_pos (operate_segs ctx sub h ctx) q2.
+Admitted.
 
 (* セグメントと境界線の位置関係の場合分け（排中律 Classical が必要？）*)
 (* TODO : make_border の性質 の節のものとまとめる *)
