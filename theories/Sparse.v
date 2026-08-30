@@ -866,7 +866,8 @@ Definition weakly_below (b : Border) (P : Point_Set) : Prop :=
 Parameter dzone : list Segment -> list Segment -> nat -> Point_Set.
 
 (* ---- 可変域には自分と隣接セグメント以外は入らない ---------- *)
-(* TODO : 可変域は端点を含まないようにしても良い（可変域＋端点，の中でセグメントを変形する） *)
+(* 可変域は端点を含む必要があることに注意
+  （境界線と交わるセグメントの調整に使う時，移動後の端点の近くを通るように調整する） *)
 Lemma dz_local : forall l sub r i j p, 
   let ctx := (l ++ sub ++ r) in
   ~ close ctx ->
@@ -1084,6 +1085,17 @@ Parameter operate_seg : list Segment -> list Segment -> R -> Segment -> Segment.
 Definition operate_segs (ctx sub : list Segment) (h : R) (ls : list Segment)
   : list Segment := map (operate_seg ctx sub h) ls.
 
+(* dzone を移動．集合を上下したもののほか，その集合に含まれ境界線上にあった線分と，
+    上下移動した後のその線分からなる閉長方形を含む *)
+Parameter operate_dzone : Point_Set -> R -> Point_Set.
+
+(* 移動後の可変域は，簡約部分の長方形の内部には入らない *)
+Axiom operate_dzone_avoids_rect :
+  forall l sub r h i p,
+    well_split l sub r -> h_large h sub ->
+    operate_dzone (dzone (l ++ sub ++ r) sub i) h p ->
+    ~ in_rect (rect_of sub) p.
+
 (* --- operate_seg の仕様 --- *)
 
 (* 仕様1：境界線上に完全に乗るセグメントは不動（簡約部分） *)
@@ -1092,27 +1104,29 @@ Axiom operate_seg_fix :
     (forall p, onSegment s p -> on_border (make_border ctx sub) p) ->
     operate_seg ctx sub h s = s.
 
-(* 仕様2：移動後の点は「厳密な上下移動の像」か「自分の可変域の中」 *)
+(* 仕様2：移動後の点は「厳密な上下移動の像」か「移動後の可変域の中」。
+   境界線と交わるセグメントは、端点を上下移動した後に
+   operate_dzone (dzone ctx sub i) h の内部で調整される。 *)
 Axiom operate_seg_zone : forall ctx sub h s i p, 
   nth_error ctx i = Some s ->
     onSegment (operate_seg ctx sub h s) p ->
       (exists p0, onSegment s p0
                   /\ p = operate_point (make_border ctx sub) h p0)
-      \/ dzone ctx sub i p.
+      \/ operate_dzone (dzone ctx sub i) h p.
 
 Axiom operate_seg_zone_head : forall ctx sub h s i p, 
   nth_error ctx i = Some s ->
     onHead (operate_seg ctx sub h s) p ->
       (exists p0, onHead s p0
                   /\ p = operate_point (make_border ctx sub) h p0)
-      \/ dzone ctx sub i p.
+      \/ operate_dzone (dzone ctx sub i) h p.
 
 Axiom operate_seg_zone_last : forall ctx sub h s i p, 
   nth_error ctx i = Some s ->
     onLast (operate_seg ctx sub h s) p ->
       (exists p0, onLast s p0
                   /\ p = operate_point (make_border ctx sub) h p0)
-      \/ dzone ctx sub i p.
+      \/ operate_dzone (dzone ctx sub i) h p.
 
 (* TODO : 上3つとまとめる *)
 Axiom operate_seg_zone_par : forall ctx sub h s i t,
@@ -1123,7 +1137,8 @@ Axiom operate_seg_zone_par : forall ctx sub h s i t,
    /\ (1 < t -> 1 < t0)
    /\ point (operate_seg ctx sub h s) t
       = operate_point (make_border ctx sub) h (point s t0))
-  \/ dzone ctx sub i (point (operate_seg ctx sub h s) t).
+  \/ operate_dzone (dzone ctx sub i) h
+       (point (operate_seg ctx sub h s) t).
 
 (* 仕様3 : 端点は「点だけで決まる写像」で動く。                              *)
 (* 境界線上の端点は classify = RegFix なので不動、それ以外は ±h。      *)
@@ -1132,8 +1147,6 @@ Axiom operate_seg_init : forall ctx sub h s,
   init (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (init s).
 Axiom operate_seg_term : forall ctx sub h s,
   term (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (term s).
-
-
 Lemma operate_segs_app :
   forall ctx sub h ls1 ls2,
     operate_segs ctx sub h (ls1 ++ ls2)
@@ -1181,14 +1194,14 @@ Proof.
   intros. unfold in_range. rewrite operate_segs_length. reflexivity.
 Qed.
 
-(* 移動後の点は「元の点の operate_point 像」か「自分の可変域」 *)
+(* 移動後の点は「元の点の operate_point 像」か「自分の移動後の可変域」 *)
 Lemma trace_pos : forall ctx sub h q,
   in_range ctx q ->
   (exists t0, in_range ctx (fst q, t0)
       /\ at_pos (operate_segs ctx sub h ctx) q
          = operate_point (make_border ctx sub) h (at_pos ctx (fst q, t0)))
-  \/ dzone ctx sub (fst q)
-           (at_pos (operate_segs ctx sub h ctx) q).
+  \/ operate_dzone (dzone ctx sub (fst q)) h
+       (at_pos (operate_segs ctx sub h ctx) q).
 Proof.
   intros ctx sub h q Hr. pose proof Hr as [Hi [Hlo Hup]].
   rewrite (at_pos_operate ctx sub h q Hi).
@@ -1269,10 +1282,9 @@ Lemma reconnect_one_segment :
 Admitted.
 
 (* 移動後も可変域は私有：他のセグメントが入るなら隣接に限る *)
-(* TODO : 移動を含まず，可変域そのものについての公理から導けるか *)
 Lemma dzone_private : forall ctx sub h i j p,
   (i < length ctx)%nat -> (j < length ctx)%nat -> i <> j ->
-  dzone ctx sub i p ->
+  operate_dzone (dzone ctx sub i) h p ->
   onExtAt (operate_segs ctx sub h ctx) j p ->
   S i = j \/ S j = i.
 Proof.
@@ -1564,7 +1576,7 @@ Proof.
     + subst p. eapply (operate_pt_not_in_rect l sub r h
                          (onHead_extend (l ++ sub ++ r))); eauto.
       apply (mb_ct_head l sub r Hws).
-    + destruct Hws as [Hsub [Hmono Hopen]]. eapply (dz_avoids_rect l sub r 0); auto.
+    + eapply (operate_dzone_avoids_rect l sub r h 0 p Hws Hh Hz).
 
   - (* [mid] l, r のセグメント *)
     destruct Hmid as [s [Hs Hp]].
@@ -1577,13 +1589,16 @@ Proof.
     assert (Hinctx : In s0 (l ++ sub ++ r)).
     { apply in_app_or in Hin0. destruct Hin0 as [H|H]; apply in_or_app;
       [left; exact H | right; apply in_or_app; right; exact H]. }
-    destruct (operate_seg_zone _ sub h s0 p Hinctx Hp)
+    assert (Hi : exists i, nth_error (l ++ sub ++ r) i = Some s0).
+    { apply In_nth_error. exact Hinctx. }
+    destruct Hi as [i Hi].
+    destruct (operate_seg_zone _ sub h s0 i p Hi Hp)
       as [[p0 [Hp0 Heq]] | Hz].
     + subst p. eapply (operate_pt_not_in_rect l sub r h
                          (onSegmentlist (l ++ r))); eauto.
       * apply (mb_ct_seg l sub r Hws).
       * exists s0. split; assumption.
-    + apply (mb_dz_rect l sub r Hws _ p Hinctx Hz).
+    + eapply (operate_dzone_avoids_rect l sub r h i p Hws Hh Hz).
 
   - (* [last] 末尾の延長線 *)
     unfold onLast_extend in Hlast.
@@ -1598,12 +1613,16 @@ Proof.
     { destruct (l ++ sub ++ r) as [|a tl] eqn:E.
       - destruct l; destruct sub; simpl in E; try discriminate; contradiction.
       - rewrite <- E. rewrite E. apply last_In. assumption. }
-    destruct (operate_seg_zone_last _ sub h _ p Hin Hlast)
+    assert (Hi : exists i, nth_error (l ++ sub ++ r) i
+                           = Some (last_segment (l ++ sub ++ r))).
+    { apply In_nth_error. exact Hin. }
+    destruct Hi as [i Hi].
+    destruct (operate_seg_zone_last _ sub h _ i p Hi Hlast)
       as [[p0 [Hp0 Heq]] | Hz].
     + subst p. eapply (operate_pt_not_in_rect l sub r h
                          (onLast_extend (l ++ sub ++ r))); eauto.
       apply (mb_ct_last l sub r Hws).
-    + apply (mb_dz_rect l sub r Hws _ p Hin Hz).
+    + eapply (operate_dzone_avoids_rect l sub r h i p Hws Hh Hz).
 Qed.
 
 
