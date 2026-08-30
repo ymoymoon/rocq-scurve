@@ -55,10 +55,6 @@ Definition same_extention_head ls1 ls2 :=
 Definition same_extention_last ls1 ls2 := 
 	(forall rr, onLast_extend ls1 rr <-> onLast_extend ls2 rr).
 
-(* 2つのセグメントが隣り合っている *)
-(* TODO : 同じセグメントが入っている時に備え，位置ベースにする *)
-Parameter adjacent : list Segment -> Segment -> Segment -> Prop.
-
 
 Definition embed_listDir (ds: list Direction) (ls: list Segment) : Prop :=
 	exists sc: scurve, scurve_to_direction sc = ds
@@ -146,7 +142,7 @@ Lemma nth_error_lt : forall (ls : list Segment) i s,
   nth_error ls i = Some s -> (i < length ls)%nat.
 Proof. intros ls i s H. apply nth_error_Some. rewrite H. discriminate. Qed.
 
-Lemma nth_error_nth' : forall (ls : list Segment) i s d,
+Lemma nth_error_nth_eq : forall (ls : list Segment) i s d,
   nth_error ls i = Some s -> nth i ls d = s.
 Proof.
   induction ls as [|a tl IH]; intros i s d H.
@@ -218,7 +214,7 @@ Proof.
   intros ls t Hne.
   destruct (extend_repr ls t Hne) as [s [Hnth Heq]].
   unfold at_pos, pos_of; simpl.
-  rewrite (nth_error_nth' ls (extend_index ls t) s default_segment Hnth).
+  rewrite (nth_error_nth_eq ls (extend_index ls t) s default_segment Hnth).
   exact Heq.
 Qed.
 
@@ -845,6 +841,14 @@ Definition Border := R -> R.
 Definition on_border (b : Border) (p : Point) : Prop := snd p = b (fst p).
 
 (* 曲線全体と簡約対象 sub から境界線を1つ決める *)
+(* 簡約部分が左下から右上にx軸に関して単調に向かうものとした時，
+    境界線として，
+    1. 左下からx軸負の向きに進む限り，セグメントないし延長線に沿う
+    2. x軸正の向きに進みそうになったらセグメント上を脱出し，x軸負の向きに進む
+    3. その後セグメントないし延長線に当たりそうになったら，その十分近くを沿ってx軸負の向きに進む
+    4. x軸正の向きに進みそうになったらセグメントないし延長線を横断し，（この時の交点で，傾きが無限大のはずである）
+      そのままx軸負の向きに進む
+    5. 向かう先にセグメントないし延長線がないならそのまま半直線を伸ばす．あるなら 3. に戻る *)
 Parameter make_border : list Segment -> list Segment -> Border.
 
 (* 3分割された形での省略記法 *)
@@ -859,7 +863,17 @@ Definition weakly_below (b : Border) (P : Point_Set) : Prop :=
 
 (* 可変域：曲線 ctx の中でセグメント s が形を変えてよい領域 *)
 (* TODO : 可変域が取れるのは自己交差がない場合のみ *)
-Parameter dzone : list Segment -> list Segment -> Segment -> Point_Set.
+Parameter dzone : list Segment -> list Segment -> nat -> Point_Set.
+
+(* ---- 可変域には自分と隣接セグメント以外は入らない ---------- *)
+(* TODO : 可変域は端点を含まないようにしても良い（可変域＋端点，の中でセグメントを変形する） *)
+Lemma dz_local : forall l sub r i j p, 
+  let ctx := (l ++ sub ++ r) in
+  ~ close ctx ->
+  (i < length ctx)%nat -> (j < length ctx)%nat ->
+  dzone ctx sub i p -> onExtAt ctx j p -> 
+  (i = j \/ S i = j \/ i = S j).
+Admitted.
 
   (* --- 境界線との接触点の x 座標 --- *)
 Definition contact_x (b : Border) (P : Point_Set) (x : R) : Prop :=
@@ -891,6 +905,7 @@ Proof.
   - eapply Rlt_le_trans; [| apply Rmax_r]. lra.
 Qed.
 
+(* make_border の満たすべき性質 *)
 (* ---- (A-1) sub は境界線のグラフの一部 -------------------- *)
 Lemma mb_fits :
   forall l sub r, well_split l sub r ->
@@ -948,25 +963,6 @@ Lemma mb_ct_last :
       outside_rect_x sub x.
 Admitted.
 
-(* ---- (Z-1) 可変域は長方形の内部と交わらない --- *)
-(* TODO : ここに well_split は関係ない．開であることは必要だが． *)
-Lemma mb_dz_rect :
-  forall l sub r, well_split l sub r ->
-    forall s p, In s (l ++ sub ++ r) ->
-      dzone (l ++ sub ++ r) sub s p -> ~ in_rect (rect_of sub) p.
-Admitted.
-
-(* ---- (Z-2) 可変域には自分と隣接セグメント以外は入らない ---------- *)
-(*      「端点近くで隣のセグメントが入り込む」問題への対応            *)
-(* TODO : 可変域は端点を含まないようにしても良い（可変域＋端点，の中でセグメントを変形する） *)
-
-Lemma mb_dz_local :
-  forall l sub r, well_split l sub r ->
-    forall s s' p, In s (l ++ sub ++ r) -> In s' (l ++ sub ++ r) ->
-      dzone (l ++ sub ++ r) sub s p -> onSegment s' p ->
-      s = s' \/ adjacent (l ++ sub ++ r) s s'.
-Admitted.
-    
 Lemma rect_of_in_bbox :
   forall sub, sub <> [] ->
     ry0 (bbox_of sub) <= ry0 (rect_of sub)
@@ -1097,36 +1093,46 @@ Axiom operate_seg_fix :
     operate_seg ctx sub h s = s.
 
 (* 仕様2：移動後の点は「厳密な上下移動の像」か「自分の可変域の中」 *)
-Axiom operate_seg_zone :
-  forall ctx sub h s p, In s ctx ->
+Axiom operate_seg_zone : forall ctx sub h s i p, 
+  nth_error ctx i = Some s ->
     onSegment (operate_seg ctx sub h s) p ->
       (exists p0, onSegment s p0
                   /\ p = operate_point (make_border ctx sub) h p0)
-      \/ dzone ctx sub s p.
+      \/ dzone ctx sub i p.
 
-Axiom operate_seg_zone_head :
-  forall ctx sub h s p, In s ctx ->
+Axiom operate_seg_zone_head : forall ctx sub h s i p, 
+  nth_error ctx i = Some s ->
     onHead (operate_seg ctx sub h s) p ->
       (exists p0, onHead s p0
                   /\ p = operate_point (make_border ctx sub) h p0)
-      \/ dzone ctx sub s p.
+      \/ dzone ctx sub i p.
 
-Axiom operate_seg_zone_last :
-  forall ctx sub h s p, In s ctx ->
+Axiom operate_seg_zone_last : forall ctx sub h s i p, 
+  nth_error ctx i = Some s ->
     onLast (operate_seg ctx sub h s) p ->
       (exists p0, onLast s p0
                   /\ p = operate_point (make_border ctx sub) h p0)
-      \/ dzone ctx sub s p.
+      \/ dzone ctx sub i p.
 
 (* TODO : 上3つとまとめる *)
-Axiom operate_seg_zone_par : forall ctx sub h s t,
+Axiom operate_seg_zone_par : forall ctx sub h s i t,
+  nth_error ctx i = Some s ->
   (exists t0,
       (t <= 0 -> t0 <= 0)
    /\ (0 < t <= 1 -> 0 < t0 <= 1)
    /\ (1 < t -> 1 < t0)
    /\ point (operate_seg ctx sub h s) t
       = operate_point (make_border ctx sub) h (point s t0))
-  \/ dzone ctx sub s (point (operate_seg ctx sub h s) t).
+  \/ dzone ctx sub i (point (operate_seg ctx sub h s) t).
+
+(* 仕様3 : 端点は「点だけで決まる写像」で動く。                              *)
+(* 境界線上の端点は classify = RegFix なので不動、それ以外は ±h。      *)
+(* いずれにせよ operate_point で書ける ＝ 端点の像はセグメントに依存しない *)
+Axiom operate_seg_init : forall ctx sub h s,
+  init (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (init s).
+Axiom operate_seg_term : forall ctx sub h s,
+  term (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (term s).
+
 
 Lemma operate_segs_app :
   forall ctx sub h ls1 ls2,
@@ -1181,13 +1187,17 @@ Lemma trace_pos : forall ctx sub h q,
   (exists t0, in_range ctx (fst q, t0)
       /\ at_pos (operate_segs ctx sub h ctx) q
          = operate_point (make_border ctx sub) h (at_pos ctx (fst q, t0)))
-  \/ dzone ctx sub (nth (fst q) ctx default_segment)
+  \/ dzone ctx sub (fst q)
            (at_pos (operate_segs ctx sub h ctx) q).
 Proof.
   intros ctx sub h q Hr. pose proof Hr as [Hi [Hlo Hup]].
   rewrite (at_pos_operate ctx sub h q Hi).
+  assert (Hnth : nth_error ctx (fst q) = Some (nth (fst q) ctx default_segment)). {
+    apply nth_error_nth'.
+    assumption.
+  }
   destruct (operate_seg_zone_par ctx sub h
-             (nth (fst q) ctx default_segment) (snd q))
+             (nth (fst q) ctx default_segment) (fst q) (snd q) Hnth)
     as [[t0 (Hn & Hm & Hp & Heq)] | Hz]; [| right; exact Hz].
   left. exists t0. split; [| unfold at_pos; simpl; exact Heq].
   unfold in_range; simpl. repeat split; [exact Hi | | ].
@@ -1200,15 +1210,6 @@ Proof.
     + apply Hm; lra.
     + apply Rle_trans with 0; [apply Hn; lra | lra].
 Qed.
-
-(* 端点は「点だけで決まる写像」で動く。                              *)
-(* 境界線上の端点は classify = RegFix なので不動、それ以外は ±h。      *)
-(* いずれにせよ operate_point で書ける ＝ 端点の像はセグメントに依存しない *)
-Axiom operate_seg_init : forall ctx sub h s,
-  init (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (init s).
-Axiom operate_seg_term : forall ctx sub h s,
-  term (operate_seg ctx sub h s) = operate_point (make_border ctx sub) h (term s).
-
 
 (* 鉛直平行移動（向きの不変性を持つ） *)
 (* TODO : これを用いて operate_seg を実装 *)
@@ -1267,11 +1268,11 @@ Lemma reconnect_one_segment :
     orn_seg (operate_seg ctx sub h s) = orn_seg s.
 Admitted.
 
-(* 可変域は私有：他のセグメントが入るなら隣接に限る *)
+(* 移動後も可変域は私有：他のセグメントが入るなら隣接に限る *)
 (* TODO : 移動を含まず，可変域そのものについての公理から導けるか *)
 Lemma dzone_private : forall ctx sub h i j p,
   (i < length ctx)%nat -> (j < length ctx)%nat -> i <> j ->
-  dzone ctx sub (nth i ctx default_segment) p ->
+  dzone ctx sub i p ->
   onExtAt (operate_segs ctx sub h ctx) j p ->
   S i = j \/ S j = i.
 Proof.
@@ -1466,7 +1467,7 @@ Qed.
 
 (* ---- Lemma B : 開の保存 ----------------------------------------- *)
 (*  [1] セグメント×セグメント：同領域なら同じ h 平行移動 ⇒ 移動前も    *)
-(*      交差して矛盾／可変域に入る場合は mb_dz_local より隣接 ⇒       *)
+(*      交差して矛盾／可変域に入る場合は dz_local より隣接 ⇒       *)
 (*      共有端点であって自己交差ではない                              *)
 (*  [2] セグメント×延長線，[3] 延長線×延長線：同様に帰着              *)
 Lemma operate_preserves_open : forall l sub r h,
@@ -1554,16 +1555,16 @@ Proof.
   - (* [head] 先頭の延長線 *)
     unfold onHead_extend in Hhead.
     rewrite (hd_operate l sub r h Hws) in Hhead.
-    assert (Hin : In (hd_segment (l ++ sub ++ r)) (l ++ sub ++ r)).
+    assert (Hin : nth_error (l ++ sub ++ r) 0 = Some (hd_segment (l ++ sub ++ r))).
     { destruct l as [|a l']; simpl;
-      [destruct sub as [|s sub']; [contradiction | left; reflexivity]
-      | left; reflexivity]. }
-    destruct (operate_seg_zone_head _ sub h _ p Hin Hhead)
+      [destruct sub as [|s sub']; [contradiction | reflexivity]
+      | reflexivity ]. }
+    destruct (operate_seg_zone_head _ sub h _ 0 p Hin Hhead)
       as [[p0 [Hp0 Heq]] | Hz].
     + subst p. eapply (operate_pt_not_in_rect l sub r h
                          (onHead_extend (l ++ sub ++ r))); eauto.
       apply (mb_ct_head l sub r Hws).
-    + apply (mb_dz_rect l sub r Hws _ p Hin Hz).
+    + destruct Hws as [Hsub [Hmono Hopen]]. eapply (dz_avoids_rect l sub r 0); auto.
 
   - (* [mid] l, r のセグメント *)
     destruct Hmid as [s [Hs Hp]].
