@@ -288,17 +288,31 @@ Proof. intros. reflexivity. Qed.
 (* dc_pseg_hd は「相手リストの先頭だけ」を見る（DcNil / DcCons の形から）*)
 Lemma dc_pseg_hd_hd_error : forall ps l1 l2,
   hd_error l1 = hd_error l2 -> dc_pseg_hd ps l1 -> dc_pseg_hd ps l2.
-Admitted.
+Proof.
+  intros ps l1 l2 Hhd H. 
+  destruct l1, l2; simpl in Hhd; inversion Hhd.
+  - assumption.
+  - subst.
+    constructor.
+    inversion H.
+    assumption.
+Qed.
 
 (* scurve_to_direction = map f ∘ proj1_sig であることの帰結2本 *)
 Lemma std_length : forall sc,
   length (scurve_to_direction sc) = length (proj1_sig sc).
-Admitted.
+Proof.
+  intros.
+  unfold scurve_to_direction; apply length_map.
+Qed.
 
 Lemma std_app_of_proj : forall sc sc1 sc2,
   proj1_sig sc = proj1_sig sc1 ++ proj1_sig sc2 ->
   scurve_to_direction sc = scurve_to_direction sc1 ++ scurve_to_direction sc2.
-Admitted.
+Proof.
+  intros.
+  unfold scurve_to_direction; intros; rewrite H; apply map_app.
+Qed.
 
 Lemma embed_scurve_length : forall sc ls,
   embed_scurve sc ls -> length (proj1_sig sc) = length ls.
