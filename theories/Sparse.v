@@ -756,21 +756,50 @@ Definition in_rect (Rc : Rect) (p : Point) : Prop :=
 Definition rect_width  (Rc : Rect) : R := rx1 Rc - rx0 Rc.
 Definition rect_height (Rc : Rect) : R := ry1 Rc - ry0 Rc.
 
+(* new は old の両端点、または old の開長方形の内部にある。 *)
+Definition in_rect_or_endpoints (old new : list Segment) : Prop :=
+  forall p, onSegmentlist new p ->
+    p = init (hd_segment old)
+    \/ p = term (last_segment old)
+    \/ in_rect (rect_of old) p.
+
+Lemma in_rect_implies_or_endpoints : forall old new,
+  (forall p, onSegmentlist new p -> in_rect (rect_of old) p) ->
+  in_rect_or_endpoints old new.
+Proof. intros old new H p Hp. right; right; auto. Qed.
+
 (* p が l ++ sub ++ r の sub 以外の部分から来ることを表す。
    点集合の差 [~ onSegmentlist sub p] では、他セグメントとの交点も
    sub 上の点として除外されてしまうため、点の由来を分解で記録する。 *)
-(* TODO : sub の端点を考慮 *)
+(* 注意 : sub の端点は「外側」とみなす→ sparse 側で対処が必要 *)
 Definition outside_sub (l sub r : list Segment) (p : Point) : Prop :=
   let ls := l ++ sub ++ r in
   onHead_extend ls p
   \/ onSegmentlist (l ++ r) p
   \/ onLast_extend ls p.
 
-(* sub の長方形には、曲線 l ++ sub ++ r のうち sub 以外の部分が入らない。 *)
+(* sub の両端点は、曲線の他の部分と交わらない．
+    outside_sub が端点の情報を消してしまうので，こちらで拾う *)
+Definition sub_endpoints_do_not_cross (l sub r : list Segment) : Prop :=
+  forall t1 t2,
+    t1 <> t2 ->
+    (extend (l ++ sub ++ r) t1 = init (hd_segment sub)
+     \/ extend (l ++ sub ++ r) t1 = term (last_segment sub)) ->
+    extend (l ++ sub ++ r) t1 <> extend (l ++ sub ++ r) t2.
+
+Lemma open_sub_endpoints_do_not_cross : forall l sub r,
+  ~ close (l ++ sub ++ r) -> sub_endpoints_do_not_cross l sub r.
+Proof.
+  intros l sub r Hopen t1 t2 Hneq _. intro Heq.
+  apply Hopen. now exists t1, t2.
+Qed.
+
+(* 内部点は開長方形の疎性で、両端点は明示的な非交差条件で扱う。 *)
 Definition sparse_around (l sub r : list Segment) : Prop :=
-  forall p,
-    outside_sub l sub r p ->
-    ~ in_rect (rect_of sub) p.
+  (forall p,
+     outside_sub l sub r p ->
+     ~ in_rect (rect_of sub) p)
+  /\ sub_endpoints_do_not_cross l sub r.
 
 (* ls の各セグメント出現の長方形について疎である。
    値が等しいセグメントが複数あっても、リスト中の位置を区別する。 *)
@@ -802,9 +831,16 @@ Proof.
   split; lra.
 Qed.
 
+(* 埋め込まれた各セグメントは、自身の両端点または開長方形内にある。 *)
+Lemma embedded_segments_in_rect_or_endpoints :
+  forall ds ls,
+    embed_listDir ds ls ->
+    forall s, In s ls -> in_rect_or_endpoints [s] [s].
+Admitted.
+
 Lemma sparse_extensions_open :
-  forall ls,
-    connected ls ->
+  forall ds ls,
+    embed_listDir ds ls ->
     sparse_embedding ls ->
     extensions_disjoint ls ->
     ~ close ls.
@@ -1141,15 +1177,15 @@ Lemma reconnect_gives_sparse_around :
 Admitted.
 
 Lemma reconnect_preserves_open :
-  forall ctx sub h,
-    connected ctx ->
+  forall ds ctx sub h,
+    embed_listDir ds ctx ->
     sparse_embedding ctx ->
     extensions_disjoint ctx ->
     ~ close (reconnect_segs ctx sub h ctx).
 Proof.
-  intros ctx sub h Hconn Hsparse Hext.
-  apply sparse_extensions_open.
-  - apply reconnect_segs_connected. exact Hconn.
+  intros ds ctx sub h Hembed Hsparse Hext.
+  apply sparse_extensions_open with (ds := ds).
+  - apply reconnect_preserves_embed. exact Hembed.
   - apply reconnect_preserves_sparse; assumption.
   - apply reconnect_preserves_extensions_disjoint; assumption.
 Qed.
@@ -1240,8 +1276,8 @@ Proof.
     apply reconnect_preserves_embed. exact Hall0.
   - split.
     + subst ctx0. rewrite <- !reconnect_segs_app.
-      apply reconnect_preserves_open.
-      * eapply embed_listDir_connected; exact Hall0.
+      apply reconnect_preserves_open with (ds := ds1 ++ sub_ds ++ ds2).
+      * exact Hall0.
       * exact Hsparse.
       * exact Hext.
     + split.

@@ -380,34 +380,6 @@ Definition slope_two (rr1 rr2 : Point) :=
 	let (x1, y1) := rr1 in
 	let (x2, y2) := rr2 in (y2 - y1) / (x2 - x1).
 
-(* `sub` の両端で生じる自己交差が、全体曲線にはないこと。 *)
-Definition sub_endpoints_do_not_cross (l sub r : list Segment) : Prop :=
-  forall t1 t2,
-    t1 <> t2 ->
-    (extend (l ++ sub ++ r) t1 = init (hd_segment sub)
-     \/ extend (l ++ sub ++ r) t1 = term (last_segment sub)) ->
-    extend (l ++ sub ++ r) t1 <> extend (l ++ sub ++ r) t2.
-
-Lemma open_sub_endpoints_do_not_cross : forall l sub r,
-  ~ close (l ++ sub ++ r) -> sub_endpoints_do_not_cross l sub r.
-Proof.
-  intros l sub r Hopen t1 t2 Hneq _. intro Heq.
-  apply Hopen. now exists t1, t2.
-Qed.
-
-Definition in_rect_or_endpoints (old new : list Segment) : Prop :=
-  forall p, onSegmentlist new p ->
-    p = init (hd_segment old)
-    \/ p = term (last_segment old)
-    \/ in_rect (rect_of old) p.
-
-Lemma in_rect_implies_or_endpoints : forall old new,
-  (forall p, onSegmentlist new p -> in_rect (rect_of old) p) ->
-  in_rect_or_endpoints old new.
-Proof. intros old new H p Hp. right; right; auto. Qed.
-
-
-
 (* embed_sparsely_listDir を強めたもの
 		sub_ds の埋め込みについて，その部分の埋め込みの終点が始点の右上側にあり，
 		始点での傾きが終点での傾き（どちらも正）よりも大きいようにできる *)
