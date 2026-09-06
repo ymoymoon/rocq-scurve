@@ -16,7 +16,6 @@ From Stdlib Require Import Lia.
 (* ================================================================= *)
 
 Definition Point := (R * R)%type.
-Definition Point_Set := Point -> Prop.
 
 Definition hd_segment ls := hd default_segment ls.
 Definition last_segment ls := last ls default_segment.
@@ -637,6 +636,14 @@ Admitted.
 (*     E,NE,SE → R0 ／ N,NW → R270 ／ W,SW → R180 ／ S → R90          *)
 (*   あとは rot_seg_point から init_x < term_x を計算するだけ．        *)
 
+(* x 正方向に進む埋め込みの方向列は単方向である。 *)
+Lemma x_monotone_embed_is_one_way_listDir :
+  forall ds sub,
+    embed_listDir ds sub ->
+    x_monotone_segs sub ->
+    is_one_way_listDir ds.
+Admitted.
+
     
 (* --------------------------------------------------------------------------- *)
 (* AdmissibleDirs について成り立ってほしい性質と，それに必要な補題 *)
@@ -884,21 +891,8 @@ Admitted.
 
 
 (* ================================================================= *)
-(*  3.  境界線                                                       *)
+(*  3.  sub のグラフと移動量                                         *)
 (* ================================================================= *)
-
-(* 将来は sub の両端点だけから各端点の領域を決める定義に置き換える。
-   現段階では既存のインターフェースを保つ。 *)
-Definition Border := R -> R.
-Definition on_border (b : Border) (p : Point) : Prop := snd p = b (fst p).
-
-Parameter make_border : list Segment -> list Segment -> Border.
-
-Definition border_of (l sub r : list Segment) : Border :=
-  make_border (l ++ sub ++ r) sub.
-
-Definition contact_x (b : Border) (P : Point_Set) (x : R) : Prop :=
-  exists p, P p /\ on_border b p /\ fst p = x.
 
 Parameter bbox_of : list Segment -> Rect.
 Axiom bbox_of_bounds :
@@ -922,38 +916,6 @@ Proof.
   - eapply Rlt_le_trans; [| apply Rmax_r]. lra.
 Qed.
 
-Lemma mb_fits :
-  forall l sub r, well_split l sub r ->
-    forall p, onSegmentlist sub p -> on_border (border_of l sub r) p.
-Admitted.
-
-Lemma mb_cover :
-  forall l sub r, well_split l sub r ->
-    forall x, rx0 (rect_of sub) <= x <= rx1 (rect_of sub) ->
-      exists q, onSegmentlist sub q /\ fst q = x
-                /\ snd q = border_of l sub r x.
-Admitted.
-
-Lemma mb_ct_seg :
-  forall l sub r, well_split l sub r ->
-    forall x, contact_x (border_of l sub r) (onSegmentlist (l ++ r)) x ->
-      outside_rect_x sub x.
-Admitted.
-
-Lemma mb_ct_head :
-  forall l sub r, well_split l sub r ->
-    forall x, contact_x (border_of l sub r)
-                        (onHead_extend (l ++ sub ++ r)) x ->
-      outside_rect_x sub x.
-Admitted.
-
-Lemma mb_ct_last :
-  forall l sub r, well_split l sub r ->
-    forall x, contact_x (border_of l sub r)
-                        (onLast_extend (l ++ sub ++ r)) x ->
-      outside_rect_x sub x.
-Admitted.
-
 Lemma rect_of_in_bbox :
   forall sub, sub <> [] ->
     ry0 (bbox_of sub) <= ry0 (rect_of sub)
@@ -967,6 +929,71 @@ Proof.
     split; lra.
 Qed.
 
+(* x が sub の始点と終点の間にあるとき、sub 上で x 座標が x の点の
+   y 座標を返す。x 単調かつ連結なら、この値は一意である。 *)
+Parameter sub_y_at_x : list Segment -> R -> R.
+
+Axiom sub_y_at_x_spec :
+  forall sub x,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    init_x (hd_segment sub) <= x <= term_x (last_segment sub) ->
+    onSegmentlist sub (x, sub_y_at_x sub x).
+
+Axiom sub_x_bounds :
+  forall sub,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    init_x (hd_segment sub) < term_x (last_segment sub).
+
+Definition reference_y (sub : list Segment) (x : R) : R :=
+  if Rlt_dec x (init_x (hd_segment sub)) then
+    init_y (hd_segment sub)
+  else if Rlt_dec (term_x (last_segment sub)) x then
+    term_y (last_segment sub)
+  else
+    sub_y_at_x sub x.
+
+Lemma reference_y_left :
+  forall sub x,
+    x < init_x (hd_segment sub) ->
+    reference_y sub x = init_y (hd_segment sub).
+Proof.
+  intros sub x H. unfold reference_y.
+  destruct (Rlt_dec x (init_x (hd_segment sub))); [reflexivity | lra].
+Qed.
+
+Lemma reference_y_right :
+  forall sub x,
+    init_x (hd_segment sub) <= term_x (last_segment sub) ->
+    term_x (last_segment sub) < x ->
+    reference_y sub x = term_y (last_segment sub).
+Proof.
+  intros sub x Hends H. unfold reference_y.
+  destruct (Rlt_dec x (init_x (hd_segment sub))).
+  - lra.
+  - destruct (Rlt_dec (term_x (last_segment sub)) x); [reflexivity | lra].
+Qed.
+
+Lemma reference_y_middle :
+  forall sub x,
+    init_x (hd_segment sub) <= x <= term_x (last_segment sub) ->
+    reference_y sub x = sub_y_at_x sub x.
+Proof.
+  intros sub x H. unfold reference_y.
+  destruct (Rlt_dec x (init_x (hd_segment sub))); [lra |].
+  destruct (Rlt_dec (term_x (last_segment sub)) x); [lra | reflexivity].
+Qed.
+
+Axiom reference_y_in_bbox :
+  forall sub x,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    ry0 (bbox_of sub) <= reference_y sub x <= ry1 (bbox_of sub).
+
 
 (* ================================================================= *)
 (*  4.  端点の上下移動                                               *)
@@ -974,9 +1001,22 @@ Qed.
 
 Inductive Region : Type := RegFix | RegUp | RegDown.
 
-Definition classify (b : Border) (p : Point) : Region :=
-  if Rlt_dec (b (fst p)) (snd p) then RegUp
-  else if Rlt_dec (snd p) (b (fst p)) then RegDown
+Definition endpoint_of_seg (s : Segment) (p : Point) : Prop :=
+  p = init s \/ p = term s.
+
+Definition endpoint_of (ls : list Segment) (p : Point) : Prop :=
+  exists s, In s ls /\ endpoint_of_seg s p.
+
+Definition fixed_point (sub : list Segment) (p : Point) : Prop :=
+  endpoint_of sub p
+  \/ (fst p < init_x (hd_segment sub)
+      /\ snd p = init_y (hd_segment sub))
+  \/ (term_x (last_segment sub) < fst p
+      /\ snd p = term_y (last_segment sub)).
+
+Definition classify (sub : list Segment) (p : Point) : Region :=
+  if Rlt_dec (reference_y sub (fst p)) (snd p) then RegUp
+  else if Rlt_dec (snd p) (reference_y sub (fst p)) then RegDown
   else RegFix.
 
 Definition shift (h : R) (g : Region) (p : Point) : Point :=
@@ -986,162 +1026,255 @@ Definition shift (h : R) (g : Region) (p : Point) : Point :=
   | RegDown => (fst p, snd p - h)
   end.
 
-Definition operate_point (b : Border) (h : R) (p : Point) : Point :=
-  shift h (classify b p) p.
+Definition operate_point (sub : list Segment) (h : R) (p : Point) : Point :=
+  shift h (classify sub p) p.
 
 Lemma classify_RegFix_char :
-  forall b p, classify b p = RegFix -> on_border b p.
+  forall sub p,
+    classify sub p = RegFix ->
+    snd p = reference_y sub (fst p).
 Proof.
-  intros b p H. unfold classify in H. unfold on_border.
-  destruct (Rlt_dec (b (fst p)) (snd p)); [discriminate|].
-  destruct (Rlt_dec (snd p) (b (fst p))); [discriminate|]. lra.
+  intros sub p H. unfold classify in H.
+  destruct (Rlt_dec (reference_y sub (fst p)) (snd p)); [discriminate|].
+  destruct (Rlt_dec (snd p) (reference_y sub (fst p))); [discriminate|]. lra.
 Qed.
 
 Lemma classify_RegUp_char :
-  forall b p, classify b p = RegUp -> b (fst p) < snd p.
+  forall sub p,
+    classify sub p = RegUp -> reference_y sub (fst p) < snd p.
 Proof.
-  intros b p H. unfold classify in H.
-  destruct (Rlt_dec (b (fst p)) (snd p)); [assumption|].
-  destruct (Rlt_dec (snd p) (b (fst p))); discriminate.
+  intros sub p H. unfold classify in H.
+  destruct (Rlt_dec (reference_y sub (fst p)) (snd p)); [assumption|].
+  destruct (Rlt_dec (snd p) (reference_y sub (fst p))); discriminate.
 Qed.
 
 Lemma classify_RegDown_char :
-  forall b p, classify b p = RegDown -> snd p < b (fst p).
+  forall sub p,
+    classify sub p = RegDown -> snd p < reference_y sub (fst p).
 Proof.
-  intros b p H. unfold classify in H.
-  destruct (Rlt_dec (b (fst p)) (snd p)); [discriminate|].
-  destruct (Rlt_dec (snd p) (b (fst p))); [assumption|discriminate].
+  intros sub p H. unfold classify in H.
+  destruct (Rlt_dec (reference_y sub (fst p)) (snd p)); [discriminate|].
+  destruct (Rlt_dec (snd p) (reference_y sub (fst p))); [assumption|discriminate].
 Qed.
 
-Lemma classify_on_border :
-  forall b p, on_border b p -> classify b p = RegFix.
+Lemma classify_reference :
+  forall sub p,
+    snd p = reference_y sub (fst p) -> classify sub p = RegFix.
 Proof.
-  intros b p H. unfold on_border in H. unfold classify.
-  destruct (Rlt_dec (b (fst p)) (snd p)); [lra|].
-  destruct (Rlt_dec (snd p) (b (fst p))); [lra | reflexivity].
+  intros sub p H. unfold classify.
+  destruct (Rlt_dec (reference_y sub (fst p)) (snd p)); [lra|].
+  destruct (Rlt_dec (snd p) (reference_y sub (fst p))); [lra | reflexivity].
 Qed.
 
-Lemma operate_point_border :
-  forall b h p, on_border b p -> operate_point b h p = p.
+Lemma operate_point_RegFix :
+  forall sub h p, classify sub p = RegFix -> operate_point sub h p = p.
 Proof.
-  intros b h p H. unfold operate_point.
-  rewrite (classify_on_border b p H). reflexivity.
+  intros sub h p H. unfold operate_point. rewrite H. reflexivity.
 Qed.
+
+Axiom classify_sub_endpoint :
+  forall sub p,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    endpoint_of sub p ->
+    classify sub p = RegFix.
+
+Lemma classify_left_ray :
+  forall sub p,
+    fst p < init_x (hd_segment sub) ->
+    snd p = init_y (hd_segment sub) ->
+    classify sub p = RegFix.
+Proof.
+  intros sub p Hx Hy. apply classify_reference.
+  rewrite reference_y_left by exact Hx. exact Hy.
+Qed.
+
+Lemma classify_right_ray :
+  forall sub p,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    term_x (last_segment sub) < fst p ->
+    snd p = term_y (last_segment sub) ->
+    classify sub p = RegFix.
+Proof.
+  intros sub p Hne Hconn Hxmono Hx Hy. apply classify_reference.
+  rewrite reference_y_right; [exact Hy | | exact Hx].
+  apply Rlt_le. now apply sub_x_bounds.
+Qed.
+
+(* 全域疎性の下では、ctx の端点で RegFix となるものは sub の端点か、
+   sub の左右に付けた水平半直線上にある。 *)
+Axiom classify_RegFix_endpoint_char :
+  forall l sub r p,
+    well_split l sub r ->
+    connected sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    endpoint_of (l ++ sub ++ r) p ->
+    classify sub p = RegFix ->
+    fixed_point sub p.
 
 Lemma operate_pt_not_in_rect :
-  forall l sub r h (P : Point_Set) p0,
-    well_split l sub r -> h_large h sub ->
-    (forall x, contact_x (border_of l sub r) P x -> outside_rect_x sub x) ->
-    P p0 ->
-    ~ in_rect (rect_of sub) (operate_point (border_of l sub r) h p0).
-Proof.
-  intros l sub r h P p0 Hws Hh Hct HP Hin.
-  destruct Hws as [Hne [Hx Hop]].
-  assert (Hws : well_split l sub r).
-  { split; [exact Hne | split; assumption]. }
-  destruct Hh as [Hh0 Hh].
-  pose proof (rect_of_in_bbox sub Hne) as [Hb0 Hb1].
-  unfold rect_height in Hh.
-  unfold operate_point in Hin.
-  destruct (classify (border_of l sub r) p0) eqn:Hg; unfold shift in Hin.
-  - destruct Hin as [[Hx0 Hx1] _].
-    assert (Hc : contact_x (border_of l sub r) P (fst p0)).
-    { exists p0. repeat split;
-      [exact HP | apply (classify_RegFix_char _ p0 Hg)]. }
-    destruct (Hct _ Hc); unfold outside_rect_x in *; lra.
-  - pose proof (classify_RegUp_char _ p0 Hg) as Hup.
-    destruct Hin as [[Hx0 Hx1] [Hy0 Hy1]]. cbn [fst snd] in *.
-    destruct (mb_cover l sub r Hws (fst p0)) as [q [Hq [Hqx Hqy]]]; [lra|].
-    pose proof (bbox_of_bounds sub q Hq) as [Hql Hqr].
-    lra.
-  - pose proof (classify_RegDown_char _ p0 Hg) as Hdn.
-    destruct Hin as [[Hx0 Hx1] [Hy0 Hy1]]. cbn [fst snd] in *.
-    destruct (mb_cover l sub r Hws (fst p0)) as [q [Hq [Hqx Hqy]]]; [lra|].
-    pose proof (bbox_of_bounds sub q Hq) as [Hql Hqr].
-    lra.
-Qed.
+  forall l sub r h p,
+    well_split l sub r ->
+    connected sub ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    endpoint_of (l ++ r) p ->
+    ~ in_rect (rect_of sub) (operate_point sub h p).
+Admitted.
 
 
 (* ================================================================= *)
 (*  5.  端点移動後の再接続                                           *)
 (* ================================================================= *)
 
-Parameter reconnect_seg :
-  list Segment -> list Segment -> R -> Segment -> Segment.
+Parameter reconnectable : Point -> Point -> Direction -> Prop.
+
+Parameter reconnect_seg : Point -> Point -> Direction -> Segment.
+
+Axiom reconnectable_iff :
+  forall p q d,
+    reconnectable p q d <->
+    exists s, init s = p /\ term s = q /\ orn_seg s = d.
+
+Definition reconnectable_after
+  (sub : list Segment) (h : R) (s : Segment) : Prop :=
+  reconnectable
+    (operate_point sub h (init s))
+    (operate_point sub h (term s))
+    (orn_seg s).
+
+Definition all_reconnectable
+  (sub : list Segment) (h : R) (ls : list Segment) : Prop :=
+  forall s, In s ls -> reconnectable_after sub h s.
+
+Definition reconnect_one
+  (sub : list Segment) (h : R) (s : Segment) : Segment :=
+  reconnect_seg
+    (operate_point sub h (init s))
+    (operate_point sub h (term s))
+    (orn_seg s).
 
 Definition reconnect_segs
-  (ctx sub : list Segment) (h : R) (ls : list Segment) : list Segment :=
-  map (reconnect_seg ctx sub h) ls.
+  (sub : list Segment) (h : R) (ls : list Segment) : list Segment :=
+  map (reconnect_one sub h) ls.
 
 Axiom reconnect_init :
-  forall ctx sub h s,
-    init (reconnect_seg ctx sub h s)
-    = operate_point (make_border ctx sub) h (init s).
+  forall p q d,
+    reconnectable p q d ->
+    init (reconnect_seg p q d) = p.
 
 Axiom reconnect_term :
-  forall ctx sub h s,
-    term (reconnect_seg ctx sub h s)
-    = operate_point (make_border ctx sub) h (term s).
+  forall p q d,
+    reconnectable p q d ->
+    term (reconnect_seg p q d) = q.
 
 Axiom reconnect_orn :
-  forall ctx sub h s,
-    orn_seg (reconnect_seg ctx sub h s) = orn_seg s.
+  forall p q d,
+    reconnectable p q d ->
+    orn_seg (reconnect_seg p q d) = d.
+
+Lemma reconnectable_neq_x :
+  forall p q d,
+    reconnectable p q d -> fst p <> fst q.
+Proof.
+  intros p q d Hrec Heq.
+  destruct (proj1 (reconnectable_iff p q d) Hrec)
+    as [s [Hinit [Hterm _]]].
+  apply (neq_init_term_x s). unfold init_x, term_x.
+  rewrite Hinit, Hterm. exact Heq.
+Qed.
+
+Lemma reconnectable_neq_y :
+  forall p q d,
+    reconnectable p q d -> snd p <> snd q.
+Proof.
+  intros p q d Hrec Heq.
+  destruct (proj1 (reconnectable_iff p q d) Hrec)
+    as [s [Hinit [Hterm _]]].
+  apply (neq_init_term_y s). unfold init_y, term_y.
+  rewrite Hinit, Hterm. exact Heq.
+Qed.
+
+Axiom operate_endpoints_reconnectable :
+  forall l sub r h,
+    connected (l ++ sub ++ r) ->
+    well_split l sub r ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    all_reconnectable sub h (l ++ sub ++ r).
+
+Lemma all_reconnectable_mono :
+  forall sub h ls ls',
+    all_reconnectable sub h ls ->
+    (forall s, In s ls' -> In s ls) ->
+    all_reconnectable sub h ls'.
+Proof. intros sub h ls ls' H HIn s Hs. apply H, HIn, Hs. Qed.
 
 Lemma reconnect_segs_app :
-  forall ctx sub h ls1 ls2,
-    reconnect_segs ctx sub h (ls1 ++ ls2)
-    = reconnect_segs ctx sub h ls1 ++ reconnect_segs ctx sub h ls2.
+  forall sub h ls1 ls2,
+    reconnect_segs sub h (ls1 ++ ls2)
+    = reconnect_segs sub h ls1 ++ reconnect_segs sub h ls2.
 Proof. intros. unfold reconnect_segs. apply map_app. Qed.
 
 Lemma reconnect_segs_length :
-  forall ctx sub h ls,
-    length (reconnect_segs ctx sub h ls) = length ls.
+  forall sub h ls,
+    length (reconnect_segs sub h ls) = length ls.
 Proof. intros. unfold reconnect_segs. apply length_map. Qed.
 
 Lemma reconnect_segs_nth_error :
-  forall ctx sub h ls i s,
+  forall sub h ls i s,
     nth_error ls i = Some s ->
-    nth_error (reconnect_segs ctx sub h ls) i =
-      Some (reconnect_seg ctx sub h s).
+    nth_error (reconnect_segs sub h ls) i = Some (reconnect_one sub h s).
 Proof.
-  intros ctx sub h ls i s H. unfold reconnect_segs.
+  intros sub h ls i s H. unfold reconnect_segs.
   rewrite nth_error_map, H. reflexivity.
 Qed.
 
 Lemma reconnect_segs_connected :
-  forall ctx sub h ls,
+  forall sub h ls,
+    all_reconnectable sub h ls ->
     connected ls ->
-    connected (reconnect_segs ctx sub h ls).
+    connected (reconnect_segs sub h ls).
 Proof.
-  intros ctx sub h ls Hc i s1 s2 H1 H2.
+  intros sub h ls Hrec Hc i s1 s2 H1 H2.
   unfold reconnect_segs in H1, H2.
   destruct (nth_error_map_inv _ _ _ _ H1) as [a [Ha Ea]].
   destruct (nth_error_map_inv _ _ _ _ H2) as [b [Hb Eb]].
   subst s1 s2.
+  unfold reconnect_one.
   rewrite reconnect_term, reconnect_init.
+  2,3: apply Hrec; eapply nth_error_In; eauto.
   f_equal. exact (Hc i a b Ha Hb).
 Qed.
 
 Lemma reconnect_segs_orn :
-  forall ctx sub h ls,
-    map orn_seg (reconnect_segs ctx sub h ls) = map orn_seg ls.
+  forall sub h ls,
+    all_reconnectable sub h ls ->
+    map orn_seg (reconnect_segs sub h ls) = map orn_seg ls.
 Proof.
-  intros. unfold reconnect_segs. rewrite map_map.
-  apply map_ext. intros s. apply reconnect_orn.
+  intros sub h ls Hrec. unfold reconnect_segs. rewrite map_map.
+  apply map_ext_in. intros s Hs. unfold reconnect_one.
+  apply reconnect_orn, Hrec, Hs.
 Qed.
 
 Lemma reconnect_preserves_embed :
-  forall ctx sub h ds ls,
+  forall sub h ds ls,
+    all_reconnectable sub h ls ->
     embed_listDir ds ls ->
-    embed_listDir ds (reconnect_segs ctx sub h ls).
+    embed_listDir ds (reconnect_segs sub h ls).
 Proof.
-  intros ctx sub h ds ls Hemb.
+  intros sub h ds ls Hrec Hemb.
   eapply embed_scurve_transfer; [exact Hemb | | |].
   - apply reconnect_segs_length.
   - intros i s s' Hs Hs'.
-    rewrite (reconnect_segs_nth_error ctx sub h ls i s Hs) in Hs'.
-    injection Hs' as Hs'. subst s'. apply reconnect_orn.
-  - apply reconnect_segs_connected.
+    rewrite (reconnect_segs_nth_error sub h ls i s Hs) in Hs'.
+    injection Hs' as Hs'. subst s'. unfold reconnect_one.
+    apply reconnect_orn, Hrec. eapply nth_error_In; exact Hs.
+  - eapply reconnect_segs_connected; [exact Hrec |].
     eapply embed_listDir_connected; exact Hemb.
 Qed.
 
@@ -1152,61 +1285,78 @@ Qed.
 
 Lemma reconnect_preserves_sparse :
   forall ctx sub h,
+    0 < h ->
+    all_reconnectable sub h ctx ->
     sparse_embedding ctx ->
     extensions_disjoint ctx ->
-    sparse_embedding (reconnect_segs ctx sub h ctx).
+    sparse_embedding (reconnect_segs sub h ctx).
 Admitted.
 
 Lemma reconnect_preserves_extensions_disjoint :
   forall ctx sub h,
+    0 < h ->
+    all_reconnectable sub h ctx ->
     sparse_embedding ctx ->
     extensions_disjoint ctx ->
-    extensions_disjoint (reconnect_segs ctx sub h ctx).
+    extensions_disjoint (reconnect_segs sub h ctx).
 Admitted.
 
 Lemma reconnect_gives_sparse_around :
   forall l sub r h,
+    connected (l ++ sub ++ r) ->
     well_split l sub r ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     sparse_around
-      (reconnect_segs (l ++ sub ++ r) sub h l)
-      (reconnect_segs (l ++ sub ++ r) sub h sub)
-      (reconnect_segs (l ++ sub ++ r) sub h r).
+      (reconnect_segs sub h l)
+      (reconnect_segs sub h sub)
+      (reconnect_segs sub h r).
 Admitted.
 
 Lemma reconnect_preserves_open :
   forall ds ctx sub h,
+    0 < h ->
+    all_reconnectable sub h ctx ->
     embed_listDir ds ctx ->
     sparse_embedding ctx ->
     extensions_disjoint ctx ->
-    ~ close (reconnect_segs ctx sub h ctx).
+    ~ close (reconnect_segs sub h ctx).
 Proof.
-  intros ds ctx sub h Hembed Hsparse Hext.
+  intros ds ctx sub h Hh Hrec Hembed Hsparse Hext.
   apply sparse_extensions_open with (ds := ds).
-  - apply reconnect_preserves_embed. exact Hembed.
+  - apply reconnect_preserves_embed; assumption.
   - apply reconnect_preserves_sparse; assumption.
   - apply reconnect_preserves_extensions_disjoint; assumption.
 Qed.
 
 Lemma reconnect_gives_sparse :
   forall l sub r h,
+    connected (l ++ sub ++ r) ->
     well_split l sub r ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     sparse
-      (reconnect_segs (l ++ sub ++ r) sub h l)
-      (reconnect_segs (l ++ sub ++ r) sub h sub)
-      (reconnect_segs (l ++ sub ++ r) sub h r).
+      (reconnect_segs sub h l)
+      (reconnect_segs sub h sub)
+      (reconnect_segs sub h r).
 Proof.
-  intros l sub r h Hws Hh Hsparse Hext.
+  intros l sub r h Hconn Hws Hh Hsparse Hext.
+  pose proof (proj1 Hh) as Hhpos.
+  pose proof (operate_endpoints_reconnectable
+                l sub r h Hconn Hws Hh Hsparse Hext) as Hrec.
   unfold sparse. rewrite <- !reconnect_segs_app. split.
   - apply reconnect_preserves_sparse; assumption.
   - apply reconnect_gives_sparse_around; assumption.
 Qed.
 
+
+(* ================================================================= *)
+(*  7.  最終命題                                                     *)
+(* ================================================================= *)
+
+(* 許容可能なら，全てのセグメント周りで疎な埋め込みが取れる *)
 Lemma AdmissibleDirs_has_sparse_embedding :
   forall ds,
     AdmissibleDirs ds ->
@@ -1215,29 +1365,6 @@ Lemma AdmissibleDirs_has_sparse_embedding :
       /\ sparse_embedding ls
       /\ extensions_disjoint ls.
 Admitted.
-
-(* 上の全域疎埋め込みを指定の方向列で3分割し、中央部分に既に存在する
-   x 正方向の埋め込みを選び直す。再接続に入る前の橋渡しである。 *)
-Lemma AdmissibleDirs_has_sparse_split_embedding :
-  forall ds1 sub_ds ds2 sub,
-    AdmissibleDirs (ds1 ++ sub_ds ++ ds2) ->
-    embed_listDir sub_ds sub ->
-    sub <> [] ->
-    x_monotone_segs sub ->
-    exists l0 sub0 r0,
-      embed_listDir ds1 l0
-      /\ embed_listDir sub_ds sub0
-      /\ embed_listDir ds2 r0
-      /\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l0 ++ sub0 ++ r0)
-      /\ well_split l0 sub0 r0
-      /\ sparse_embedding (l0 ++ sub0 ++ r0)
-      /\ extensions_disjoint (l0 ++ sub0 ++ r0).
-Admitted.
-
-
-(* ================================================================= *)
-(*  7.  最終命題                                                     *)
-(* ================================================================= *)
 
 Lemma embed_sparsely_xmono :
   forall ds1 sub_ds ds2 l sub r,
@@ -1260,34 +1387,94 @@ Proof.
     destruct Hall as [sc [Hdir Hembed]].
     exists sc. split; [exact Hdir |].
     exists (l ++ sub ++ r). split; assumption. }
-  destruct (AdmissibleDirs_has_sparse_split_embedding
-              ds1 sub_ds ds2 sub Hadm Hsub Hsubne Hx)
-    as (l0 & sub0 & r0 & Hl0 & Hsub0 & Hr0 & Hall0 & Hws0 & Hsparse & Hext).
-  destruct (choose_h sub0) as [h Hh].
-  set (ctx0 := l0 ++ sub0 ++ r0).
-  exists (reconnect_segs ctx0 sub0 h l0),
-         (reconnect_segs ctx0 sub0 h r0),
-         (reconnect_segs ctx0 sub0 h sub0).
-  split; [apply reconnect_preserves_embed; exact Hl0 |].
-  split; [apply reconnect_preserves_embed; exact Hsub0 |].
-  split; [apply reconnect_preserves_embed; exact Hr0 |].
+  destruct (AdmissibleDirs_has_sparse_embedding _ Hadm)
+    as (ls0 & Hall0 & Hsparse & Hext).
+  destruct (embed_split ds1 sub_ds ds2 ls0 Hall0)
+    as (l0 & sub0 & r0 & Heq & Hl0 & Hsub0 & Hr0).
+  subst ls0.
+  assert (Hsub0ne : sub0 <> []).
+  { intro Hnil.
+    apply Hsubne.
+    apply length_zero_iff_nil.
+    pose proof (embedding_listDir_length_consis _ _ Hsub) as Hlen.
+    pose proof (embedding_listDir_length_consis _ _ Hsub0) as Hlen0.
+    rewrite Hnil in Hlen0. simpl in Hlen0. lia. }
+  assert (HoneDir : is_one_way_listDir sub_ds).
+  { eapply (x_monotone_embed_is_one_way_listDir sub_ds sub);
+      [exact Hsub | exact Hx]. }
+  assert (Hone0 : is_one_way_embedding sub0).
+  { destruct Hsub0 as [sc0 [Hdir0 Hembed0]].
+    destruct HoneDir as [sc [Hdir Hone]].
+    exists sc0. split; [exact Hembed0 |].
+    eapply is_one_way_same_direction; [| exact Hone].
+    exact (eq_trans Hdir (eq_sym Hdir0)). }
+  destruct (one_way_rot_exists sub0 Hone0) as [g Hx1].
+  set (l1 := rot_segs g l0).
+  set (sub1 := rot_segs g sub0).
+  set (r1 := rot_segs g r0).
+  assert (Hl1 : embed_listDir ds1 l1).
+  { unfold l1. apply rot_embed. exact Hl0. }
+  assert (Hsub1 : embed_listDir sub_ds sub1).
+  { unfold sub1. apply rot_embed. exact Hsub0. }
+  assert (Hr1 : embed_listDir ds2 r1).
+  { unfold r1. apply rot_embed. exact Hr0. }
+  assert (Hall1 :
+      embed_listDir (ds1 ++ sub_ds ++ ds2) (l1 ++ sub1 ++ r1)).
+  { unfold l1, sub1, r1. rewrite <- !rot_segs_app.
+    apply rot_embed. exact Hall0. }
+  assert (Hsparse1 : sparse_embedding (l1 ++ sub1 ++ r1)).
+  { unfold l1, sub1, r1. rewrite <- !rot_segs_app.
+    apply rot_sparse_embedding. exact Hsparse. }
+  assert (Hext1 : extensions_disjoint (l1 ++ sub1 ++ r1)).
+  { unfold l1, sub1, r1. rewrite <- !rot_segs_app.
+    apply rot_extensions_disjoint. exact Hext. }
+  assert (Hsub1ne : sub1 <> []).
+  { unfold sub1. apply rot_segs_nonnil. exact Hsub0ne. }
+  assert (Hopen1 : ~ close (l1 ++ sub1 ++ r1)).
+  { eapply sparse_extensions_open with
+      (ds := ds1 ++ sub_ds ++ ds2);
+      [exact Hall1 | exact Hsparse1 | exact Hext1]. }
+  assert (Hws1 : well_split l1 sub1 r1).
+  { split; [exact Hsub1ne |].
+    split; [exact Hx1 | exact Hopen1]. }
+  destruct (choose_h sub1) as [h Hh].
+  pose proof (proj1 Hh) as Hhpos.
+  assert (HconnAll1 : connected (l1 ++ sub1 ++ r1)).
+  { eapply embed_listDir_connected. exact Hall1. }
+  pose proof (operate_endpoints_reconnectable
+                l1 sub1 r1 h HconnAll1 Hws1 Hh Hsparse1 Hext1) as HrecAll1.
+  assert (HrecL1 : all_reconnectable sub1 h l1).
+  { eapply all_reconnectable_mono; [exact HrecAll1 |].
+    intros s Hs. rewrite !in_app_iff. auto. }
+  assert (HrecSub1 : all_reconnectable sub1 h sub1).
+  { eapply all_reconnectable_mono; [exact HrecAll1 |].
+    intros s Hs. rewrite !in_app_iff. auto. }
+  assert (HrecR1 : all_reconnectable sub1 h r1).
+  { eapply all_reconnectable_mono; [exact HrecAll1 |].
+    intros s Hs. rewrite !in_app_iff. auto. }
+  exists (reconnect_segs sub1 h l1),
+         (reconnect_segs sub1 h r1),
+         (reconnect_segs sub1 h sub1).
+  split; [apply reconnect_preserves_embed; assumption |].
+  split; [apply reconnect_preserves_embed; assumption |].
+  split; [apply reconnect_preserves_embed; assumption |].
   split.
-  - subst ctx0. rewrite <- !reconnect_segs_app.
-    apply reconnect_preserves_embed. exact Hall0.
+  - rewrite <- !reconnect_segs_app.
+    apply reconnect_preserves_embed; assumption.
   - split.
-    + subst ctx0. rewrite <- !reconnect_segs_app.
+    + rewrite <- !reconnect_segs_app.
       apply reconnect_preserves_open with (ds := ds1 ++ sub_ds ++ ds2).
-      * exact Hall0.
-      * exact Hsparse.
-      * exact Hext.
+      * exact Hhpos.
+      * exact HrecAll1.
+      * exact Hall1.
+      * exact Hsparse1.
+      * exact Hext1.
     + split.
-      * subst ctx0. apply reconnect_gives_sparse; assumption.
+      * apply reconnect_gives_sparse; assumption.
       * intro Hnil.
-        destruct Hws0 as [Hsub0ne _].
-        apply Hsub0ne.
+        apply Hsub1ne.
         apply length_zero_iff_nil.
-        pose proof (reconnect_segs_length
-                      ctx0 sub0 h sub0) as Hlen.
+        pose proof (reconnect_segs_length sub1 h sub1) as Hlen.
         rewrite Hnil in Hlen. simpl in Hlen. lia.
 Qed.
 
