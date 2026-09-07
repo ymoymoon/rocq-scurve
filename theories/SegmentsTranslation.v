@@ -1,7 +1,10 @@
 Require Import Stdlib.Reals.Reals.
 Require Import Stdlib.Lists.List.
 Require Import Segment.
+Require Import PrimitiveSegment.
 Require Import Reduction.
+Require Import Embed.
+Require Import Admissible.
 Import ListNotations.
 Open Scope R_scope.
 
@@ -14,6 +17,43 @@ Definition Point := (R * R)%type.
 
 (* セグメントが表す向き。具体的な Segment の実装が与える基本仕様。 *)
 Parameter orn_seg : Segment -> Direction.
+
+Definition hd_segment (ls : list Segment) := hd default_segment ls.
+Definition last_segment (ls : list Segment) := last ls default_segment.
+
+Definition onHead (s : Segment) (p : Point) :=
+  exists t : R, t <= 0 /\ point s t = p.
+
+Definition onLast (s : Segment) (p : Point) :=
+  exists t : R, 1 < t /\ point s t = p.
+
+Definition onHead_extend (ls : list Segment) (p : Point) :=
+  onHead (hd_segment ls) p.
+
+Definition onLast_extend (ls : list Segment) (p : Point) :=
+  onLast (last_segment ls) p.
+
+Definition same_extention_head (ls1 ls2 : list Segment) :=
+  forall p, onHead_extend ls1 p <-> onHead_extend ls2 p.
+
+Definition same_extention_last (ls1 ls2 : list Segment) :=
+  forall p, onLast_extend ls1 p <-> onLast_extend ls2 p.
+
+Definition x_monotone_seg (s : Segment) : Prop := init_x s < term_x s.
+
+Definition x_monotone_segs (ls : list Segment) : Prop :=
+  forall s, In s ls -> x_monotone_seg s.
+
+Definition embed_listDir (ds : list Direction) (ls : list Segment) : Prop :=
+  exists sc : scurve,
+    scurve_to_direction sc = ds /\ embed_scurve sc ls.
+
+Definition is_one_way_embedding (ls : list Segment) : Prop :=
+  exists sc, embed_scurve sc ls /\ is_one_way_scurve sc.
+
+Definition is_one_way_listDir (ds : list Direction) : Prop :=
+  exists sc : scurve,
+    scurve_to_direction sc = ds /\ is_one_way_scurve sc.
 
 
 (* ----------------------------------------------------------------- *)
@@ -101,6 +141,55 @@ Proof.
   intros g s p [t [Ht Hp]]. exists t. split; [exact Ht |].
   now rewrite rot_seg_point, Hp.
 Qed.
+
+Lemma onHead_rot :
+  forall g s p, onHead s p -> onHead (rot_seg g s) (rot_pt g p).
+Proof.
+  intros g s p [t [Ht Hp]]. exists t. split; [exact Ht |].
+  now rewrite rot_seg_point, Hp.
+Qed.
+
+Lemma onLast_rot :
+  forall g s p, onLast s p -> onLast (rot_seg g s) (rot_pt g p).
+Proof.
+  intros g s p [t [Ht Hp]]. exists t. split; [exact Ht |].
+  now rewrite rot_seg_point, Hp.
+Qed.
+
+Lemma app_nonnil_mid :
+  forall (l sub r : list Segment), sub <> [] -> l ++ sub ++ r <> [].
+Proof.
+  intros l sub r H. destruct l as [|a l']; simpl.
+  - destruct sub as [|s sub']; [contradiction | discriminate].
+  - discriminate.
+Qed.
+
+(* 回転はセグメント列が同じ向き列を埋め込むという性質を保存する。 *)
+Lemma rot_embed :
+  forall g ds ls, embed_listDir ds ls -> embed_listDir ds (rot_segs g ls).
+Admitted.
+
+(* 回転後に自己交差があれば、逆回転により元の列にも自己交差がある。 *)
+Lemma rot_close :
+  forall g ls, close (rot_segs g ls) -> close ls.
+Admitted.
+
+Lemma rot_open :
+  forall g ls, ~ close ls -> ~ close (rot_segs g ls).
+Proof. intros g ls H Hc. apply H. now apply (rot_close g). Qed.
+
+(* 単方向な埋め込みは、90 度単位の回転で x 正方向へ単調にできる。 *)
+Lemma one_way_rot_exists :
+  forall ls, is_one_way_embedding ls ->
+    exists g : Rot, x_monotone_segs (rot_segs g ls).
+Admitted.
+
+Lemma x_monotone_embed_is_one_way_listDir :
+  forall ds ls,
+    embed_listDir ds ls ->
+    x_monotone_segs ls ->
+    is_one_way_listDir ds.
+Admitted.
 
 
 (* ----------------------------------------------------------------- *)

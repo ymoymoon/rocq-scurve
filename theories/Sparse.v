@@ -16,20 +16,12 @@ From Stdlib Require Import Lia.
 (*  0.  基本プリミティブ                                              *)
 (* ================================================================= *)
 
-Definition hd_segment ls := hd default_segment ls.
-Definition last_segment ls := last ls default_segment.
-
 Definition rightabove (rr1 rr2 : Point) :=
   let (x1, y1) := rr1 in
   let (x2, y2) := rr2 in x1 < x2 /\ y1 < y2.
 Definition rightbelow (rr1 rr2 : Point) :=
   let (x1, y1) := rr1 in
   let (x2, y2) := rr2 in x1 < x2 /\ y2 < y1.
-
-(* x 単調 = x 軸正の向きに進み続ける（y は無関係） *)
-Definition x_monotone_seg  (s : Segment) : Prop := init_x s < term_x s.
-Definition x_monotone_segs (ls : list Segment) : Prop :=
-  forall s, In s ls -> x_monotone_seg s.
 
 Definition connected (ls : list Segment) : Prop :=
   forall i s1 s2, nth_error ls i = Some s1 -> nth_error ls (S i) = Some s2 ->
@@ -59,33 +51,10 @@ Qed.
 
 Definition onSegment' (seg: Segment) (rr : R * R) := exists (t:R), 0 < t <= 1 /\ point seg t = rr.
 (* TODO: 空リストを省く *)
-Definition onHead (seg: Segment) (rr : Point) := exists (t:R), t <= 0 /\ point seg t = rr.
-Definition onHead_extend (ls: list Segment) (rr : Point) := onHead (hd_segment ls) rr.
-Definition onLast (seg: Segment) (rr : Point) := exists (t:R), 1 < t /\ point seg t = rr.
-Definition onLast_extend (ls: list Segment) (rr : Point) := onLast (last_segment ls) rr.
 Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
 (* TODO: extend に関する公理を完成させた後， onExtendSegment と整合することを確認
 		特に空リストの扱い *)
 Definition onExtend ls rr := exists t, rr = extend ls t.
-
-Definition same_extention_head ls1 ls2 := 
-	(forall rr, onHead_extend ls1 rr <-> onHead_extend ls2 rr).
-Definition same_extention_last ls1 ls2 := 
-	(forall rr, onLast_extend ls1 rr <-> onLast_extend ls2 rr).
-
-
-Definition embed_listDir (ds: list Direction) (ls: list Segment) : Prop :=
-	exists sc: scurve, scurve_to_direction sc = ds
-	/\ embed_scurve sc ls.
-
-Definition is_one_way_embedding (ls : list Segment) : Prop :=
-	exists sc, embed_scurve sc ls /\ is_one_way_scurve sc.
-Definition is_one_way_listDir (ds: list Direction) : Prop :=
-	exists sc: scurve, scurve_to_direction sc = ds /\ is_one_way_scurve sc.
-(* 帰納的に定義することもできると思われる．
-		特に後者は，回転数を使った定義もできる？
-		必要があれば証明 *)
-
 
 (* リスト補助（hd / last と map の交換．空リスト回避のため非空を仮定）*)
 Lemma hd_map_nonnil :
@@ -539,68 +508,11 @@ Admitted.
 (*      8方向はどれも 90°の4回転のどれかで x 正成分を持つ向きに入る．    *)
 (* ================================================================= *)
 
-Lemma app_nonnil_mid :
-  forall (l sub r : list Segment), sub <> [] -> l ++ sub ++ r <> [].
-Proof.
-  intros l sub r H. destruct l as [|a l']; simpl.
-  - destruct sub as [|s sub']; [contradiction | discriminate].
-  - discriminate.
-Qed.
-
-(* --- 点集合の輸送 --- *)
-Lemma onHead_rot :
-  forall g s p, onHead s p -> onHead (rot_seg g s) (rot_pt g p).
-Proof.
-  intros g s p [t [Ht Hp]]. exists t. split; [exact Ht|].
-  rewrite rot_seg_point, Hp. reflexivity.
-Qed.
-
-Lemma onLast_rot :
-  forall g s p, onLast s p -> onLast (rot_seg g s) (rot_pt g p).
-Proof.
-  intros g s p [t [Ht Hp]]. exists t. split; [exact Ht|].
-  rewrite rot_seg_point, Hp. reflexivity.
-Qed.
-
-
 Lemma Rmin_opp : forall a b, Rmin (- a) (- b) = - Rmax a b.
 Proof. intros. unfold Rmin, Rmax. destruct (Rle_dec (-a) (-b)), (Rle_dec a b); lra. Qed.
 Lemma Rmax_opp : forall a b, Rmax (- a) (- b) = - Rmin a b.
 Proof. intros. unfold Rmin, Rmax. destruct (Rle_dec (-a) (-b)), (Rle_dec a b); lra. Qed.
 
-(* --- embed / close / sparse の回転不変性 --- *)
-Lemma rot_embed :
-  forall g ds ls, embed_listDir ds ls -> embed_listDir ds (rot_segs g ls).
-Admitted. 
-
-Lemma rot_close :
-  forall g ls, close (rot_segs g ls) -> close ls.
-Admitted.  (* rot_pt が単射なので，交点は交点に対応 *)
-
-Lemma rot_open :
-  forall g ls, ~ close ls -> ~ close (rot_segs g ls).
-Proof. intros g ls H Hc. apply H. eapply rot_close; exact Hc. Qed.
-
-(* --- 単方向なら回転で x 正方向単調にできる --- *)
-Lemma one_way_rot_exists :
-  forall sub, is_one_way_embedding sub ->
-    exists g : Rot, x_monotone_segs (rot_segs g sub).
-Admitted.
-(* 証明方針：is_one_way_scurve から，sub の全セグメントの向きは        *)
-(*   「ある成分の符号が一定」な向きの集合に入る．8方向 d に対し，        *)
-(*   g だけ回転させて {E, NE, SE}（= x 正成分）に入る g が存在：         *)
-(*     E,NE,SE → R0 ／ N,NW → R270 ／ W,SW → R180 ／ S → R90          *)
-(*   あとは rot_seg_point から init_x < term_x を計算するだけ．        *)
-
-(* x 正方向に進む埋め込みの方向列は単方向である。 *)
-Lemma x_monotone_embed_is_one_way_listDir :
-  forall ds sub,
-    embed_listDir ds sub ->
-    x_monotone_segs sub ->
-    is_one_way_listDir ds.
-Admitted.
-
-    
 (* --------------------------------------------------------------------------- *)
 (* AdmissibleDirs について成り立ってほしい性質と，それに必要な補題 *)
 
