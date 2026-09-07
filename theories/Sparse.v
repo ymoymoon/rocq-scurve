@@ -631,12 +631,32 @@ Definition in_rect (Rc : Rect) (p : Point) : Prop :=
 Definition rect_width  (Rc : Rect) : R := rx1 Rc - rx0 Rc.
 Definition rect_height (Rc : Rect) : R := ry1 Rc - ry0 Rc.
 
-(* new は old の両端点、または old の開長方形の内部にある。 *)
+(* 点が old の両端点、または old の開長方形の内部にある。 *)
+Definition in_rect_or_endpoints_at (old : list Segment) (p : Point) : Prop :=
+  p = init (hd_segment old)
+  \/ p = term (last_segment old)
+  \/ in_rect (rect_of old) p.
+
+Definition in_segment_rect_or_endpoints (s : Segment) (p : Point) : Prop :=
+  p = init s \/ p = term s \/ in_rect (rect_of [s]) p.
+
+(* new の全ての点が old の両端点、または開長方形の内部にある。 *)
 Definition in_rect_or_endpoints (old new : list Segment) : Prop :=
   forall p, onSegmentlist new p ->
-    p = init (hd_segment old)
-    \/ p = term (last_segment old)
-    \/ in_rect (rect_of old) p.
+    in_rect_or_endpoints_at old p.
+
+(* セグメントは、その両端点と両端点を対角線とする開長方形内に収まる。 *)
+Axiom segment_in_rect_or_endpoints :
+  forall s p, onSegment s p -> in_segment_rect_or_endpoints s p.
+
+Lemma single_segment_in_rect_or_endpoints :
+  forall s, in_rect_or_endpoints [s] [s].
+Proof.
+  intros s p [t [Ht Hp]]. simpl in Ht.
+  destruct Ht as [Ht | Hfalse]; [subst t | contradiction].
+  change (in_segment_rect_or_endpoints s p).
+  now apply segment_in_rect_or_endpoints.
+Qed.
 
 Lemma in_rect_implies_or_endpoints : forall old new,
   (forall p, onSegmentlist new p -> in_rect (rect_of old) p) ->
@@ -695,7 +715,7 @@ Definition segment_rectangles_separated (ls : list Segment) : Prop :=
     ls = l ++ [s] ++ r ->
     forall t, In t (l ++ r) ->
     forall p,
-      (p = init t \/ p = term t \/ in_rect (rect_of [t]) p) ->
+      in_segment_rect_or_endpoints t p ->
       ~ in_rect (rect_of [s]) p.
 
 Definition extensions_avoid_segment_rectangles (ls : list Segment) : Prop :=
@@ -778,7 +798,7 @@ Lemma embedded_segments_in_rect_or_endpoints :
   forall ds ls,
     embed_listDir ds ls ->
     forall s, In s ls -> in_rect_or_endpoints [s] [s].
-Admitted.
+Proof. intros ds ls _ s _. apply single_segment_in_rect_or_endpoints. Qed.
 
 Lemma sparse_extensions_open :
   forall ds ls,
@@ -1073,6 +1093,7 @@ Definition all_reconnectable
   (sub : list Segment) (h : R) (ls : list Segment) : Prop :=
   forall s, In s ls -> reconnectable_after sub h s.
 
+(* TODO：先頭末尾については適当に結ぶのではなく，傾きにある程度の制限がかかるか *)
 Definition reconnect_one
   (sub : list Segment) (h : R) (s : Segment) : Segment :=
   reconnect_seg
@@ -1083,6 +1104,33 @@ Definition reconnect_one
 Definition reconnect_segs
   (sub : list Segment) (h : R) (ls : list Segment) : list Segment :=
   map (reconnect_one sub h) ls.
+
+Lemma reconnect_one_init :
+  forall sub h s,
+    reconnectable_after sub h s ->
+    init (reconnect_one sub h s) = operate_point sub h (init s).
+Proof.
+  intros sub h s Hrec. unfold reconnect_one.
+  now apply reconnect_init.
+Qed.
+
+Lemma reconnect_one_term :
+  forall sub h s,
+    reconnectable_after sub h s ->
+    term (reconnect_one sub h s) = operate_point sub h (term s).
+Proof.
+  intros sub h s Hrec. unfold reconnect_one.
+  now apply reconnect_term.
+Qed.
+
+Lemma reconnect_one_orn :
+  forall sub h s,
+    reconnectable_after sub h s ->
+    orn_seg (reconnect_one sub h s) = orn_seg s.
+Proof.
+  intros sub h s Hrec. unfold reconnect_one.
+  now apply reconnect_orn.
+Qed.
 
 Lemma all_reconnectable_mono :
   forall sub h ls ls',
@@ -1102,6 +1150,14 @@ Lemma reconnect_segs_length :
     length (reconnect_segs sub h ls) = length ls.
 Proof. intros. unfold reconnect_segs. apply length_map. Qed.
 
+Lemma reconnect_segs_nonnil :
+  forall sub h ls, ls <> [] -> reconnect_segs sub h ls <> [].
+Proof.
+  intros sub h ls Hne Hnil. apply Hne.
+  apply length_zero_iff_nil.
+  rewrite <- (reconnect_segs_length sub h ls), Hnil. reflexivity.
+Qed.
+
 Lemma reconnect_segs_nth_error :
   forall sub h ls i s,
     nth_error ls i = Some s ->
@@ -1111,7 +1167,7 @@ Proof.
   rewrite nth_error_map, H. reflexivity.
 Qed.
 
-(* 各辺が再接続可能なら、共有端点の移動後も列の連結性は保たれる。 *)
+(* 各セグメントが再接続可能なら、共有端点の移動後も列の連結性は保たれる。 *)
 Lemma reconnect_segs_connected :
   forall sub h ls,
     all_reconnectable sub h ls ->
@@ -1154,6 +1210,18 @@ Qed.
 
 (* ---- 再接続可能性と各セグメントの幾何 -------------------------- *)
 
+(* 一つのセグメントについて、移動後の両端点を元の向きで再接続できる。 *)
+Lemma operate_one_endpoints_reconnectable :
+  forall l sub r h s,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    In s (l ++ sub ++ r) ->
+    reconnectable_after sub h s.
+Admitted.
+
 Lemma operate_endpoints_reconnectable :
   forall l sub r h,
     sub <> [] ->
@@ -1162,17 +1230,32 @@ Lemma operate_endpoints_reconnectable :
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     all_reconnectable sub h (l ++ sub ++ r).
-Admitted.
+Proof.
+  intros l sub r h Hne Hconn Hx Hh Hsparse s Hs.
+  now apply (operate_one_endpoints_reconnectable
+               l sub r h s Hne Hconn Hx Hh Hsparse).
+Qed.
 
 (* 再接続したセグメントは、移動後の両端点を対角線とする長方形の
    内部と両端点だけからなる。 *)
+Lemma reconnect_seg_in_rect_or_endpoints :
+  forall p q d,
+    reconnectable p q d ->
+    in_rect_or_endpoints
+      [reconnect_seg p q d]
+      [reconnect_seg p q d].
+Proof. intros p q d _. apply single_segment_in_rect_or_endpoints. Qed.
+
 Lemma reconnect_one_in_rect_or_endpoints :
   forall sub h s,
     reconnectable_after sub h s ->
     in_rect_or_endpoints
       [reconnect_one sub h s]
       [reconnect_one sub h s].
-Admitted.
+Proof.
+  intros sub h s Hrec. unfold reconnect_one.
+  now apply reconnect_seg_in_rect_or_endpoints.
+Qed.
 
 Lemma reconnect_segs_in_rect_or_endpoints :
   forall sub h ls,
@@ -1187,36 +1270,135 @@ Proof.
   apply reconnect_one_in_rect_or_endpoints, Hrec, Hs0.
 Qed.
 
-(* 疎な埋め込みでは、各セグメントが自身の端点長方形を横断することから、
-   異なるセグメントの端点長方形も互いの内部へ入らない。 *)
+Lemma sparse_segment_occurrence_avoids_other_points :
+  forall pre s post p,
+    sparse_embedding (pre ++ [s] ++ post) ->
+    onSegmentlist (pre ++ post) p ->
+    ~ in_rect (rect_of [s]) p.
+Proof.
+  intros pre s post p Hsparse Hp Hin.
+  pose proof (proj1 (Hsparse pre s post eq_refl) p) as Havoid.
+  apply Havoid; [| exact Hin].
+  unfold outside_sub. right; left. exact Hp.
+Qed.
+
+(* 外側セグメントの出現位置を取り出し、その長方形を sub が避けると示す。 *)
+Lemma sparse_side_segment_avoids_sub_points :
+  forall l sub r s p,
+    sparse_embedding (l ++ sub ++ r) ->
+    In s (l ++ r) ->
+    onSegmentlist sub p ->
+    ~ in_rect (rect_of [s]) p.
+Proof.
+  intros l sub r s p Hsparse Hs Hp.
+  rewrite in_app_iff in Hs. destruct Hs as [Hs | Hs].
+  - apply in_split in Hs. destruct Hs as [l1 [l2 Hl]]. subst l.
+    assert (Heq :
+        (l1 ++ s :: l2) ++ sub ++ r =
+        l1 ++ [s] ++ (l2 ++ sub ++ r)).
+    { rewrite <- !app_assoc. reflexivity. }
+    apply (sparse_segment_occurrence_avoids_other_points
+             l1 s (l2 ++ sub ++ r) p).
+    + now rewrite <- Heq.
+    + destruct Hp as [t [Ht Htp]]. exists t. split; [| exact Htp].
+      repeat rewrite in_app_iff. tauto.
+  - apply in_split in Hs. destruct Hs as [r1 [r2 Hr]]. subst r.
+    assert (Heq :
+        l ++ sub ++ (r1 ++ s :: r2) =
+        (l ++ sub ++ r1) ++ [s] ++ r2).
+    { rewrite <- !app_assoc. reflexivity. }
+    apply (sparse_segment_occurrence_avoids_other_points
+             (l ++ sub ++ r1) s r2 p).
+    + now rewrite <- Heq.
+    + destruct Hp as [t [Ht Htp]]. exists t. split; [| exact Htp].
+      repeat rewrite in_app_iff. tauto.
+Qed.
+
+(* 一つのセグメント周りの疎性から、外側セグメントの長方形分離を得る。 *)
+Lemma sparse_around_segment_rectangles_separated :
+  forall l s r,
+    sparse_around l [s] r ->
+    forall t, In t (l ++ r) ->
+    forall p,
+      in_segment_rect_or_endpoints t p ->
+      ~ in_rect (rect_of [s]) p.
+Admitted.
+
 Lemma sparse_embedding_segment_rectangles_separated :
   forall ls,
     sparse_embedding ls -> segment_rectangles_separated ls.
-Admitted.
+Proof.
+  intros ls Hsparse l s r Heq t Ht p Hp.
+  exact (sparse_around_segment_rectangles_separated
+           l s r (Hsparse l s r Heq) t Ht p Hp).
+Qed.
 
-(* operate_point は同じ側の端点を同量だけ動かすため、端点長方形の
-   分離は再接続後にも保存される。 *)
-Lemma reconnect_preserves_segment_rectangles_separated :
-  forall ctx sub h,
-    0 < h ->
-    all_reconnectable sub h ctx ->
-    segment_rectangles_separated ctx ->
-    segment_rectangles_separated (reconnect_segs sub h ctx).
-Admitted.
+(* map で得た再接続列の一点分解を、元の列の対応する一点分解へ戻す。 *)
+Lemma reconnect_segs_split_inv :
+  forall sub h ctx l' s' r',
+    reconnect_segs sub h ctx = l' ++ [s'] ++ r' ->
+    exists l s r,
+      ctx = l ++ [s] ++ r
+      /\ l' = reconnect_segs sub h l
+      /\ s' = reconnect_one sub h s
+      /\ r' = reconnect_segs sub h r.
+Proof.
+  intros sub h ctx. induction ctx as [|a ctx IH]; intros l' s' r' Heq.
+  - unfold reconnect_segs in Heq. simpl in Heq.
+    destruct l'; simpl in Heq; discriminate.
+  - destruct l' as [|b l'].
+    + simpl in Heq. unfold reconnect_segs in Heq. simpl in Heq.
+      injection Heq as Hs Hr. subst s'.
+      exists [], a, ctx. repeat split; try reflexivity.
+      symmetry. exact Hr.
+    + change
+        (reconnect_one sub h a :: reconnect_segs sub h ctx =
+         b :: (l' ++ [s'] ++ r')) in Heq.
+      injection Heq as Hb Htail. subst b.
+      destruct (IH l' s' r' Htail)
+        as [l [s [r [Hctx [Hl [Hs Hr]]]]]].
+      exists (a :: l), s, r. split.
+      * simpl. f_equal. exact Hctx.
+      * split.
+        -- unfold reconnect_segs in *. simpl. f_equal. exact Hl.
+        -- split; assumption.
+Qed.
 
 (* ---- 延長線と端点の安全性 -------------------------------------- *)
 
-(* 再接続後の延長線について必要なのは、旧延長線との一致や傾き保存ではなく、
-   新しい各セグメント長方形を避け、互いにも交わらないことだけである。 *)
-Lemma reconnect_gives_extensions_safe :
+(* 再接続後の両延長線は、一つの再接続セグメントの長方形を避ける。 *)
+Lemma reconnect_extension_avoids_one_rectangle :
+  forall ctx sub h s p,
+    0 < h ->
+    all_reconnectable sub h ctx ->
+    sparse_embedding ctx ->
+    extensions_disjoint ctx ->
+    In s ctx ->
+    (onHead_extend (reconnect_segs sub h ctx) p
+     \/ onLast_extend (reconnect_segs sub h ctx) p) ->
+    ~ in_rect (rect_of [reconnect_one sub h s]) p.
+Admitted.
+
+(* 二つの一点対長方形補題を、全セグメントに関する安全性へ持ち上げる。 *)
+Lemma reconnect_preserves_extensions_avoid_rectangles :
   forall ctx sub h,
     0 < h ->
     all_reconnectable sub h ctx ->
     sparse_embedding ctx ->
     extensions_disjoint ctx ->
-    extensions_safe (reconnect_segs sub h ctx).
-Admitted.
+    extensions_avoid_segment_rectangles (reconnect_segs sub h ctx).
+Proof.
+  intros ctx sub h Hh Hrec Hsparse Hext l' s' r' Heq p Hside.
+  destruct (reconnect_segs_split_inv sub h ctx l' s' r' Heq)
+    as [l [s [r [Hctx [Hl [Hs Hr]]]]]].
+  subst l' s' r'.
+  apply (reconnect_extension_avoids_one_rectangle
+           ctx sub h s p Hh Hrec Hsparse Hext).
+  - rewrite Hctx, !in_app_iff. simpl. tauto.
+  - exact Hside.
+Qed.
 
+(* 再接続後の先頭延長線と末尾延長線は交わらない。 *)
 Lemma reconnect_preserves_extensions_disjoint :
   forall ctx sub h,
     0 < h ->
@@ -1224,14 +1406,77 @@ Lemma reconnect_preserves_extensions_disjoint :
     sparse_embedding ctx ->
     extensions_disjoint ctx ->
     extensions_disjoint (reconnect_segs sub h ctx).
+Admitted.
+
+(* 延長線の二つの独立な安全条件をまとめる。 *)
+Lemma reconnect_gives_extensions_safe :
+  forall ctx sub h,
+    0 < h ->
+    all_reconnectable sub h ctx ->
+    sparse_embedding ctx ->
+    extensions_disjoint ctx ->
+    extensions_safe (reconnect_segs sub h ctx).
 Proof.
   intros ctx sub h Hh Hrec Hsparse Hext.
-  exact (proj2 (reconnect_gives_extensions_safe
-                  ctx sub h Hh Hrec Hsparse Hext)).
+  split.
+  - now apply reconnect_preserves_extensions_avoid_rectangles.
+  - now apply reconnect_preserves_extensions_disjoint.
 Qed.
 
-(* 元の端点非交差、operate_point の単射性、再接続後の延長線の安全性から、
-   再接続後にも端点での非交差が保たれる。 *)
+(* 再接続後の端点衝突は、移動前の異なるパラメータでの衝突へ戻せる。 *)
+Lemma reconnect_endpoint_collision_reflects :
+  forall ctx sub h s t1 t2,
+    0 < h ->
+    all_reconnectable sub h ctx ->
+    In s ctx ->
+    extensions_safe (reconnect_segs sub h ctx) ->
+    t1 <> t2 ->
+    (extend (reconnect_segs sub h ctx) t1 = init (reconnect_one sub h s)
+     \/ extend (reconnect_segs sub h ctx) t1 = term (reconnect_one sub h s)) ->
+    extend (reconnect_segs sub h ctx) t1 =
+      extend (reconnect_segs sub h ctx) t2 ->
+    exists u1 u2,
+      u1 <> u2
+      /\ (extend ctx u1 = init s \/ extend ctx u1 = term s)
+      /\ extend ctx u1 = extend ctx u2.
+Admitted.
+
+(* 衝突反映と移動前の端点非交差から、再接続後の端点非交差を得る。 *)
+Lemma reconnect_one_preserves_endpoint_separation :
+  forall l s r sub h,
+    0 < h ->
+    all_reconnectable sub h (l ++ [s] ++ r) ->
+    sub_endpoints_do_not_cross l [s] r ->
+    extensions_safe (reconnect_segs sub h (l ++ [s] ++ r)) ->
+    sub_endpoints_do_not_cross
+      (reconnect_segs sub h l)
+      [reconnect_one sub h s]
+      (reconnect_segs sub h r).
+Proof.
+  intros l s r sub h Hh Hrec Hsep Hsafe t1 t2 Hneq Hend Heq.
+  set (ctx := l ++ [s] ++ r) in *.
+  assert (Hs : In s ctx).
+  { subst ctx. rewrite !in_app_iff. simpl. tauto. }
+  assert (Hnew :
+      reconnect_segs sub h ctx =
+      reconnect_segs sub h l ++ [reconnect_one sub h s] ++
+      reconnect_segs sub h r).
+  { subst ctx. rewrite !reconnect_segs_app. reflexivity. }
+  change
+    (extend
+       (reconnect_segs sub h l ++ [reconnect_one sub h s] ++
+        reconnect_segs sub h r) t1 = init (reconnect_one sub h s)
+     \/ extend
+       (reconnect_segs sub h l ++ [reconnect_one sub h s] ++
+        reconnect_segs sub h r) t1 = term (reconnect_one sub h s)) in Hend.
+  rewrite <- Hnew in Hend, Heq.
+  destruct (reconnect_endpoint_collision_reflects
+              ctx sub h s t1 t2 Hh Hrec Hs Hsafe Hneq Hend Heq)
+    as [u1 [u2 [Huneq [Huend Hueq]]]].
+  exact (Hsep u1 u2 Huneq Huend Hueq).
+Qed.
+
+(* 各セグメント出現に対する端点分離を、再接続列全体へ持ち上げる。 *)
 Lemma reconnect_preserves_segment_endpoints_separated :
   forall ctx sub h,
     0 < h ->
@@ -1239,11 +1484,71 @@ Lemma reconnect_preserves_segment_endpoints_separated :
     segment_endpoints_separated ctx ->
     extensions_safe (reconnect_segs sub h ctx) ->
     segment_endpoints_separated (reconnect_segs sub h ctx).
-Admitted.
+Proof.
+  intros ctx sub h Hh Hrec Hsep Hsafe l' s' r' Heq.
+  destruct (reconnect_segs_split_inv sub h ctx l' s' r' Heq)
+    as [l [s [r [Hctx [Hl [Hs Hr]]]]]].
+  subst l' s' r'.
+  apply reconnect_one_preserves_endpoint_separation.
+  - exact Hh.
+  - rewrite <- Hctx. exact Hrec.
+  - apply (Hsep l s r Hctx).
+  - change (extensions_safe (reconnect_segs sub h (l ++ [s] ++ r))).
+    rewrite <- Hctx. exact Hsafe.
+Qed.
 
 (* ---- 全域疎性の保存 -------------------------------------------- *)
 
-(* 三種類の分離条件を統合し、再接続が全域疎性を保存することを示す。 *)
+(* 対象以外の再接続セグメントは、対象セグメントの再接続後の長方形を避ける。 *)
+Lemma reconnect_other_segments_avoid_one_rectangle :
+  forall l s r sub h p,
+    0 < h ->
+    all_reconnectable sub h (l ++ [s] ++ r) ->
+    sparse_embedding (l ++ [s] ++ r) ->
+    onSegmentlist
+      (reconnect_segs sub h l ++ reconnect_segs sub h r) p ->
+    ~ in_rect (rect_of [reconnect_one sub h s]) p.
+Admitted.
+
+(* 他のセグメント・両延長線・端点非交差を合わせ、一セグメント周りの疎性を保存する。 *)
+Lemma reconnect_one_preserves_sparse_around :
+  forall l s r sub h,
+    0 < h ->
+    all_reconnectable sub h (l ++ [s] ++ r) ->
+    sparse_embedding (l ++ [s] ++ r) ->
+    extensions_disjoint (l ++ [s] ++ r) ->
+    sparse_around
+      (reconnect_segs sub h l)
+      [reconnect_one sub h s]
+      (reconnect_segs sub h r).
+Proof.
+  intros l s r sub h Hh Hrec Hsparse Hext.
+  pose proof (reconnect_gives_extensions_safe
+                (l ++ [s] ++ r) sub h Hh Hrec Hsparse Hext) as Hsafe.
+  assert (Hnew :
+      reconnect_segs sub h (l ++ [s] ++ r) =
+      reconnect_segs sub h l ++ [reconnect_one sub h s] ++
+      reconnect_segs sub h r).
+  { rewrite !reconnect_segs_app. reflexivity. }
+  split.
+  - intros p Houtside. unfold outside_sub in Houtside.
+    destruct Houtside as [Hhead | [Hsides | Hlast]].
+    + eapply reconnect_extension_avoids_one_rectangle; eauto.
+      * rewrite !in_app_iff. simpl. tauto.
+      * left. now rewrite Hnew.
+    + exact (reconnect_other_segments_avoid_one_rectangle
+               l s r sub h p Hh Hrec Hsparse Hsides).
+    + eapply reconnect_extension_avoids_one_rectangle; eauto.
+      * rewrite !in_app_iff. simpl. tauto.
+      * right. now rewrite Hnew.
+  - apply reconnect_one_preserves_endpoint_separation.
+    + exact Hh.
+    + exact Hrec.
+    + exact (proj2 (Hsparse l s r eq_refl)).
+    + exact Hsafe.
+Qed.
+
+(* 再接続列の一点分解を元へ戻し、一セグメント周りの保存を列全体へ持ち上げる。 *)
 Lemma reconnect_preserves_sparse :
   forall ctx sub h,
     0 < h ->
@@ -1252,23 +1557,73 @@ Lemma reconnect_preserves_sparse :
     extensions_disjoint ctx ->
     sparse_embedding (reconnect_segs sub h ctx).
 Proof.
-  intros ctx sub h Hh Hrec Hsparse Hext.
-  pose proof (reconnect_gives_extensions_safe
-                ctx sub h Hh Hrec Hsparse Hext) as Hsafe.
-  apply geometric_sparse_embedding.
-  - apply reconnect_segs_in_rect_or_endpoints. exact Hrec.
-  - apply reconnect_preserves_segment_rectangles_separated;
-      [exact Hh | exact Hrec |].
-    now apply sparse_embedding_segment_rectangles_separated.
-  - exact (proj1 Hsafe).
-  - apply reconnect_preserves_segment_endpoints_separated.
-    + exact Hh.
-    + exact Hrec.
-    + now apply sparse_embedding_segment_endpoints_separated.
-    + exact Hsafe.
+  intros ctx sub h Hh Hrec Hsparse Hext l' s' r' Heq.
+  destruct (reconnect_segs_split_inv sub h ctx l' s' r' Heq)
+    as [l [s [r [Hctx [Hl [Hs Hr]]]]]].
+  subst l' s' r'.
+  apply reconnect_one_preserves_sparse_around.
+  - exact Hh.
+  - rewrite <- Hctx. exact Hrec.
+  - rewrite <- Hctx. exact Hsparse.
+  - rewrite <- Hctx. exact Hext.
+Qed.
+
+Lemma reconnect_preserves_sparse_split :
+  forall l sub r h,
+    0 < h ->
+    all_reconnectable sub h (l ++ sub ++ r) ->
+    sparse_embedding (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    sparse_embedding
+      (reconnect_segs sub h l ++
+       reconnect_segs sub h sub ++
+       reconnect_segs sub h r).
+Proof.
+  intros l sub r h Hh Hrec Hsparse Hext.
+  rewrite <- !reconnect_segs_app.
+  now apply reconnect_preserves_sparse.
 Qed.
 
 (* ---- 指定部分列の長方形からの退避 ------------------------------ *)
+
+Lemma operate_sub_endpoint :
+  forall sub h p,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    endpoint_of sub p ->
+    operate_point sub h p = p.
+Proof.
+  intros sub h p Hne Hconn Hx Hend.
+  apply operate_point_RegFix.
+  now apply classify_sub_endpoint.
+Qed.
+
+Lemma reconnect_segs_init_hd :
+  forall sub h,
+    sub <> [] ->
+    all_reconnectable sub h sub ->
+    init (hd_segment (reconnect_segs sub h sub)) =
+    operate_point sub h (init (hd_segment sub)).
+Proof.
+  intros sub h Hne Hrec.
+  unfold reconnect_segs. rewrite hd_map_nonnil by exact Hne.
+  apply reconnect_one_init, Hrec.
+  destruct sub as [|s sub']; [contradiction |]. simpl. auto.
+Qed.
+
+Lemma reconnect_segs_term_last :
+  forall sub h,
+    sub <> [] ->
+    all_reconnectable sub h sub ->
+    term (last_segment (reconnect_segs sub h sub)) =
+    operate_point sub h (term (last_segment sub)).
+Proof.
+  intros sub h Hne Hrec.
+  unfold reconnect_segs. rewrite last_map_nonnil by exact Hne.
+  apply reconnect_one_term, Hrec.
+  apply last_In. exact Hne.
+Qed.
 
 (* sub の全端点は RegFix なので、再接続後も sub の始点・終点、従って
    それらを対角線とする長方形は変わらない。 *)
@@ -1285,35 +1640,251 @@ Proof.
   { destruct sub as [|s sub']; [contradiction |]. simpl. now left. }
   assert (HlastIn : In (last_segment sub) sub).
   { apply last_In. exact Hne. }
-  assert (HfixInit : classify sub (init (hd_segment sub)) = RegFix).
-  { apply classify_sub_endpoint; try assumption.
-    exists (hd_segment sub). split; [exact HhdIn |]. now left. }
-  assert (HfixTerm : classify sub (term (last_segment sub)) = RegFix).
-  { apply classify_sub_endpoint; try assumption.
-    exists (last_segment sub). split; [exact HlastIn |]. now right. }
   assert (HopInit :
       operate_point sub h (init (hd_segment sub)) = init (hd_segment sub)).
-  { apply operate_point_RegFix. exact HfixInit. }
+  { apply operate_sub_endpoint; try assumption.
+    exists (hd_segment sub). split; [exact HhdIn |]. now left. }
   assert (HopTerm :
       operate_point sub h (term (last_segment sub)) = term (last_segment sub)).
-  { apply operate_point_RegFix. exact HfixTerm. }
-  assert (HrecHd := HrecSub (hd_segment sub) HhdIn).
-  assert (HrecLast := HrecSub (last_segment sub) HlastIn).
-  unfold reconnectable_after in HrecHd, HrecLast.
-  unfold reconnect_segs, rect_of.
-  rewrite (hd_map_nonnil (reconnect_one sub h) sub Hne).
-  rewrite (last_map_nonnil (reconnect_one sub h) sub Hne).
-  unfold reconnect_one.
-  rewrite reconnect_init by exact HrecHd.
-  rewrite reconnect_term by exact HrecLast.
+  { apply operate_sub_endpoint; try assumption.
+    exists (last_segment sub). split; [exact HlastIn |]. now right. }
+  unfold rect_of.
+  rewrite reconnect_segs_init_hd by assumption.
+  rewrite reconnect_segs_term_last by assumption.
   rewrite HopInit, HopTerm. reflexivity.
 Qed.
 
-(* h が sub の高さより大きければ、上下へ動かした端点から再接続した
-   l, r と両延長線は、元の sub の長方形へ入らない。 *)
-(* 両端点が同じ領域なら、端点長方形は 0, h, -h のいずれかだけ
-   鉛直移動する。外部セグメントについては移動後の長方形全体が
-   sub の長方形を避ける。 *)
+(* 端点がともに Rc より上なら、その端点長方形も Rc を避ける。 *)
+Lemma endpoint_rect_above_avoids_rect :
+  forall Rc s p,
+    ry1 Rc < snd (init s) ->
+    ry1 Rc < snd (term s) ->
+    in_segment_rect_or_endpoints s p ->
+    ~ in_rect Rc p.
+Proof.
+  intros Rc s p Hinit Hterm Hp Hin.
+  unfold in_segment_rect_or_endpoints in Hp.
+  unfold in_rect in Hin. destruct Hin as [_ [_ Hy1]].
+  destruct Hp as [Hp | [Hp | Hinside]].
+  - subst p. lra.
+  - subst p. lra.
+  - unfold in_rect, rect_of in Hinside. simpl in Hinside.
+    destruct Hinside as [_ [Hpy _]].
+    change (Rmin (snd (init s)) (snd (term s)) < snd p) in Hpy.
+    destruct (Rle_dec (snd (init s)) (snd (term s))) as [Hle | Hnle].
+    + rewrite Rmin_left in Hpy by exact Hle. lra.
+    + rewrite Rmin_right in Hpy by lra. lra.
+Qed.
+
+(* 端点がともに Rc より下なら、その端点長方形も Rc を避ける。 *)
+Lemma endpoint_rect_below_avoids_rect :
+  forall Rc s p,
+    snd (init s) < ry0 Rc ->
+    snd (term s) < ry0 Rc ->
+    in_segment_rect_or_endpoints s p ->
+    ~ in_rect Rc p.
+Proof.
+  intros Rc s p Hinit Hterm Hp Hin.
+  unfold in_segment_rect_or_endpoints in Hp.
+  unfold in_rect in Hin. destruct Hin as [_ [Hy0 _]].
+  destruct Hp as [Hp | [Hp | Hinside]].
+  - subst p. lra.
+  - subst p. lra.
+  - unfold in_rect, rect_of in Hinside. simpl in Hinside.
+    destruct Hinside as [_ [_ Hpy]].
+    change (snd p < Rmax (snd (init s)) (snd (term s))) in Hpy.
+    destruct (Rle_dec (snd (init s)) (snd (term s))) as [Hle | Hnle].
+    + rewrite Rmax_right in Hpy by exact Hle. lra.
+    + rewrite Rmax_left in Hpy by lra. lra.
+Qed.
+
+(* RegFix の外側セグメントの両端点は、sub の x 範囲の同じ外側にある。 *)
+Lemma fixed_external_endpoints_same_x_side :
+  forall l sub r s,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    In s (l ++ r) ->
+    classify sub (init s) = RegFix ->
+    classify sub (term s) = RegFix ->
+    (fst (init s) <= rx0 (rect_of sub)
+     /\ fst (term s) <= rx0 (rect_of sub))
+    \/ (rx1 (rect_of sub) <= fst (init s)
+        /\ rx1 (rect_of sub) <= fst (term s)).
+Admitted.
+
+(* 両端点が Rc の左側なら、端点長方形全体も Rc を避ける。 *)
+Lemma endpoint_rect_left_avoids_rect :
+  forall Rc s p,
+    fst (init s) <= rx0 Rc ->
+    fst (term s) <= rx0 Rc ->
+    in_segment_rect_or_endpoints s p ->
+    ~ in_rect Rc p.
+Proof.
+  intros Rc s p Hinit Hterm Hp Hin.
+  unfold in_segment_rect_or_endpoints in Hp.
+  unfold in_rect in Hin. destruct Hin as [[Hx0 _] _].
+  destruct Hp as [Hp | [Hp | Hinside]].
+  - subst p. lra.
+  - subst p. lra.
+  - unfold in_rect, rect_of in Hinside. simpl in Hinside.
+    destruct Hinside as [[_ Hpx] _].
+    change (fst p < Rmax (fst (init s)) (fst (term s))) in Hpx.
+    destruct (Rle_dec (fst (init s)) (fst (term s))) as [Hle | Hnle].
+    + rewrite Rmax_right in Hpx by exact Hle. lra.
+    + rewrite Rmax_left in Hpx by lra. lra.
+Qed.
+
+(* 両端点が Rc の右側なら、端点長方形全体も Rc を避ける。 *)
+Lemma endpoint_rect_right_avoids_rect :
+  forall Rc s p,
+    rx1 Rc <= fst (init s) ->
+    rx1 Rc <= fst (term s) ->
+    in_segment_rect_or_endpoints s p ->
+    ~ in_rect Rc p.
+Proof.
+  intros Rc s p Hinit Hterm Hp Hin.
+  unfold in_segment_rect_or_endpoints in Hp.
+  unfold in_rect in Hin. destruct Hin as [[_ Hx1] _].
+  destruct Hp as [Hp | [Hp | Hinside]].
+  - subst p. lra.
+  - subst p. lra.
+  - unfold in_rect, rect_of in Hinside. simpl in Hinside.
+    destruct Hinside as [[Hpx _] _].
+    change (Rmin (fst (init s)) (fst (term s)) < fst p) in Hpx.
+    destruct (Rle_dec (fst (init s)) (fst (term s))) as [Hle | Hnle].
+    + rewrite Rmin_left in Hpx by exact Hle. lra.
+    + rewrite Rmin_right in Hpx by lra. lra.
+Qed.
+
+(* RegFix では両端点も sub も動かないため、再接続長方形の退避が従う。 *)
+Lemma reconnect_one_fixed_endpoint_rect_avoids_sub_rect :
+  forall l sub r h s,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    reconnectable_after sub h s ->
+    In s (l ++ r) ->
+    forall p,
+      classify sub (init s) = RegFix ->
+      classify sub (term s) = RegFix ->
+      in_segment_rect_or_endpoints (reconnect_one sub h s) p ->
+      ~ in_rect (rect_of sub) p.
+Proof.
+  intros l sub r h s Hne Hconn Hx Hsparse Hrec Hs p Hinit Hterm Hp.
+  pose proof (fixed_external_endpoints_same_x_side
+                l sub r s Hne Hconn Hx Hsparse Hs Hinit Hterm) as Hside.
+  destruct Hside as [[Hi Ht] | [Hi Ht]].
+  - apply (endpoint_rect_left_avoids_rect
+             (rect_of sub) (reconnect_one sub h s) p); [| | exact Hp].
+    + rewrite reconnect_one_init by exact Hrec.
+      now rewrite operate_point_RegFix by exact Hinit.
+    + rewrite reconnect_one_term by exact Hrec.
+      now rewrite operate_point_RegFix by exact Hterm.
+  - apply (endpoint_rect_right_avoids_rect
+             (rect_of sub) (reconnect_one sub h s) p); [| | exact Hp].
+    + rewrite reconnect_one_init by exact Hrec.
+      now rewrite operate_point_RegFix by exact Hinit.
+    + rewrite reconnect_one_term by exact Hrec.
+      now rewrite operate_point_RegFix by exact Hterm.
+Qed.
+
+(* RegUp の端点は h だけ上へ移り、端点長方形全体が sub より上に来る。 *)
+Lemma reconnect_one_up_endpoint_rect_avoids_sub_rect :
+  forall sub h s p,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    h_large h sub ->
+    reconnectable_after sub h s ->
+    classify sub (init s) = RegUp ->
+    classify sub (term s) = RegUp ->
+    in_segment_rect_or_endpoints (reconnect_one sub h s) p ->
+    ~ in_rect (rect_of sub) p.
+Proof.
+  intros sub h s p Hne Hconn Hx [Hh Hheight] Hrec Hinit Hterm Hp.
+  apply (endpoint_rect_above_avoids_rect
+           (rect_of sub) (reconnect_one sub h s) p); [| | exact Hp].
+  - rewrite reconnect_one_init by exact Hrec.
+    unfold operate_point. rewrite Hinit. simpl.
+    change (ry1 (rect_of sub) < snd (init s) + h).
+    pose proof (classify_RegUp_char sub (init s) Hinit).
+    pose proof (reference_y_in_bbox sub (fst (init s)) Hne Hconn Hx)
+      as [Href0 Href1].
+    pose proof (rect_of_in_bbox sub Hne) as [Hrect0 Hrect1].
+    unfold rect_height in Hheight. lra.
+  - rewrite reconnect_one_term by exact Hrec.
+    unfold operate_point. rewrite Hterm. simpl.
+    change (ry1 (rect_of sub) < snd (term s) + h).
+    pose proof (classify_RegUp_char sub (term s) Hterm).
+    pose proof (reference_y_in_bbox sub (fst (term s)) Hne Hconn Hx)
+      as [Href0 Href1].
+    pose proof (rect_of_in_bbox sub Hne) as [Hrect0 Hrect1].
+    unfold rect_height in Hheight. lra.
+Qed.
+
+(* RegDown の端点は h だけ下へ移り、端点長方形全体が sub より下に来る。 *)
+Lemma reconnect_one_down_endpoint_rect_avoids_sub_rect :
+  forall sub h s p,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    h_large h sub ->
+    reconnectable_after sub h s ->
+    classify sub (init s) = RegDown ->
+    classify sub (term s) = RegDown ->
+    in_segment_rect_or_endpoints (reconnect_one sub h s) p ->
+    ~ in_rect (rect_of sub) p.
+Proof.
+  intros sub h s p Hne Hconn Hx [Hh Hheight] Hrec Hinit Hterm Hp.
+  apply (endpoint_rect_below_avoids_rect
+           (rect_of sub) (reconnect_one sub h s) p); [| | exact Hp].
+  - rewrite reconnect_one_init by exact Hrec.
+    unfold operate_point. rewrite Hinit. simpl.
+    change (snd (init s) - h < ry0 (rect_of sub)).
+    pose proof (classify_RegDown_char sub (init s) Hinit).
+    pose proof (reference_y_in_bbox sub (fst (init s)) Hne Hconn Hx)
+      as [Href0 Href1].
+    pose proof (rect_of_in_bbox sub Hne) as [Hrect0 Hrect1].
+    unfold rect_height in Hheight. lra.
+  - rewrite reconnect_one_term by exact Hrec.
+    unfold operate_point. rewrite Hterm. simpl.
+    change (snd (term s) - h < ry0 (rect_of sub)).
+    pose proof (classify_RegDown_char sub (term s) Hterm).
+    pose proof (reference_y_in_bbox sub (fst (term s)) Hne Hconn Hx)
+      as [Href0 Href1].
+    pose proof (rect_of_in_bbox sub Hne) as [Hrect0 Hrect1].
+    unfold rect_height in Hheight. lra.
+Qed.
+
+(* 三つの同一領域の場合を、再接続後の端点長方形についてまとめる。 *)
+Lemma reconnect_one_same_region_endpoint_rect_avoids_sub_rect :
+  forall l sub r h s,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    all_reconnectable sub h (l ++ sub ++ r) ->
+    In s (l ++ r) ->
+    classify sub (init s) = classify sub (term s) ->
+    forall p,
+      in_segment_rect_or_endpoints (reconnect_one sub h s) p ->
+      ~ in_rect (rect_of sub) p.
+Proof.
+  intros l sub r h s Hne Hconn Hx Hh Hsparse Hrec Hs Heq p Hp.
+  assert (Hsctx : In s (l ++ sub ++ r)).
+  { rewrite !in_app_iff. rewrite in_app_iff in Hs. tauto. }
+  specialize (Hrec s Hsctx).
+  destruct (classify sub (init s)) eqn:Hinit.
+  - eapply reconnect_one_fixed_endpoint_rect_avoids_sub_rect; eauto.
+  - eapply reconnect_one_up_endpoint_rect_avoids_sub_rect; eauto.
+  - eapply reconnect_one_down_endpoint_rect_avoids_sub_rect; eauto.
+Qed.
+
+(* セグメント包含公理により、端点長方形の退避をセグメント自身へ移す。 *)
 Lemma reconnect_one_same_region_avoids_sub_rect :
   forall l sub r h s,
     sub <> [] ->
@@ -1327,39 +1898,87 @@ Lemma reconnect_one_same_region_avoids_sub_rect :
     forall p,
       onSegment (reconnect_one sub h s) p ->
       ~ in_rect (rect_of sub) p.
-Admitted.
-
-(* sub の外側にあるセグメント上の点は、疎性によりそのセグメントの
-   開長方形へ入った sub 上の点とは一致し得ない。 *)
-Lemma sparse_side_segment_avoids_sub_points :
-  forall l sub r s p,
-    sparse_embedding (l ++ sub ++ r) ->
-    In s (l ++ r) ->
-    onSegmentlist sub p ->
-    ~ in_rect (rect_of [s]) p.
 Proof.
-  intros l sub r s p Hsparse Hs Hp Hin.
-  rewrite in_app_iff in Hs. destruct Hs as [Hs | Hs].
-  - apply in_split in Hs. destruct Hs as [l1 [l2 Hl]]. subst l.
-    assert (Heq :
-        (l1 ++ s :: l2) ++ sub ++ r =
-        l1 ++ [s] ++ (l2 ++ sub ++ r)).
-    { rewrite <- !app_assoc. reflexivity. }
-    pose proof (proj1 (Hsparse l1 s (l2 ++ sub ++ r) Heq) p) as Havoid.
-    apply Havoid; clear Havoid. unfold outside_sub. right; left.
-    destruct Hp as [t [Ht Htp]]. exists t. split; [| exact Htp].
-    repeat rewrite in_app_iff. tauto.
-    exact Hin.
-  - apply in_split in Hs. destruct Hs as [r1 [r2 Hr]]. subst r.
-    assert (Heq :
-        l ++ sub ++ (r1 ++ s :: r2) =
-        (l ++ sub ++ r1) ++ [s] ++ r2).
-    { rewrite <- !app_assoc. reflexivity. }
-    pose proof (proj1 (Hsparse (l ++ sub ++ r1) s r2 Heq) p) as Havoid.
-    apply Havoid; clear Havoid. unfold outside_sub. right; left.
-    destruct Hp as [t [Ht Htp]]. exists t. split; [| exact Htp].
-    repeat rewrite in_app_iff. tauto.
-    exact Hin.
+  intros l sub r h s Hne Hconn Hx Hh Hsparse Hrec Hs Heq p Hp.
+  eapply reconnect_one_same_region_endpoint_rect_avoids_sub_rect; eauto.
+  now apply segment_in_rect_or_endpoints.
+Qed.
+
+Definition segment_same_x_side (Rc : Rect) (s : Segment) : Prop :=
+  (fst (init s) <= rx0 Rc /\ fst (term s) <= rx0 Rc)
+  \/ (rx1 Rc <= fst (init s) /\ rx1 Rc <= fst (term s)).
+
+Lemma segment_same_x_side_dec :
+  forall Rc s, {segment_same_x_side Rc s} + {~ segment_same_x_side Rc s}.
+Proof.
+  intros Rc s. unfold segment_same_x_side.
+  destruct (Rle_dec (fst (init s)) (rx0 Rc));
+  destruct (Rle_dec (fst (term s)) (rx0 Rc));
+  destruct (Rle_dec (rx1 Rc) (fst (init s)));
+  destruct (Rle_dec (rx1 Rc) (fst (term s)));
+  first [left; tauto | right; tauto].
+Qed.
+
+(* 両端点が Rc の左側なら、端点長方形内のセグメントも Rc を避ける。 *)
+Lemma segment_left_of_rect_avoids_rect :
+  forall Rc s,
+    in_rect_or_endpoints [s] [s] ->
+    fst (init s) <= rx0 Rc ->
+    fst (term s) <= rx0 Rc ->
+    forall p, onSegment s p -> ~ in_rect Rc p.
+Proof.
+  intros Rc s Hcontained Hi0 Ht0 p Hp Hin.
+  assert (Hpon : onSegmentlist [s] p).
+  { exists s. simpl. auto. }
+  specialize (Hcontained p Hpon).
+  unfold in_rect in Hin. destruct Hin as [[Hx0 Hx1] _].
+  destruct Hcontained as [Hpinit | [Hpterm | Hpbox]].
+  - change (p = init s) in Hpinit. subst p. lra.
+  - change (p = term s) in Hpterm. subst p. lra.
+  - unfold in_rect, rect_of in Hpbox. simpl in Hpbox.
+    destruct Hpbox as [[_ Hpx] _].
+    change (fst p < Rmax (fst (init s)) (fst (term s))) in Hpx.
+    assert (Hmax : Rmax (fst (init s)) (fst (term s)) <= rx0 Rc).
+    { apply Rmax_lub; assumption. }
+    lra.
+Qed.
+
+(* 両端点が Rc の右側なら、端点長方形内のセグメントも Rc を避ける。 *)
+Lemma segment_right_of_rect_avoids_rect :
+  forall Rc s,
+    in_rect_or_endpoints [s] [s] ->
+    rx1 Rc <= fst (init s) ->
+    rx1 Rc <= fst (term s) ->
+    forall p, onSegment s p -> ~ in_rect Rc p.
+Proof.
+  intros Rc s Hcontained Hi1 Ht1 p Hp Hin.
+  assert (Hpon : onSegmentlist [s] p).
+  { exists s. simpl. auto. }
+  specialize (Hcontained p Hpon).
+  unfold in_rect in Hin. destruct Hin as [[Hx0 Hx1] _].
+  destruct Hcontained as [Hpinit | [Hpterm | Hpbox]].
+  - change (p = init s) in Hpinit. subst p. lra.
+  - change (p = term s) in Hpterm. subst p. lra.
+  - unfold in_rect, rect_of in Hpbox. simpl in Hpbox.
+    destruct Hpbox as [[Hpx _] _].
+    change (Rmin (fst (init s)) (fst (term s)) < fst p) in Hpx.
+    assert (Hmin : rx1 Rc <= Rmin (fst (init s)) (fst (term s))).
+    { apply Rmin_glb; assumption. }
+    lra.
+Qed.
+
+(* 左右それぞれの補題をまとめ、セグメントが Rc と同じ x 側なら交わらないと示す。 *)
+Lemma segment_same_x_side_avoids_rect :
+  forall Rc s,
+    in_rect_or_endpoints [s] [s] ->
+    segment_same_x_side Rc s ->
+    forall p, onSegment s p -> ~ in_rect Rc p.
+Proof.
+  intros Rc s Hcontained [[Hi0 Ht0] | [Hi1 Ht1]] p Hp.
+  - now apply (segment_left_of_rect_avoids_rect
+                 Rc s Hcontained Hi0 Ht0 p Hp).
+  - now apply (segment_right_of_rect_avoids_rect
+                 Rc s Hcontained Hi1 Ht1 p Hp).
 Qed.
 
 (* 連結な x 単調曲線が二点を異なる領域に分けるなら、両端が同じ x 側に
@@ -1370,11 +1989,7 @@ Lemma cross_region_intermediate_value :
     connected sub ->
     x_monotone_segs sub ->
     classify sub (init s) <> classify sub (term s) ->
-    ~ ((fst (init s) <= rx0 (rect_of sub)
-        /\ fst (term s) <= rx0 (rect_of sub))
-       \/
-       (rx1 (rect_of sub) <= fst (init s)
-        /\ rx1 (rect_of sub) <= fst (term s))) ->
+    ~ segment_same_x_side (rect_of sub) s ->
     exists p,
       onSegmentlist sub p /\ in_rect (rect_of [s]) p.
 Admitted.
@@ -1389,31 +2004,10 @@ Lemma cross_region_endpoints_same_x_side :
     sparse_embedding (l ++ sub ++ r) ->
     In s (l ++ r) ->
     classify sub (init s) <> classify sub (term s) ->
-    (fst (init s) <= rx0 (rect_of sub)
-     /\ fst (term s) <= rx0 (rect_of sub))
-    \/
-    (rx1 (rect_of sub) <= fst (init s)
-     /\ rx1 (rect_of sub) <= fst (term s)).
+    segment_same_x_side (rect_of sub) s.
 Proof.
   intros l sub r s Hne Hconn Hx Hsparse Hs Hcross.
-  assert (Hdec :
-    {((fst (init s) <= rx0 (rect_of sub)
-       /\ fst (term s) <= rx0 (rect_of sub))
-      \/
-      (rx1 (rect_of sub) <= fst (init s)
-       /\ rx1 (rect_of sub) <= fst (term s)))}
-    +
-    {~ ((fst (init s) <= rx0 (rect_of sub)
-         /\ fst (term s) <= rx0 (rect_of sub))
-        \/
-        (rx1 (rect_of sub) <= fst (init s)
-         /\ rx1 (rect_of sub) <= fst (term s)))}).
-  { destruct (Rle_dec (fst (init s)) (rx0 (rect_of sub)));
-    destruct (Rle_dec (fst (term s)) (rx0 (rect_of sub)));
-    destruct (Rle_dec (rx1 (rect_of sub)) (fst (init s)));
-    destruct (Rle_dec (rx1 (rect_of sub)) (fst (term s)));
-    first [left; tauto | right; tauto]. }
-  destruct Hdec as [Hside | Hnot].
+  destruct (segment_same_x_side_dec (rect_of sub) s) as [Hside | Hnot].
   - exact Hside.
   - exfalso.
     destruct (cross_region_intermediate_value
@@ -1439,66 +2033,22 @@ Lemma reconnect_one_cross_region_avoids_sub_rect :
       onSegment (reconnect_one sub h s) p ->
       ~ in_rect (rect_of sub) p.
 Proof.
-  intros l sub r h s Hne Hconn Hx Hsparse HrecAll Hs Hcross p Hp Hin.
+  intros l sub r h s Hne Hconn Hx Hsparse HrecAll Hs Hcross p Hp.
   pose proof (cross_region_endpoints_same_x_side
                 l sub r s Hne Hconn Hx Hsparse Hs Hcross) as Hside.
   assert (Hsctx : In s (l ++ sub ++ r)).
   { rewrite !in_app_iff. rewrite in_app_iff in Hs. tauto. }
   specialize (HrecAll s Hsctx).
-  pose proof (reconnect_one_in_rect_or_endpoints sub h s HrecAll) as Hinside.
-  specialize (Hinside p).
-  assert (Hpon : onSegmentlist [reconnect_one sub h s] p).
-  { exists (reconnect_one sub h s). simpl. auto. }
-  specialize (Hinside Hpon).
-  unfold in_rect in Hin.
-  destruct Hin as [[Hsubx0 Hsubx1] _].
-  destruct Hside as [[Hi0 Ht0] | [Hi1 Ht1]].
-  - destruct Hinside as [Hpinit | [Hpterm | Hpbox]].
-    + change (p = init (reconnect_one sub h s)) in Hpinit.
-      subst p. unfold reconnect_one in Hsubx0.
-      rewrite reconnect_init in Hsubx0 by exact HrecAll.
-      unfold operate_point in Hsubx0. rewrite shift_fst in Hsubx0. lra.
-    + change (p = term (reconnect_one sub h s)) in Hpterm.
-      subst p. unfold reconnect_one in Hsubx0.
-      rewrite reconnect_term in Hsubx0 by exact HrecAll.
-      unfold operate_point in Hsubx0. rewrite shift_fst in Hsubx0. lra.
-    + unfold in_rect, rect_of in Hpbox. simpl in Hpbox.
-      destruct Hpbox as [[_ Hpx] _].
-      change
-        (fst p <
-         Rmax (fst (init (reconnect_one sub h s)))
-              (fst (term (reconnect_one sub h s)))) in Hpx.
-      unfold reconnect_one in Hpx.
-      rewrite reconnect_init, reconnect_term in Hpx by exact HrecAll.
-      unfold operate_point in Hpx. rewrite !shift_fst in Hpx.
-      assert (Hmax :
-          Rmax (fst (init s)) (fst (term s)) <= rx0 (rect_of sub)).
-      { apply Rmax_lub; assumption. }
-      lra.
-  - destruct Hinside as [Hpinit | [Hpterm | Hpbox]].
-    + change (p = init (reconnect_one sub h s)) in Hpinit.
-      subst p. unfold reconnect_one in Hsubx1.
-      rewrite reconnect_init in Hsubx1 by exact HrecAll.
-      unfold operate_point in Hsubx1. rewrite shift_fst in Hsubx1. lra.
-    + change (p = term (reconnect_one sub h s)) in Hpterm.
-      subst p. unfold reconnect_one in Hsubx1.
-      rewrite reconnect_term in Hsubx1 by exact HrecAll.
-      unfold operate_point in Hsubx1. rewrite shift_fst in Hsubx1. lra.
-    + unfold in_rect, rect_of in Hpbox. simpl in Hpbox.
-      destruct Hpbox as [[Hpx _] _].
-      change
-        (Rmin (fst (init (reconnect_one sub h s)))
-              (fst (term (reconnect_one sub h s))) < fst p) in Hpx.
-      unfold reconnect_one in Hpx.
-      rewrite reconnect_init, reconnect_term in Hpx by exact HrecAll.
-      unfold operate_point in Hpx. rewrite !shift_fst in Hpx.
-      assert (Hmin :
-          rx1 (rect_of sub) <= Rmin (fst (init s)) (fst (term s))).
-      { apply Rmin_glb; assumption. }
-      lra.
+  apply (segment_same_x_side_avoids_rect
+           (rect_of sub) (reconnect_one sub h s)).
+  - now apply reconnect_one_in_rect_or_endpoints.
+  - unfold segment_same_x_side in *.
+    rewrite reconnect_one_init, reconnect_one_term by exact HrecAll.
+    unfold operate_point. rewrite !shift_fst. exact Hside.
+  - exact Hp.
 Qed.
 
-(* 端点が同一領域か否かで場合分けし、外側の一辺が sub の矩形を避けることを得る。 *)
+(* 端点が同一領域か否かで場合分けし、外側セグメントが sub の矩形を避けると示す。 *)
 Lemma reconnect_one_avoids_sub_rect :
   forall l sub r h s,
     sub <> [] ->
@@ -1520,6 +2070,7 @@ Proof.
   - eapply reconnect_one_cross_region_avoids_sub_rect; eauto.
 Qed.
 
+(* 再接続列上の点を元のセグメントへ戻し、一セグメント版の結果を列へ持ち上げる。 *)
 Lemma reconnect_sides_avoid_sub_rect :
   forall l sub r h p,
     sub <> [] ->
@@ -1538,13 +2089,13 @@ Proof.
   eapply reconnect_one_avoids_sub_rect; eauto.
 Qed.
 
-Lemma reconnect_extensions_avoid_sub_rect :
+(* h_large による移動後、再接続列の両延長線は sub の長方形を避ける。 *)
+Lemma reconnect_extension_avoids_sub_rect :
   forall l sub r h p,
     connected (l ++ sub ++ r) ->
     well_split l sub r ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
-    extensions_disjoint (l ++ sub ++ r) ->
     (onHead_extend (reconnect_segs sub h (l ++ sub ++ r)) p
      \/ onLast_extend (reconnect_segs sub h (l ++ sub ++ r)) p) ->
     ~ in_rect (rect_of sub) p.
@@ -1557,7 +2108,6 @@ Lemma h_large_reconnect_avoids_sub_rect :
     well_split l sub r ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
-    extensions_disjoint (l ++ sub ++ r) ->
     forall p,
       outside_sub
         (reconnect_segs sub h l)
@@ -1565,7 +2115,7 @@ Lemma h_large_reconnect_avoids_sub_rect :
         (reconnect_segs sub h r) p ->
       ~ in_rect (rect_of sub) p.
 Proof.
-  intros l sub r h Hconn Hws Hh Hsparse Hext p Houtside.
+  intros l sub r h Hconn Hws Hh Hsparse p Houtside.
   pose proof Hws as [Hsubne [Hx _]].
   assert (HconnSub : connected sub).
   { eapply connected_middle. exact Hconn. }
@@ -1573,14 +2123,14 @@ Proof.
                 l sub r h Hsubne HconnSub Hx Hh Hsparse) as Hrec.
   unfold outside_sub in Houtside.
   destruct Houtside as [Hhead | [Hsides | Hlast]].
-  - apply (reconnect_extensions_avoid_sub_rect
-             l sub r h p Hconn Hws Hh Hsparse Hext).
+  - apply (reconnect_extension_avoids_sub_rect
+             l sub r h p Hconn Hws Hh Hsparse).
     left. rewrite reconnect_segs_app, reconnect_segs_app. exact Hhead.
   - apply (reconnect_sides_avoid_sub_rect
              l sub r h p Hsubne HconnSub Hx Hh Hsparse Hrec).
     rewrite reconnect_segs_app. exact Hsides.
-  - apply (reconnect_extensions_avoid_sub_rect
-             l sub r h p Hconn Hws Hh Hsparse Hext).
+  - apply (reconnect_extension_avoids_sub_rect
+             l sub r h p Hconn Hws Hh Hsparse).
     right. rewrite reconnect_segs_app, reconnect_segs_app. exact Hlast.
 Qed.
 
@@ -1614,18 +2164,13 @@ Proof.
         (reconnect_segs sub h l ++
          reconnect_segs sub h sub ++
          reconnect_segs sub h r)).
-  { rewrite <- !reconnect_segs_app.
-    apply reconnect_preserves_sparse; assumption. }
+  { now apply reconnect_preserves_sparse_split. }
   split.
   - intros p Houtside.
     rewrite (reconnect_sub_rect sub h Hsubne HconnSub Hx HrecSub).
     eapply h_large_reconnect_avoids_sub_rect; eauto.
   - apply sparse_embedding_sub_endpoints.
-    + intro Hnil.
-      apply Hsubne.
-      apply length_zero_iff_nil.
-      pose proof (reconnect_segs_length sub h sub) as Hlen.
-      rewrite Hnil in Hlen. simpl in Hlen. lia.
+    + now apply reconnect_segs_nonnil.
     + exact Hnew_sparse.
 Qed.
 
