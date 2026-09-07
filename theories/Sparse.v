@@ -4,6 +4,7 @@ Require Import Stdlib.Reals.Reals.
 Require Import Embed.
 Require Import PrimitiveSegment.
 Require Import Segment.
+Require Import SegmentsTranslation.
 Require Import ListExt.
 Import ListNotations.
 From Stdlib Require Import Lra.
@@ -15,12 +16,8 @@ From Stdlib Require Import Lia.
 (*  0.  基本プリミティブ                                              *)
 (* ================================================================= *)
 
-Definition Point := (R * R)%type.
-
 Definition hd_segment ls := hd default_segment ls.
 Definition last_segment ls := last ls default_segment.
-
-Parameter orn_seg   : Segment -> Direction.
 
 Definition rightabove (rr1 rr2 : Point) :=
   let (x1, y1) := rr1 in
@@ -542,65 +539,6 @@ Admitted.
 (*      8方向はどれも 90°の4回転のどれかで x 正成分を持つ向きに入る．    *)
 (* ================================================================= *)
 
-Inductive Rot : Type := R0 | R90 | R180 | R270.
-
-Definition rot_pt (g : Rot) (p : Point) : Point :=
-  match g with
-  | R0   => p
-  | R90  => (- snd p, fst p)
-  | R180 => (- fst p, - snd p)
-  | R270 => (snd p, - fst p)
-  end.
-
-(* TODO : 反転は不要かもしれない *)
-Definition rot_inv (g : Rot) : Rot :=
-  match g with R0 => R0 | R90 => R270 | R180 => R180 | R270 => R90 end.
-
-Lemma rot_pt_inv : forall g p, rot_pt (rot_inv g) (rot_pt g p) = p.
-Proof.
-  intros g [x y]; destruct g; simpl;
-    f_equal; try ring.
-Qed.
-
-(* セグメントの回転．point との整合を公理に置くと                *)
-(* onSegment / onHead / onLast の輸送が自動で従う                      *)
-Parameter rot_seg : Rot -> Segment -> Segment.
-Definition rot_segs (g : Rot) (ls : list Segment) := map (rot_seg g) ls.
-
-Axiom rot_seg_point :
-  forall g s t, point (rot_seg g s) t = rot_pt g (point s t).
-Axiom rot_inv_seg :
-  forall g s, rot_seg (rot_inv g) (rot_seg g s) = s.
-Axiom rot_seg_inv :
-  forall g s, rot_seg g (rot_seg (rot_inv g) s) = s.
-
-Lemma rot_inv_segs : forall g ls, rot_segs (rot_inv g) (rot_segs g ls) = ls.
-Proof.
-  intros g ls. unfold rot_segs. rewrite map_map.
-  apply map_id_pointwise. intros s _. apply rot_inv_seg.
-Qed.
-
-Lemma rot_segs_inv : forall g ls, rot_segs g (rot_segs (rot_inv g) ls) = ls.
-Proof.
-  intros g ls. unfold rot_segs. rewrite map_map.
-  apply map_id_pointwise. intros s _. apply rot_seg_inv.
-Qed.
-
-Lemma rot_segs_app :
-  forall g ls1 ls2, rot_segs g (ls1 ++ ls2) = rot_segs g ls1 ++ rot_segs g ls2.
-Proof. intros. unfold rot_segs. apply map_app. Qed.
-
-(* ---- 回転の反転 ------------------------------------------------- *)
-Lemma rot_inv_inv : forall g, rot_inv (rot_inv g) = g.
-Proof. destruct g; reflexivity. Qed.
-
-(* ---- 非空性 ----------------------------------------------------- *)
-Lemma rot_segs_nonnil : forall g ls, ls <> [] -> rot_segs g ls <> [].
-Proof.
-  intros g ls H. destruct ls as [|a tl]; [contradiction|].
-  unfold rot_segs. simpl. discriminate.
-Qed.
-
 Lemma app_nonnil_mid :
   forall (l sub r : list Segment), sub <> [] -> l ++ sub ++ r <> [].
 Proof.
@@ -610,13 +548,6 @@ Proof.
 Qed.
 
 (* --- 点集合の輸送 --- *)
-Lemma onSegment_rot :
-  forall g s p, onSegment s p -> onSegment (rot_seg g s) (rot_pt g p).
-Proof.
-  intros g s p [t [Ht Hp]]. exists t. split; [exact Ht|].
-  rewrite rot_seg_point, Hp. reflexivity.
-Qed.
-
 Lemma onHead_rot :
   forall g s p, onHead s p -> onHead (rot_seg g s) (rot_pt g p).
 Proof.
@@ -1219,22 +1150,6 @@ Admitted.
 (*  5.  端点移動後の再接続                                           *)
 (* ================================================================= *)
 
-Parameter reconnectable : Point -> Point -> Direction -> Prop.
-
-Parameter reconnect_seg : Point -> Point -> Direction -> Segment.
-
-Axiom reconnectable_iff :
-  forall p q d,
-    reconnectable p q d <->
-    exists s, init s = p /\ term s = q /\ orn_seg s = d.
-
-Axiom reconnect_seg_spec :
-  forall p q d,
-    reconnectable p q d ->
-    init (reconnect_seg p q d) = p
-    /\ term (reconnect_seg p q d) = q
-    /\ orn_seg (reconnect_seg p q d) = d.
-
 Definition reconnectable_after
   (sub : list Segment) (h : R) (s : Segment) : Prop :=
   reconnectable
@@ -1256,24 +1171,6 @@ Definition reconnect_one
 Definition reconnect_segs
   (sub : list Segment) (h : R) (ls : list Segment) : list Segment :=
   map (reconnect_one sub h) ls.
-
-Lemma reconnect_init :
-  forall p q d,
-    reconnectable p q d ->
-    init (reconnect_seg p q d) = p.
-Proof. intros p q d H. exact (proj1 (reconnect_seg_spec p q d H)). Qed.
-
-Lemma reconnect_term :
-  forall p q d,
-    reconnectable p q d ->
-    term (reconnect_seg p q d) = q.
-Proof. intros p q d H. exact (proj1 (proj2 (reconnect_seg_spec p q d H))). Qed.
-
-Lemma reconnect_orn :
-  forall p q d,
-    reconnectable p q d ->
-    orn_seg (reconnect_seg p q d) = d.
-Proof. intros p q d H. exact (proj2 (proj2 (reconnect_seg_spec p q d H))). Qed.
 
 Lemma all_reconnectable_mono :
   forall sub h ls ls',

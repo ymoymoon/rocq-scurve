@@ -4,6 +4,7 @@ Require Import Stdlib.Reals.Reals.
 Require Import Embed.
 Require Import PrimitiveSegment.
 Require Import Segment.
+Require Import SegmentsTranslation.
 Require Import ListExt.
 Require Import Sparse.
 Import ListNotations.
