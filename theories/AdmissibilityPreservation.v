@@ -192,6 +192,16 @@ Axiom last_extension_determined_by_term_slope : forall s1 s2,
 (* 指定した両端点と両端傾きを、実現する単一セグメントが存在する *)
 Parameter can_satisfy_slope : Point -> Point -> Direction -> R -> R -> Prop.
 
+Axiom can_satisfy_slope_spec :
+  forall p q d slope_p slope_q,
+    can_satisfy_slope p q d slope_p slope_q <->
+    exists seg,
+      embed_listDir [d] [seg]
+      /\ init seg = p
+      /\ term seg = q
+      /\ slope_init seg = slope_p
+      /\ slope_term seg = slope_q.
+
 (* 接続点での滑らかさを課さず、指定した外側の傾きを持つ連結2セグメントが存在する *)
 Definition can_satisfy_slope_pair
 	(p q : Point) (d1 d2 : Direction) (slope_p slope_q : R) : Prop :=
@@ -199,6 +209,17 @@ Definition can_satisfy_slope_pair
 		in_rect (rect_between p q) middle /\
 		can_satisfy_slope p middle d1 slope_p slope_left /\
 		can_satisfy_slope middle q d2 slope_right slope_q.
+
+Axiom can_satisfy_slope_pair_spec :
+  forall p q d1 d2 slope_p slope_q,
+    can_satisfy_slope_pair p q d1 d2 slope_p slope_q <->
+    exists s1 s2,
+      embed_listDir [d1; d2] [s1; s2]
+      /\ init s1 = p
+      /\ term s2 = q
+      /\ in_rect (rect_between p q) (term s1)
+      /\ slope_init s1 = slope_p
+      /\ slope_term s2 = slope_q.
 
 Definition same_init_and_term (c1 c2 : list Segment) := 
 	init (hd_segment c1) = init (hd_segment c2) 
