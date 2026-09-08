@@ -164,10 +164,30 @@ Proof.
   - discriminate.
 Qed.
 
+(* ----------------------------------------------------------------- *)
+(*  scurve（PrimitiveSegment 列）レベルでの回転                       *)
+(* ----------------------------------------------------------------- *)
+
+Definition rot_scurve (g : Rot) (sc : scurve) : scurve.
+Admitted. (*TODO*)
+
+(** 回転は向き（Plus/Minus）の列を変えない。 *)
+Lemma rot_scurve_direction : forall g sc,
+  scurve_to_direction (rot_scurve g sc) = scurve_to_direction sc.
+Admitted.
+
+Axiom rot_scurve_embed : forall g sc ls,
+  embed_scurve sc ls <-> embed_scurve (rot_scurve g sc) (rot_segs g ls).
+
 (* 回転はセグメント列が同じ向き列を埋め込むという性質を保存する。 *)
 Lemma rot_embed :
   forall g ds ls, embed_listDir ds ls -> embed_listDir ds (rot_segs g ls).
-Admitted.
+Proof.
+  intros g ds ls [sc [Hdir Hembed]].
+  exists (rot_scurve g sc). split.
+  - rewrite rot_scurve_direction. exact Hdir.
+  - apply (rot_scurve_embed g sc ls). exact Hembed.
+Qed.
 
 (* 回転後に自己交差があれば、逆回転により元の列にも自己交差がある。 *)
 Lemma rot_close :
@@ -177,6 +197,27 @@ Admitted.
 Lemma rot_open :
   forall g ls, ~ close ls -> ~ close (rot_segs g ls).
 Proof. intros g ls H Hc. apply H. now apply (rot_close g). Qed.
+
+Lemma rot_scurve_admissible : forall g sc,
+  admissible sc <-> admissible (rot_scurve g sc).
+Proof.
+  intros g sc. split.
+  - intros [ls [Hembed Hopen]]. exists (rot_segs g ls). split.
+    + apply (rot_scurve_embed g sc ls). exact Hembed.
+    + intros Hclose. apply Hopen. apply (rot_close g ls). exact Hclose.
+  - intros [ls' [Hembed Hopen]]. exists (rot_segs (rot_inv g) ls'). split.
+    + apply (rot_scurve_embed g sc (rot_segs (rot_inv g) ls')).
+      rewrite rot_segs_inv. exact Hembed.
+    + intros Hclose. apply Hopen. apply (rot_close (rot_inv g) ls'). exact Hclose.
+Qed.
+
+(** 向き列（Plus/Minus の列）が一致する2つの scurve は，一方をもう一方の
+   回転として得られる。 *)
+Lemma rot_scurve_of_same_direction :
+  forall sc ps,
+    scurve_to_direction sc = scurve_to_direction ps ->
+    exists g, ps = rot_scurve g sc.
+Admitted.
 
 (* 単方向な埋め込みは、90 度単位の回転で x 正方向へ単調にできる。 *)
 Lemma one_way_rot_exists :
