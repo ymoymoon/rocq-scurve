@@ -617,6 +617,11 @@ Qed.
 
 Record Rect := mkRect { rx0 : R; ry0 : R; rx1 : R; ry1 : R }.
 
+(* 2点を対角線の端点とする長方形。 *)
+Definition rect_between (p q : Point) : Rect :=
+  mkRect (Rmin (fst p) (fst q)) (Rmin (snd p) (snd q))
+         (Rmax (fst p) (fst q)) (Rmax (snd p) (snd q)).
+
 (* 部分列の始点と終点を対角線にもつ長方形。
    1セグメントの長方形には rect_of [s] を用いる。 *)
 Definition rect_of (sub : list Segment) : Rect :=
