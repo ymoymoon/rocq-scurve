@@ -575,9 +575,10 @@ Proof.
 	- intros adms ps Hps.
 	  (* ps が空なら自明，そうでなければ先頭の Primitive Segment の向きとして４通り考えられ，
 			内１つは ps = sc を導く．それ以外の場合は，sc の開埋め込みを90度ずつ回転させることで ps の開埋め込みとなる． *)
-	  admit.
-	- auto. 
-Admitted.
+          symmetry in Hps. destruct (rot_scurve_of_same_direction _ _ Hps) as [g ->].
+          now rewrite <- rot_scurve_admissible.
+	- auto.
+Qed.
 
 (* 向きが ds の許容可能な scurve を見つけることと，向きが ds である任意の scurve が許容可能であることは同値 *)
 Lemma AdmissibleDirs_exist : forall ds,
