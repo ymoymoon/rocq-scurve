@@ -694,7 +694,7 @@ Proof.
 					exists t2'. split; subst post intersection; try lra; congruence. 
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
-					apply Hsparse.
+					apply (sparse_outside_avoids ls sub_ls rs intersection Hsparse).
 					left.
 					apply Hsame_ex_head. 
 					exists t1'. split; subst post intersection; congruence. 
@@ -731,7 +731,7 @@ Proof.
 					exists t1'. split; subst post intersection; try lra; congruence. 
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
-					apply Hsparse.
+					apply (sparse_outside_avoids ls sub_ls rs intersection Hsparse).
 					left.
 					apply Hsame_ex_head. 
 					exists t2'. split; subst post intersection; try lra; congruence.
@@ -766,7 +766,7 @@ Proof.
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
-					apply Hsparse.
+					apply (sparse_outside_avoids ls sub_ls rs intersection Hsparse).
 					right. left.
 					exists seg2. split.
 					* apply in_or_app. auto.
@@ -781,7 +781,7 @@ Proof.
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
-					apply Hsparse.
+					apply (sparse_outside_avoids ls sub_ls rs intersection Hsparse).
 					right. left.
 					exists seg1. split.
 					* apply in_or_app. auto.
@@ -821,7 +821,7 @@ Proof.
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
-					apply Hsparse.
+					apply (sparse_outside_avoids ls sub_ls rs intersection Hsparse).
 					right. left.
 					exists seg1. split.
 					* apply in_or_app. auto.
@@ -837,7 +837,7 @@ Proof.
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
 					destruct Hin.
-					apply Hsparse.
+					apply (sparse_outside_avoids ls sub_ls rs intersection Hsparse).
 					right. left.
 					exists seg2. split.
 					* apply in_or_app. auto.
@@ -873,7 +873,7 @@ Proof.
 					exists t1'. split; subst post intersection; try lra; congruence. 
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
-					apply Hsparse.
+					apply (sparse_outside_avoids ls sub_ls rs intersection Hsparse).
 					repeat right.
 					apply Hsame_ex_last. 
 					exists t2'. split; subst post intersection; try lra; congruence. 
@@ -911,7 +911,7 @@ Proof.
 					exists t2'. split; subst post intersection; try lra; congruence. 
 				}
 				assert (Hin_rect_no : ~ in_rect (rect_of sub_ls) intersection). {
-					apply Hsparse.
+					apply (sparse_outside_avoids ls sub_ls rs intersection Hsparse).
 					repeat right.
 					apply Hsame_ex_last. 
 					exists t1'. split; subst post intersection; try lra; congruence. 
