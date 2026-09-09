@@ -1427,7 +1427,8 @@ Lemma reconnect_preserves_extensions_disjoint :
     extensions_disjoint (reconnect_split l sub r h).
 Admitted.
 
-(* 再接続した外側セグメントは、十分大きな移動後に sub の長方形を避ける。 *)
+(* 再接続した外側セグメントの端点長方形は、十分大きな移動後に
+   sub の長方形を避ける。 *)
 Lemma reconnect_one_avoids_sub_rect :
   forall l sub r h s,
     sub <> [] ->
@@ -1438,25 +1439,24 @@ Lemma reconnect_one_avoids_sub_rect :
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     In s (l ++ r) ->
     forall p,
-      onSegment (reconnect_one l sub r h s) p ->
+      in_segment_rect_or_endpoints (reconnect_one l sub r h s) p ->
       ~ in_rect (rect_of sub) p.
 Admitted.
 
 (* 一セグメント版の退避を、左右の再接続列全体へ持ち上げる。 *)
 Lemma reconnect_sides_avoid_sub_rect :
-  forall l sub r h p,
+  forall l sub r h s p,
     sub <> [] ->
     connected sub ->
     x_monotone_segs sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     all_reconnectable l sub r h (l ++ sub ++ r) ->
-    onSegmentlist
-      (reconnect_segs l sub r h l ++ reconnect_segs l sub r h r) p ->
+    In s (reconnect_segs l sub r h l ++ reconnect_segs l sub r h r) ->
+    in_segment_rect_or_endpoints s p ->
     ~ in_rect (rect_of sub) p.
 Proof.
-  intros l sub r h p Hne Hconn Hmono Hh Hsparse Hrec Hseg.
-  destruct Hseg as [s' [Hs' Hp]].
+  intros l sub r h s' p Hne Hconn Hmono Hh Hsparse Hrec Hs' Hp.
   rewrite in_app_iff in Hs'. destruct Hs' as [Hs' | Hs'];
     unfold reconnect_segs in Hs'; apply in_map_iff in Hs';
     destruct Hs' as [s [Heq Hs]]; subst s';
@@ -1501,9 +1501,10 @@ Proof.
   - apply (reconnect_extensions_avoid_sub_rect
              l sub r h p Hconn Hws Hh Hsparse).
     now left.
-  - apply (reconnect_sides_avoid_sub_rect
-             l sub r h p Hsubne HconnSub Hmono Hh Hsparse Hrec).
-    exact Hsides.
+  - destruct Hsides as [s [Hs Hp]].
+    apply (reconnect_sides_avoid_sub_rect
+             l sub r h s p Hsubne HconnSub Hmono Hh Hsparse Hrec Hs).
+    now apply segment_in_rect_or_endpoints.
   - apply (reconnect_extensions_avoid_sub_rect
              l sub r h p Hconn Hws Hh Hsparse).
     now right.
@@ -1521,7 +1522,31 @@ Lemma reconnect_gives_sparse_around :
       (reconnect_segs l sub r h l)
       sub
       (reconnect_segs l sub r h r).
-Admitted.
+Proof.
+  intros l sub r h Hconn Hws Hh Hsparse Hext.
+  pose proof Hws as [Hsubne [Hmono _]].
+  assert (HconnSub : connected sub).
+  { eapply connected_middle. exact Hconn. }
+  pose proof (operate_endpoints_reconnectable
+                l sub r h Hsubne HconnSub Hmono Hh Hsparse) as Hrec.
+  assert (Hsparse' : sparse_embedding (reconnect_split l sub r h)).
+  { apply reconnect_preserves_sparse; try assumption.
+    exact (proj1 Hh). }
+  split.
+  - intros p Hextend.
+    apply (reconnect_extensions_avoid_sub_rect
+             l sub r h p Hconn Hws Hh Hsparse).
+    exact Hextend.
+  - split.
+    + intros s p Hs Hp.
+      exact (reconnect_sides_avoid_sub_rect
+               l sub r h s p Hsubne HconnSub Hmono Hh
+               Hsparse Hrec Hs Hp).
+    + apply sparse_embedding_sub_endpoints.
+      * exact Hsubne.
+      * change (sparse_embedding (reconnect_split l sub r h)).
+        exact Hsparse'.
+Qed.
 
 Lemma reconnect_preserves_open :
   forall ds l sub r h,
