@@ -152,6 +152,32 @@ Proof.
     split; [f_equal; assumption | exact E2].
 Qed.
 
+(* リストの [i] 番目を抜き出した前後の文脈。別の位置の要素は必ず外側に残る。 *)
+Lemma nth_error_other_context :
+  forall (ls : list Segment) (i j : nat) (s t : Segment),
+    nth_error ls i = Some s ->
+    nth_error ls j = Some t ->
+    i <> j ->
+    exists l r, ls = l ++ [s] ++ r /\ In t (l ++ r).
+Proof.
+  induction ls as [|a ls IH]; intros i j s t Hi Hj Hneq.
+  - destruct i; simpl in Hi; discriminate.
+  - destruct i as [|i], j as [|j]; simpl in Hi, Hj.
+    + exfalso. apply Hneq. reflexivity.
+    + injection Hi as Hs. subst s.
+      exists [], ls. split; [reflexivity|].
+      now apply nth_error_In in Hj.
+    + injection Hj as Ht. subst t.
+      apply nth_error_In in Hi.
+      apply in_split in Hi as [l [r Hls]].
+      exists (a :: l), r. split.
+      * simpl. now rewrite Hls.
+      * simpl. now left.
+    + destruct (IH i j s t Hi Hj ltac:(lia)) as [l [r [Hls Hin]]].
+      exists (a :: l), r. split.
+      * simpl. now rewrite Hls.
+      * simpl. now right.
+Qed.
 
 (* onSegmentlist に関する補題 *)
 Lemma onSegmentlist_init_hd :
@@ -869,7 +895,102 @@ Lemma embedded_segments_in_rect_or_endpoints :
     forall s, In s ls -> in_rect_or_endpoints [s] [s].
 Proof. intros ds ls _ s _. apply single_segment_in_rect_or_endpoints. Qed.
 
-(* リストの [i] 番目を抜き出した前後の文脈。別の位置の要素は必ず外側に残る。 *)
+Lemma extend_head_from_repr : forall ls t s,
+  ls <> [] ->
+  nth_error ls (extend_index ls t) = Some s ->
+  extend ls t = point s (extend_param ls t) ->
+  extend_index ls t = 0%nat ->
+  extend_param ls t <= 0 ->
+  onHead_extend ls (extend ls t).
+Proof.
+  intros ls t s Hne Hnth Hrepr Hindex Hparam.
+  assert (Hs : hd_segment ls = s).
+  { destruct ls as [|a ls]; [contradiction|].
+    unfold hd_segment. simpl.
+    rewrite Hindex in Hnth. simpl in Hnth. now injection Hnth. }
+  unfold onHead_extend, onHead. exists (extend_param ls t).
+  split; [exact Hparam|]. now rewrite Hs, <- Hrepr.
+Qed.
+
+Lemma extend_last_from_repr : forall ls t s,
+  ls <> [] ->
+  nth_error ls (extend_index ls t) = Some s ->
+  extend ls t = point s (extend_param ls t) ->
+  S (extend_index ls t) = length ls ->
+  1 < extend_param ls t ->
+  onLast_extend ls (extend ls t).
+Proof.
+  intros ls t s Hne Hnth Hrepr Hindex Hparam.
+  assert (Hs : s = last_segment ls).
+  { unfold last_segment.
+    assert (K : extend_index ls t = (length ls - 1)%nat) by lia.
+    rewrite K in Hnth.
+    pose proof (@nth_error_last Segment ls default_segment Hne) as Hlast.
+    rewrite Hnth in Hlast. now injection Hlast. }
+  unfold onLast_extend, onLast. exists (extend_param ls t).
+  split; [lra|]. now rewrite <- Hs, <- Hrepr.
+Qed.
+
+Lemma same_extend_piece_no_collision : forall ls t1 t2 s1 s2,
+  ls <> [] ->
+  nth_error ls (extend_index ls t1) = Some s1 ->
+  nth_error ls (extend_index ls t2) = Some s2 ->
+  extend_index ls t1 = extend_index ls t2 ->
+  point s1 (extend_param ls t1) = point s2 (extend_param ls t2) ->
+  t1 = t2.
+Proof.
+  intros ls t1 t2 s1 s2 Hne Hnth1 Hnth2 Hindex Heq.
+  assert (Hs : s1 = s2).
+  { rewrite <- (nth_error_nth_eq ls (extend_index ls t1) s1 default_segment Hnth1).
+    rewrite Hindex.
+    now rewrite (nth_error_nth_eq ls (extend_index ls t2) s2 default_segment Hnth2). }
+  subst s2.
+  apply (extend_same_piece_injective ls t1 t2); [exact Hne | exact Hindex |].
+  now apply (point_injective s1).
+Qed.
+
+Lemma sparse_body_collision_impossible : forall ls tb to sb so,
+  ls <> [] ->
+  sparse_embedding ls ->
+  nth_error ls (extend_index ls tb) = Some sb ->
+  nth_error ls (extend_index ls to) = Some so ->
+  extend_index ls tb <> extend_index ls to ->
+  0 < extend_param ls tb <= 1 ->
+  extend ls tb = point sb (extend_param ls tb) ->
+  extend ls to = point so (extend_param ls to) ->
+  extend ls tb = extend ls to ->
+  (onHead_extend ls (extend ls to)
+   \/ onSegment so (extend ls to)
+   \/ onLast_extend ls (extend ls to)) ->
+  False.
+Proof.
+  intros ls tb to sb so Hne Hsparse Hnthb Hntho Hindex Hbody
+         Hreprb Hrepro Heq Hwhere.
+  destruct (nth_error_other_context ls _ _ _ _ Hnthb Hntho Hindex)
+    as [l [r [Hsplit Houtside]]].
+  pose proof (Hsparse l sb r Hsplit) as [Hextension [Hrect Hendpoint]].
+  assert (Honbody : onSegment sb (extend ls tb)).
+  { exists (extend_param ls tb). split; [lra|]. now rewrite Hreprb. }
+  destruct (segment_in_rect_or_endpoints sb (extend ls tb) Honbody)
+    as [Hinit | [Hterm | Hinside]].
+  - apply (Hendpoint tb to ltac:(congruence)).
+    + left. now rewrite <- Hsplit.
+    + now rewrite <- Hsplit.
+  - apply (Hendpoint tb to ltac:(congruence)).
+    + right. now rewrite <- Hsplit.
+    + now rewrite <- Hsplit.
+  - destruct Hwhere as [Hhead | [Honother | Hlast]].
+    + apply (Hextension (extend ls tb)).
+      * left. rewrite <- Hsplit. now rewrite Heq.
+      * unfold in_rect, rect_of in Hinside. exact Hinside.
+    + apply (Hrect so (extend ls tb) Houtside).
+      * apply segment_in_rect_or_endpoints. now rewrite Heq.
+      * unfold in_rect, rect_of in Hinside. exact Hinside.
+    + apply (Hextension (extend ls tb)).
+      * right. rewrite <- Hsplit. now rewrite Heq.
+      * unfold in_rect, rect_of in Hinside. exact Hinside.
+Qed.
+
 Lemma sparse_extensions_open :
   forall ds ls,
     ls <> [] ->
@@ -877,7 +998,62 @@ Lemma sparse_extensions_open :
     sparse_embedding ls ->
     extensions_disjoint ls ->
     ~ close ls.
-Admitted.
+Proof.
+  intros ds ls Hne _ Hsparse Hdisjoint [t1 [t2 [Hneq Heq]]].
+  destruct (extend_repr ls t1 Hne) as [s1 [Hnth1 Hrepr1]].
+  destruct (extend_repr ls t2 Hne) as [s2 [Hnth2 Hrepr2]].
+  assert (Hpoint : point s1 (extend_param ls t1) =
+                   point s2 (extend_param ls t2)).
+  { now rewrite <- Hrepr1, <- Hrepr2. }
+  destruct (extend_param_region ls t1 Hne) as [Hbody1 | [Hhead1 | Hlast1]];
+  destruct (extend_param_region ls t2 Hne) as [Hbody2 | [Hhead2 | Hlast2]].
+  - destruct (Nat.eq_dec (extend_index ls t1) (extend_index ls t2)) as [Hi|Hi].
+    + apply Hneq. exact (same_extend_piece_no_collision ls t1 t2 s1 s2 Hne Hnth1 Hnth2 Hi Hpoint).
+    + eapply (sparse_body_collision_impossible ls t1 t2 s1 s2
+                Hne Hsparse Hnth1 Hnth2 Hi Hbody1 Hrepr1 Hrepr2 Heq).
+      right; left.
+      exists (extend_param ls t2). split; [lra|exact (eq_sym Hrepr2)].
+  - destruct (Nat.eq_dec (extend_index ls t1) (extend_index ls t2)) as [Hi|Hi].
+    + apply Hneq. exact (same_extend_piece_no_collision ls t1 t2 s1 s2 Hne Hnth1 Hnth2 Hi Hpoint).
+    + eapply (sparse_body_collision_impossible ls t1 t2 s1 s2
+                Hne Hsparse Hnth1 Hnth2 Hi Hbody1 Hrepr1 Hrepr2 Heq).
+      left.
+      destruct Hhead2 as [Hi2 Hp2].
+      exact (extend_head_from_repr ls t2 s2 Hne Hnth2 Hrepr2 Hi2 Hp2).
+  - destruct (Nat.eq_dec (extend_index ls t1) (extend_index ls t2)) as [Hi|Hi].
+    + apply Hneq. exact (same_extend_piece_no_collision ls t1 t2 s1 s2 Hne Hnth1 Hnth2 Hi Hpoint).
+    + eapply (sparse_body_collision_impossible ls t1 t2 s1 s2
+                Hne Hsparse Hnth1 Hnth2 Hi Hbody1 Hrepr1 Hrepr2 Heq).
+      right; right.
+      destruct Hlast2 as [Hi2 Hp2].
+      exact (extend_last_from_repr ls t2 s2 Hne Hnth2 Hrepr2 Hi2 Hp2).
+  - destruct (Nat.eq_dec (extend_index ls t1) (extend_index ls t2)) as [Hi|Hi].
+    + apply Hneq. exact (same_extend_piece_no_collision ls t1 t2 s1 s2 Hne Hnth1 Hnth2 Hi Hpoint).
+    + eapply (sparse_body_collision_impossible ls t2 t1 s2 s1
+                Hne Hsparse Hnth2 Hnth1 ltac:(congruence) Hbody2
+                Hrepr2 Hrepr1 ltac:(congruence)).
+      left. destruct Hhead1 as [Hi1 Hp1].
+      exact (extend_head_from_repr ls t1 s1 Hne Hnth1 Hrepr1 Hi1 Hp1).
+  - apply Hneq. eapply same_extend_piece_no_collision; eauto; lia.
+  - apply (Hdisjoint (extend ls t1)).
+    + destruct Hhead1 as [Hi1 Hp1].
+      exact (extend_head_from_repr ls t1 s1 Hne Hnth1 Hrepr1 Hi1 Hp1).
+    + rewrite Heq. destruct Hlast2 as [Hi2 Hp2].
+      exact (extend_last_from_repr ls t2 s2 Hne Hnth2 Hrepr2 Hi2 Hp2).
+  - destruct (Nat.eq_dec (extend_index ls t1) (extend_index ls t2)) as [Hi|Hi].
+    + apply Hneq. exact (same_extend_piece_no_collision ls t1 t2 s1 s2 Hne Hnth1 Hnth2 Hi Hpoint).
+    + eapply (sparse_body_collision_impossible ls t2 t1 s2 s1
+                Hne Hsparse Hnth2 Hnth1 ltac:(congruence) Hbody2
+                Hrepr2 Hrepr1 ltac:(congruence)).
+      right; right. destruct Hlast1 as [Hi1 Hp1].
+      exact (extend_last_from_repr ls t1 s1 Hne Hnth1 Hrepr1 Hi1 Hp1).
+  - apply (Hdisjoint (extend ls t2)).
+    + destruct Hhead2 as [Hi2 Hp2].
+      exact (extend_head_from_repr ls t2 s2 Hne Hnth2 Hrepr2 Hi2 Hp2).
+    + rewrite <- Heq. destruct Hlast1 as [Hi1 Hp1].
+      exact (extend_last_from_repr ls t1 s1 Hne Hnth1 Hrepr1 Hi1 Hp1).
+  - apply Hneq. eapply same_extend_piece_no_collision; eauto; lia.
+Qed.
 
 Definition rot_rect (g : Rot) (Rc : Rect) : Rect :=
   match g with
