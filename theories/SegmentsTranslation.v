@@ -13,11 +13,6 @@ Open Scope R_scope.
 (*  セグメントの幾何変換と端点指定                                   *)
 (* ================================================================= *)
 
-Definition Point := (R * R)%type.
-
-(* セグメントが表す向き。具体的な Segment の実装が与える基本仕様。 *)
-Parameter orn_seg : Segment -> Direction.
-
 Definition hd_segment (ls : list Segment) := hd default_segment ls.
 Definition last_segment (ls : list Segment) := last ls default_segment.
 
@@ -272,47 +267,3 @@ Proof.
   intros v s p [t [Ht Hp]]. exists t. split; [exact Ht |].
   now rewrite translate_seg_point, Hp.
 Qed.
-
-
-(* ----------------------------------------------------------------- *)
-(*  始点・終点・向きを指定したセグメント                             *)
-(* ----------------------------------------------------------------- *)
-
-(* Direction と両端点を同時に実現できることを表す。 *)
-Parameter reconnectable : Point -> Point -> Direction -> Prop.
-
-Parameter reconnect_seg : Point -> Point -> Direction -> Segment.
-
-Axiom reconnectable_iff :
-  forall p q d,
-    reconnectable p q d <->
-    exists s, init s = p /\ term s = q /\ orn_seg s = d.
-
-Lemma reconnectable_segment_exists :
-  forall p q d,
-    reconnectable p q d ->
-    exists s, init s = p /\ term s = q /\ orn_seg s = d.
-Proof. intros p q d H. now apply reconnectable_iff. Qed.
-
-(* reconnectable な三つ組について、選択したセグメントは指定を実現する。 *)
-Axiom reconnect_seg_spec :
-  forall p q d,
-    reconnectable p q d ->
-    init (reconnect_seg p q d) = p
-    /\ term (reconnect_seg p q d) = q
-    /\ orn_seg (reconnect_seg p q d) = d.
-
-Lemma reconnect_init :
-  forall p q d,
-    reconnectable p q d -> init (reconnect_seg p q d) = p.
-Proof. intros p q d H. exact (proj1 (reconnect_seg_spec p q d H)). Qed.
-
-Lemma reconnect_term :
-  forall p q d,
-    reconnectable p q d -> term (reconnect_seg p q d) = q.
-Proof. intros p q d H. exact (proj1 (proj2 (reconnect_seg_spec p q d H))). Qed.
-
-Lemma reconnect_orn :
-  forall p q d,
-    reconnectable p q d -> orn_seg (reconnect_seg p q d) = d.
-Proof. intros p q d H. exact (proj2 (proj2 (reconnect_seg_spec p q d H))). Qed.

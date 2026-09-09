@@ -6,6 +6,7 @@ Require Import PrimitiveSegment.
 Require Import Segment.
 Require Import SegmentsTranslation.
 Require Import ListExt.
+Require Import Stdlib.Logic.ClassicalDescription.
 Import ListNotations.
 From Stdlib Require Import Lra.
 From Stdlib Require Import Lia.
@@ -616,13 +617,6 @@ Qed.
 (*  2.  長方形と sparse                                               *)
 (* ================================================================= *)
 
-Record Rect := mkRect { rx0 : R; ry0 : R; rx1 : R; ry1 : R }.
-
-(* 2点を対角線の端点とする長方形。 *)
-Definition rect_between (p q : Point) : Rect :=
-  mkRect (Rmin (fst p) (fst q)) (Rmin (snd p) (snd q))
-         (Rmax (fst p) (fst q)) (Rmax (snd p) (snd q)).
-
 (* 部分列の始点と終点を対角線にもつ長方形。
    1セグメントの長方形には rect_of [s] を用いる。 *)
 Definition rect_of (sub : list Segment) : Rect :=
@@ -630,9 +624,6 @@ Definition rect_of (sub : list Segment) : Rect :=
   let q3 := term (last_segment sub) in
   mkRect (Rmin (fst q0) (fst q3)) (Rmin (snd q0) (snd q3))
          (Rmax (fst q0) (fst q3)) (Rmax (snd q0) (snd q3)).
-
-Definition in_rect (Rc : Rect) (p : Point) : Prop :=
-  rx0 Rc < fst p < rx1 Rc /\ ry0 Rc < snd p < ry1 Rc.
 
 Definition rect_width  (Rc : Rect) : R := rx1 Rc - rx0 Rc.
 Definition rect_height (Rc : Rect) : R := ry1 Rc - ry0 Rc.
@@ -651,9 +642,19 @@ Definition in_rect_or_endpoints (old new : list Segment) : Prop :=
   forall p, onSegmentlist new p ->
     in_rect_or_endpoints_at old p.
 
-(* セグメントは、その両端点と両端点を対角線とする開長方形内に収まる。 *)
-Axiom segment_in_rect_or_endpoints :
+(* [Segment.v] の基本契約を、このファイルの [Rect] 表現へ読み替える。 *)
+Lemma segment_in_rect_or_endpoints :
   forall s p, onSegment s p -> in_segment_rect_or_endpoints s p.
+Proof.
+  intros s p Hp.
+  destruct (segment_in_rectangle_or_endpoints s p Hp) as [Hinit | [Hterm | Hinside]].
+  - now left.
+  - now right; left.
+  - right; right.
+    unfold in_open_segment_rectangle, in_rect, rect_between in Hinside.
+    unfold in_rect, rect_of; simpl in *.
+    exact Hinside.
+Qed.
 
 Lemma single_segment_in_rect_or_endpoints :
   forall s, in_rect_or_endpoints [s] [s].
@@ -1099,13 +1100,17 @@ Definition all_reconnectable
   (sub : list Segment) (h : R) (ls : list Segment) : Prop :=
   forall s, In s ls -> reconnectable_after sub h s.
 
-(* TODO：先頭末尾については適当に結ぶのではなく，傾きにある程度の制限がかかるか *)
+(* TODO：先頭末尾については適当に結ぶのではなく，傾きにある程度の制限がかかるので，その時は make_seg_slope か *)
+(* TODO : 排中律を使用．reconnectable の決定可能性を示せば不要になる，もしくは reconnect 関数全てに証明をつけるか *)
 Definition reconnect_one
   (sub : list Segment) (h : R) (s : Segment) : Segment :=
-  reconnect_seg
-    (operate_point sub h (init s))
-    (operate_point sub h (term s))
-    (orn_seg s).
+  match excluded_middle_informative (reconnectable_after sub h s) with
+  | left H => make_seg
+      (operate_point sub h (init s))
+      (operate_point sub h (term s))
+      (orn_seg s) H
+  | right _ => default_segment
+  end.
 
 Definition reconnect_segs
   (sub : list Segment) (h : R) (ls : list Segment) : list Segment :=
@@ -1117,7 +1122,9 @@ Lemma reconnect_one_init :
     init (reconnect_one sub h s) = operate_point sub h (init s).
 Proof.
   intros sub h s Hrec. unfold reconnect_one.
-  now apply reconnect_init.
+  destruct (excluded_middle_informative (reconnectable_after sub h s)) as [H | H].
+  - now apply make_seg_init.
+  - contradiction.
 Qed.
 
 Lemma reconnect_one_term :
@@ -1126,7 +1133,9 @@ Lemma reconnect_one_term :
     term (reconnect_one sub h s) = operate_point sub h (term s).
 Proof.
   intros sub h s Hrec. unfold reconnect_one.
-  now apply reconnect_term.
+  destruct (excluded_middle_informative (reconnectable_after sub h s)) as [H | H].
+  - now apply make_seg_term.
+  - contradiction.
 Qed.
 
 Lemma reconnect_one_orn :
@@ -1135,7 +1144,9 @@ Lemma reconnect_one_orn :
     orn_seg (reconnect_one sub h s) = orn_seg s.
 Proof.
   intros sub h s Hrec. unfold reconnect_one.
-  now apply reconnect_orn.
+  destruct (excluded_middle_informative (reconnectable_after sub h s)) as [H | H].
+  - now apply make_seg_orn.
+  - contradiction.
 Qed.
 
 Lemma all_reconnectable_mono :
@@ -1185,8 +1196,7 @@ Proof.
   destruct (nth_error_map_inv _ _ _ _ H1) as [a [Ha Ea]].
   destruct (nth_error_map_inv _ _ _ _ H2) as [b [Hb Eb]].
   subst s1 s2.
-  unfold reconnect_one.
-  rewrite reconnect_term, reconnect_init.
+  rewrite reconnect_one_term, reconnect_one_init.
   2,3: apply Hrec; eapply nth_error_In; eauto.
   f_equal. exact (Hc i a b Ha Hb).
 Qed.
@@ -1204,7 +1214,7 @@ Proof.
   - intros i s s' Hs Hs'.
     rewrite (reconnect_segs_nth_error sub h ls i s Hs) in Hs'.
     injection Hs' as Hs'. subst s'. unfold reconnect_one.
-    apply reconnect_orn, Hrec. eapply nth_error_In; exact Hs.
+    apply reconnect_one_orn, Hrec. eapply nth_error_In; exact Hs.
   - eapply reconnect_segs_connected; [exact Hrec |].
     eapply embed_listDir_connected; exact Hemb.
 Qed.
@@ -1244,13 +1254,12 @@ Qed.
 
 (* 再接続したセグメントは、移動後の両端点を対角線とする長方形の
    内部と両端点だけからなる。 *)
-Lemma reconnect_seg_in_rect_or_endpoints :
-  forall p q d,
-    reconnectable p q d ->
+Lemma make_seg_in_rect_or_endpoints :
+  forall p q d H,
     in_rect_or_endpoints
-      [reconnect_seg p q d]
-      [reconnect_seg p q d].
-Proof. intros p q d _. apply single_segment_in_rect_or_endpoints. Qed.
+      [make_seg p q d H]
+      [make_seg p q d H].
+Proof. intros p q d H. apply single_segment_in_rect_or_endpoints. Qed.
 
 Lemma reconnect_one_in_rect_or_endpoints :
   forall sub h s,
@@ -1260,7 +1269,9 @@ Lemma reconnect_one_in_rect_or_endpoints :
       [reconnect_one sub h s].
 Proof.
   intros sub h s Hrec. unfold reconnect_one.
-  now apply reconnect_seg_in_rect_or_endpoints.
+  destruct (excluded_middle_informative (reconnectable_after sub h s)) as [H | H].
+  - apply make_seg_in_rect_or_endpoints.
+  - contradiction.
 Qed.
 
 Lemma reconnect_segs_in_rect_or_endpoints :

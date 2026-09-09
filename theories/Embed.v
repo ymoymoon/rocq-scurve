@@ -13,10 +13,6 @@ Import ListNotations.
 Definition H := H.
 
 
-(* [0, 1]区間で連続かどうか，向きがPrimitiveSegmentの向きか，など *)
-Parameter embed : PrimitiveSegment -> Segment -> Prop.
-
-
 (* 始点と終点の位置関係を示す公理 *)
 Axiom n_end_relation: forall (s: Segment) (h: H) (c: C),
     embed (n, h, c) s -> snd (init s) < snd (term s).

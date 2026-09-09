@@ -174,10 +174,6 @@ Axiom south_last_extension_bounds : forall seg h c t,
 	snd (point seg t) <= snd (term seg).
 
 
-(* 注意：傾きを想定しているが，原理上は，埋め込みの延長線を一意に定義するものであればよい *)
-Parameter slope_init : Segment -> R.
-Parameter slope_term : Segment -> R.
-
 (* 始点（終点）とそこでの傾きが、対応する延長線を一意に定める。 *)
 Axiom head_extension_determined_by_init_slope : forall s1 s2,
 	init s1 = init s2 ->
@@ -189,30 +185,17 @@ Axiom last_extension_determined_by_term_slope : forall s1 s2,
 	slope_term s1 = slope_term s2 ->
 	forall p, onLast s1 p <-> onLast s2 p.
 
-(* 指定した両端点と両端傾きを、実現する単一セグメントが存在する *)
-Parameter can_satisfy_slope : Point -> Point -> Direction -> R -> R -> Prop.
-
-Axiom can_satisfy_slope_spec :
-  forall p q d slope_p slope_q,
-    can_satisfy_slope p q d slope_p slope_q <->
-    exists seg,
-      embed_listDir [d] [seg]
-      /\ init seg = p
-      /\ term seg = q
-      /\ slope_init seg = slope_p
-      /\ slope_term seg = slope_q.
-
 (* 接続点での滑らかさを課さず、指定した外側の傾きを持つ連結2セグメントが存在する *)
-Definition can_satisfy_slope_pair
+Definition reconnect_slope_pair
 	(p q : Point) (d1 d2 : Direction) (slope_p slope_q : R) : Prop :=
 	exists middle slope_left slope_right,
 		in_rect (rect_between p q) middle /\
-		can_satisfy_slope p middle d1 slope_p slope_left /\
-		can_satisfy_slope middle q d2 slope_right slope_q.
+		reconnect_slope p middle d1 slope_p slope_left /\
+		reconnect_slope middle q d2 slope_right slope_q.
 
-Axiom can_satisfy_slope_pair_spec :
+Axiom reconnect_slope_pair_spec :
   forall p q d1 d2 slope_p slope_q,
-    can_satisfy_slope_pair p q d1 d2 slope_p slope_q <->
+    reconnect_slope_pair p q d1 d2 slope_p slope_q <->
     exists s1 s2,
       embed_listDir [d1; d2] [s1; s2]
       /\ init s1 = p
@@ -464,7 +447,7 @@ Qed. *)
 Lemma embed_sparsely_listDir_PMP (ds1 ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ [Plus; Minus; Plus] ++ ds2)
 	-> exists l r seg1 seg2 seg3,
-		can_satisfy_slope (init seg1) (term seg3) Plus
+		reconnect_slope (init seg1) (term seg3) Plus
 			(slope_init seg1) (slope_term seg3) (* 将来的にこの部分を，傾きを保存したまま１つのセグメントに変更できるように *)
 		/\ embed_listDir ds1 l
 		/\ embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3]
@@ -478,7 +461,7 @@ Proof. Admitted.
 Lemma embed_sparsely_listDir_MPM (ds1 ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ [Minus; Plus; Minus] ++ ds2)
 	-> exists l r seg1 seg2 seg3,
-		can_satisfy_slope (init seg1) (term seg3) Minus
+		reconnect_slope (init seg1) (term seg3) Minus
 			(slope_init seg1) (slope_term seg3) (* 将来的にこの部分を，傾きを保存したまま１つのセグメントに変更できるように *)
 		/\ embed_listDir ds1 l
 		/\ embed_listDir [Minus; Plus; Minus] [seg1; seg2; seg3]
@@ -491,7 +474,7 @@ Proof. Admitted.
 Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2)
 	-> exists l r seg1 seg2 seg3 seg4, 
-		can_satisfy_slope_pair (init seg1) (term seg4) Plus Minus
+		reconnect_slope_pair (init seg1) (term seg4) Plus Minus
 			(slope_init seg1) (slope_term seg4) (* 将来的にこの部分を，傾きを保存したまま２つのセグメントに変更できるように *)
 		/\ embed_listDir ds1 l
 		/\ embed_listDir [Plus; Plus; Minus; Minus] [seg1; seg2; seg3; seg4]
@@ -505,7 +488,7 @@ Proof. Admitted.
 Lemma embed_sparsely_listDir_MMPP (ds1 ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ [Minus; Minus; Plus; Plus] ++ ds2)
 	-> exists l r seg1 seg2 seg3 seg4,
-		can_satisfy_slope_pair (init seg1) (term seg4) Minus Plus
+		reconnect_slope_pair (init seg1) (term seg4) Minus Plus
 			(slope_init seg1) (slope_term seg4) (* 将来的にこの部分を，傾きを保存したまま２つのセグメントに変更できるように *)
 		/\ embed_listDir ds1 l
 		/\ embed_listDir [Minus; Minus; Plus; Plus] [seg1; seg2; seg3; seg4]
@@ -566,7 +549,7 @@ Proof. Admitted.
 		保存したまま矩形内の Plus の埋め込みに変更できる． *)
 (* TODO : もう少し一般化しても良いかもしれない *)
 Lemma embedding_PMP_to_P_in_rect : forall (seg1 seg2 seg3 : Segment),
-	can_satisfy_slope (init seg1) (term seg3) Plus
+	reconnect_slope (init seg1) (term seg3) Plus
 		(slope_init seg1) (slope_term seg3)
 	-> embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3]
 	->
@@ -576,12 +559,12 @@ Lemma embedding_PMP_to_P_in_rect : forall (seg1 seg2 seg3 : Segment),
 		/\ same_init_and_term [seg1; seg2; seg3] [seg]
 		/\ same_slope_init_and_term [seg1; seg2; seg3] [seg].
 Proof.
-	(* can_satisfy_* が保証する両端の条件を同時に満たす Plus の埋め込みを取る． *)
+	(* reconnect_slope_* が保証する両端の条件を同時に満たす Plus の埋め込みを取る． *)
 Admitted.
 
 (* embedding_PMP_to_P_in_rect の Minus 版． *)
 Lemma embedding_MPM_to_M_in_rect : forall (seg1 seg2 seg3 : Segment),
-	can_satisfy_slope (init seg1) (term seg3) Minus
+	reconnect_slope (init seg1) (term seg3) Minus
 		(slope_init seg1) (slope_term seg3)
 	-> embed_listDir [Minus; Plus; Minus] [seg1; seg2; seg3]
 	->
@@ -595,7 +578,7 @@ Proof. Admitted.
 (* PP と MM の各部分について両端点・両端傾きを同時に実現できるなら，
 		それらを矩形内の Plus，Minus セグメントへそれぞれ縮約できる． *)
 Lemma embedding_PPMM_to_PM_in_rect : forall (seg1 seg2 seg3 seg4 : Segment),
-	can_satisfy_slope_pair (init seg1) (term seg4) Plus Minus
+	reconnect_slope_pair (init seg1) (term seg4) Plus Minus
 		(slope_init seg1) (slope_term seg4)
 	-> embed_listDir [Plus; Plus; Minus; Minus] [seg1; seg2; seg3; seg4]
 	->
@@ -610,7 +593,7 @@ Admitted.
 
 (* embedding_PPMM_to_PM_in_rect の Minus 版． *)
 Lemma embedding_MMPP_to_MP_in_rect : forall (seg1 seg2 seg3 seg4 : Segment),
-	can_satisfy_slope_pair (init seg1) (term seg4) Minus Plus
+	reconnect_slope_pair (init seg1) (term seg4) Minus Plus
 		(slope_init seg1) (slope_term seg4)
 	-> embed_listDir [Minus; Minus; Plus; Plus] [seg1; seg2; seg3; seg4]
 	->
