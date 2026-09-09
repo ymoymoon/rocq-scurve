@@ -16,12 +16,6 @@ Open Scope R_scope.
 Definition hd_segment (ls : list Segment) := hd default_segment ls.
 Definition last_segment (ls : list Segment) := last ls default_segment.
 
-Definition onHead (s : Segment) (p : Point) :=
-  exists t : R, t <= 0 /\ point s t = p.
-
-Definition onLast (s : Segment) (p : Point) :=
-  exists t : R, 1 < t /\ point s t = p.
-
 Definition onHead_extend (ls : list Segment) (p : Point) :=
   onHead (hd_segment ls) p.
 

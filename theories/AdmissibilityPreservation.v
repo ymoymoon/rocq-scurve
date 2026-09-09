@@ -140,50 +140,6 @@ Proof.
 	intros t1 t2 seg H. exact (point_injective seg t1 t2 H).
 Qed.
 
-(* 一方向セグメントの延長部分は、始点・終点の外側へ同じ向きに延びる。 *)
-Axiom east_head_extension_bounds : forall seg v c t,
-	embed (v, e, c) seg -> t <= 0 ->
-	fst (point seg t) <= fst (init seg).
-
-Axiom east_last_extension_bounds : forall seg v c t,
-	embed (v, e, c) seg -> 1 <= t ->
-	fst (term seg) <= fst (point seg t).
-
-Axiom west_head_extension_bounds : forall seg v c t,
-	embed (v, w, c) seg -> t <= 0 ->
-	fst (init seg) <= fst (point seg t).
-
-Axiom west_last_extension_bounds : forall seg v c t,
-	embed (v, w, c) seg -> 1 <= t ->
-	fst (point seg t) <= fst (term seg).
-
-Axiom north_head_extension_bounds : forall seg h c t,
-	embed (n, h, c) seg -> t <= 0 ->
-	snd (point seg t) <= snd (init seg).
-
-Axiom north_last_extension_bounds : forall seg h c t,
-	embed (n, h, c) seg -> 1 <= t ->
-	snd (term seg) <= snd (point seg t).
-
-Axiom south_head_extension_bounds : forall seg h c t,
-	embed (s, h, c) seg -> t <= 0 ->
-	snd (init seg) <= snd (point seg t).
-
-Axiom south_last_extension_bounds : forall seg h c t,
-	embed (s, h, c) seg -> 1 <= t ->
-	snd (point seg t) <= snd (term seg).
-
-
-(* 始点（終点）とそこでの傾きが、対応する延長線を一意に定める。 *)
-Axiom head_extension_determined_by_init_slope : forall s1 s2,
-	init s1 = init s2 ->
-	slope_init s1 = slope_init s2 ->
-	forall p, onHead s1 p <-> onHead s2 p.
-
-Axiom last_extension_determined_by_term_slope : forall s1 s2,
-	term s1 = term s2 ->
-	slope_term s1 = slope_term s2 ->
-	forall p, onLast s1 p <-> onLast s2 p.
 
 (* 接続点での滑らかさを課さず、指定した外側の傾きを持つ連結2セグメントが存在する *)
 Definition reconnect_slope_pair
@@ -766,7 +722,7 @@ Proof.
 			+ (* 先頭の延長線と ls(rs) が交わっている場合： pre が開であることに矛盾 *) 
 				apply Hopen.
 				eapply (head_seg_cross_close intersection seg post (* ここの数字で場合わけ *)); auto. 
-				-- exists t2'. split; subst post intersection; congruence. 
+				-- exists t2'. split; subst post intersection; try lra; congruence.
 				-- exists t1'. split; subst post intersection; try lra; congruence. 
 				-- admit.
 			+ (* 先頭の延長線と sub_ls' が交わっている場合： pre が疎であることに矛盾 *) 
@@ -778,7 +734,7 @@ Proof.
 					apply Hsparse.
 					left.
 					apply Hsame_ex_head. 
-					exists t2'. split; subst post intersection; congruence. 
+					exists t2'. split; subst post intersection; try lra; congruence.
 				} 
 				auto.
 
@@ -800,7 +756,7 @@ Proof.
 				(* seg1, seg2 が隣接するかどうかで場合わけ *)
 				apply (two_segs_have_same_point_close seg1 seg2 intersection).
 				-- exists t1'. split; subst post intersection; try lra; congruence. 
-				-- exists t2'. split; subst post intersection; try lra; congruence. 
+				-- exists t2'. split; subst post intersection; try lra; congruence.
 				-- admit.
 			+ (* １つが pre 上の点，もう１つが sub_ls' 上の点の場合１： pre が疎であることに矛盾 *) 
 				assert (Hin_rect_yes : in_rect (rect_of sub_ls) intersection). {
@@ -907,7 +863,7 @@ Proof.
 			* (* 末尾の延長線と ls(rs) が交わっている場合： pre が開であることに矛盾 *) 
 				apply Hopen.
 				eapply (last_seg_cross_close intersection seg post (* ここの数字で場合わけ *)); auto. 
-				-- exists t2'. split; subst post intersection; congruence. 
+				-- exists t2'. split; subst post intersection; try lra; congruence.
 				-- exists t1'. split; subst post intersection; try lra; congruence. 
 				-- admit.
 				-- admit.
@@ -931,7 +887,7 @@ Proof.
 				destruct contra as [_ contra].
 				apply app_eq_nil in contra.
 				destruct contra as [contra _]. contradiction.
-			* exists t2'. split; subst post intersection; congruence. 
+			* exists t2'. split; subst post intersection; try lra; congruence.
 			* exists t1'. split; subst post intersection; try lra; congruence. 
 
 		- (* t1 が末尾の延長線上の点を， t2 がセグメント上の点を指す場合：セグメントがそれぞれ pre, sub_ls' どちらに属するかで場合分け *)

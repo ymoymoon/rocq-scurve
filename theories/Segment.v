@@ -108,6 +108,13 @@ Lemma nth_head: forall (l:list Segment) (d: Segment), nth 0 l d = head_seg l d.
 Definition onSegment (seg: Segment) (rr : R * R) := exists (t:R), 0 <= t <= 1 /\ point seg t = rr.
 Definition onHeadSegment (seg: Segment) (rr : R * R) := exists (t:R), t <= 1 /\ point seg t = rr.
 Definition onLastSegment (seg: Segment) (rr : R * R) := exists (t:R), 0 <= t /\ point seg t = rr.
+
+(* 始点側・終点側への延長部分上にある点 *)
+Definition onHead (seg : Segment) (p : Point) : Prop :=
+  exists t : R, t <= 0 /\ point seg t = p.
+Definition onLast (seg : Segment) (p : Point) : Prop :=
+  exists t : R, 1 <= t /\ point seg t = p.
+
 Inductive onExtendSegment : list Segment -> Segment -> R * R -> Prop :=
 | OnSegHead : forall (hds: Segment) (ls: list Segment) (rr: R*R),
     onHeadSegment hds rr
@@ -182,7 +189,8 @@ Axiom exist_between_x_pos: forall (seg: Segment) (x1 x2 y1 y2 x: R),
 Axiom exist_between_x_neg: forall (seg: Segment) (x1 x2 y1 y2 x: R),
     onSegment seg (x1, y1) -> onSegment seg (x2, y2) -> y2 <= y1 -> x1 <= x -> x <= x2 -> exists y:R, onSegment seg (x, y) /\ y2 <= y <= y1.
 
-(* 共通の Segment 契約を満たす生成器。 *)
+(* ２点を始点終点とする，指定された向きのセグメントが取れる
+    ＝ 始点と終点のx, y座標がそれぞれ異なっている，のはず *)
 Parameter reconnectable : Point -> Point -> Direction -> Prop.
 
 Axiom reconnectable_iff : forall p q d,
@@ -214,9 +222,23 @@ Lemma make_seg_orn : forall p q d H,
   orn_seg (make_seg p q d H) = d.
 Proof. intros p q d H; exact (proj2 (proj2 (make_seg_spec p q d H))). Qed.
 
+
 (* 注意：傾きを想定しているが，原理上は，埋め込みの延長線を一意に定義するものであればよい *)
 Parameter slope_init : Segment -> R.
 Parameter slope_term : Segment -> R.
+
+(* 始点（終点）とそこでの傾きが、対応する延長線を一意に定める。 *)
+Axiom head_extension_determined_by_init_slope : forall s1 s2,
+	init s1 = init s2 ->
+	slope_init s1 = slope_init s2 ->
+	forall p, onHead s1 p <-> onHead s2 p.
+
+Axiom last_extension_determined_by_term_slope : forall s1 s2,
+	term s1 = term s2 ->
+	slope_term s1 = slope_term s2 ->
+	forall p, onLast s1 p <-> onLast s2 p.
+
+(* ２点を始点終点とする，指定された向き・傾きのセグメントが取れる *)
 Parameter reconnect_slope : Point -> Point -> Direction -> R -> R -> Prop.
 
 Axiom reconnect_slope_spec : forall p q d slope_p slope_q,
