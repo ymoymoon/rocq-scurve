@@ -485,10 +485,7 @@ Proof.
   auto.
 Qed.
 
-Lemma open_nonnil : forall ls, ~ close ls -> ls <> [].
-Admitted.
-
-(*  「向き列が同じで、長さが同じで、連結なら、同じ ds の埋め込み」 *)
+(*  (orn_seg としての)向き列が同じで、長さが同じで、連結なら、同じ ds の埋め込み」 *)
 Lemma embed_scurve_transfer : forall ds ls ls',
   embed_listDir ds ls ->
   length ls' = length ls ->
@@ -499,8 +496,28 @@ Lemma embed_scurve_transfer : forall ds ls ls',
 Admitted.
 
 (* ---- 連結性は埋め込みから出る（Embed.v の consist_init_term）---- *)
+Lemma embed_scurve_connected : forall sc ls,
+  embed_scurve sc ls -> connected ls.
+Proof.
+  intros sc ls Hembed.
+  induction Hembed as [
+    | ps s Hembed_ps
+    | ps lp A s1 s2 ls Hembed_ps Hembed_tail Hterm IH].
+  - unfold connected. intros i s1 s2 H1 H2.
+    rewrite nth_error_nil in H1. discriminate H1.
+  - unfold connected. intros i s1 s2 H1 H2.
+    destruct i; simpl in H2; discriminate H2.
+  - unfold connected in IH |- *. intros i x y Hx Hy.
+    destruct i as [|i].
+    + simpl in Hx, Hy. inversion Hx; inversion Hy; subst. exact IH.
+    + simpl in Hx, Hy. now apply (Hterm i x y Hx Hy).
+Qed.
+
 Lemma embed_listDir_connected : forall ds ls, embed_listDir ds ls -> connected ls.
-Admitted.
+Proof.
+  intros ds ls [sc [_ Hembed]].
+  now apply (embed_scurve_connected sc ls).
+Qed.
 
 
 
@@ -775,7 +792,31 @@ Lemma sparse_embedding_sub_endpoints :
     sub <> [] ->
     sparse_embedding (l ++ sub ++ r) ->
     sub_endpoints_do_not_cross l sub r.
-Admitted.
+Proof.
+  intros l sub r Hsub Hsparse.
+  destruct sub as [|first tail]; [contradiction|].
+  assert (Hfirst : sub_endpoints_do_not_cross l [first] (tail ++ r)).
+  { assert (Heq : l ++ first :: tail ++ r = l ++ [first] ++ (tail ++ r)).
+    { reflexivity. }
+    exact (proj2 (Hsparse l first (tail ++ r) Heq)). }
+  assert (Hne : first :: tail <> []) by discriminate.
+  destruct (exists_last Hne) as [prefix [last Hdecomp]].
+  assert (Hfull : l ++ first :: tail ++ r = (l ++ prefix) ++ [last] ++ r).
+  { transitivity (l ++ (prefix ++ [last]) ++ r).
+    - exact (f_equal (fun xs => l ++ xs ++ r) Hdecomp).
+    - repeat rewrite app_assoc. reflexivity. }
+  assert (Hlast : sub_endpoints_do_not_cross (l ++ prefix) [last] r).
+  { exact (proj2 (Hsparse (l ++ prefix) last r Hfull)). }
+  assert (Hlastseg : last_segment (first :: tail) = last).
+  { rewrite Hdecomp. unfold last_segment. apply last_last. }
+  unfold sub_endpoints_do_not_cross in Hlast.
+  rewrite <- Hfull in Hlast.
+  unfold sub_endpoints_do_not_cross in Hfirst |- *.
+  intros t1 t2 Hneq [Hinit | Hterm].
+  - apply (Hfirst t1 t2 Hneq). now left.
+  - apply (Hlast t1 t2 Hneq). right.
+    now rewrite <- Hlastseg.
+Qed.
 
 (* 先頭延長線と末尾延長線が互いに交わらない。 ls が単一セグメントならば使わない？ *)
 Definition extensions_disjoint (ls : list Segment) : Prop :=
