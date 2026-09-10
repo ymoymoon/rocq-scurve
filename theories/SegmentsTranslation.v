@@ -242,6 +242,13 @@ Axiom translate_seg_point :
 Axiom translate_seg_orn :
   forall v s, orn_seg (translate_seg v s) = orn_seg s.
 
+(* 平行移動は両端で指定される延長線の傾きを変えない。 *)
+Axiom translate_seg_slope_init :
+  forall v s, slope_init (translate_seg v s) = slope_init s.
+
+Axiom translate_seg_slope_term :
+  forall v s, slope_term (translate_seg v s) = slope_term s.
+
 (* 逆向きの平行移動により元のセグメントへ戻る。 *)
 Axiom translate_seg_inverse :
   forall v s, translate_seg (opposite_translation v) (translate_seg v s) = s.
@@ -257,6 +264,22 @@ Proof. intros v s. unfold term. apply translate_seg_point. Qed.
 Lemma onSegment_translate :
   forall v s p,
     onSegment s p -> onSegment (translate_seg v s) (translate_pt v p).
+Proof.
+  intros v s p [t [Ht Hp]]. exists t. split; [exact Ht |].
+  now rewrite translate_seg_point, Hp.
+Qed.
+
+Lemma onHead_translate :
+  forall v s p,
+    onHead s p -> onHead (translate_seg v s) (translate_pt v p).
+Proof.
+  intros v s p [t [Ht Hp]]. exists t. split; [exact Ht |].
+  now rewrite translate_seg_point, Hp.
+Qed.
+
+Lemma onLast_translate :
+  forall v s p,
+    onLast s p -> onLast (translate_seg v s) (translate_pt v p).
 Proof.
   intros v s p [t [Ht Hp]]. exists t. split; [exact Ht |].
   now rewrite translate_seg_point, Hp.

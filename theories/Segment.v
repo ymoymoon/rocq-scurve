@@ -189,18 +189,9 @@ Axiom exist_between_x_pos: forall (seg: Segment) (x1 x2 y1 y2 x: R),
 Axiom exist_between_x_neg: forall (seg: Segment) (x1 x2 y1 y2 x: R),
     onSegment seg (x1, y1) -> onSegment seg (x2, y2) -> y2 <= y1 -> x1 <= x -> x <= x2 -> exists y:R, onSegment seg (x, y) /\ y2 <= y <= y1.
 
-(* ２点を始点終点とする，指定された向きのセグメントが取れる
-    ＝ 始点と終点のx, y座標がそれぞれ異なっている，のはず *)
-Parameter reconnectable : Point -> Point -> Direction -> Prop.
-
-Axiom reconnectable_iff : forall p q d,
-  reconnectable p q d <->
-  exists s, init s = p /\ term s = q /\ orn_seg s = d.
-
-Lemma reconnectable_segment_exists : forall p q d,
-  reconnectable p q d ->
-  exists s, init s = p /\ term s = q /\ orn_seg s = d.
-Proof. intros p q d H. now apply reconnectable_iff. Qed.
+(* x, y の双方が異なる二点は、任意の向きで再接続できる。 *)
+Definition reconnectable (p q : Point) (_ : Direction) : Prop :=
+  fst p <> fst q /\ snd p <> snd q.
 
 Parameter make_seg : forall p q d,
   reconnectable p q d -> Segment.
@@ -221,6 +212,23 @@ Proof. intros p q d H; exact (proj1 (proj2 (make_seg_spec p q d H))). Qed.
 Lemma make_seg_orn : forall p q d H,
   orn_seg (make_seg p q d H) = d.
 Proof. intros p q d H; exact (proj2 (proj2 (make_seg_spec p q d H))). Qed.
+
+Lemma reconnectable_iff : forall p q d,
+  reconnectable p q d <->
+  exists s, init s = p /\ term s = q /\ orn_seg s = d.
+Proof.
+  intros p q d. split.
+  - intros H. exists (make_seg p q d H). apply make_seg_spec.
+  - intros [s [Hinit [Hterm _]]]. unfold reconnectable.
+    split.
+    + rewrite <- Hinit, <- Hterm. apply neq_init_term_x.
+    + rewrite <- Hinit, <- Hterm. apply neq_init_term_y.
+Qed.
+
+Lemma reconnectable_segment_exists : forall p q d,
+  reconnectable p q d ->
+  exists s, init s = p /\ term s = q /\ orn_seg s = d.
+Proof. intros p q d H. now apply reconnectable_iff. Qed.
 
 
 (* 注意：傾きを想定しているが，原理上は，埋め込みの延長線を一意に定義するものであればよい *)
