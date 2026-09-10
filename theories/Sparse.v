@@ -1135,6 +1135,17 @@ Inductive region_above : Region -> Region -> Prop :=
   | RegUp_above_Down : region_above RegUp RegDown
   | RegFix_above_Down : region_above RegFix RegDown.
 
+Definition region_at_or_above (g1 g2 : Region) : Prop :=
+  g1 = g2 \/ region_above g1 g2.
+
+Lemma region_above_not_reverse :
+  forall g1 g2,
+    region_above g1 g2 -> ~ region_at_or_above g2 g1.
+Proof.
+  intros g1 g2 H. destruct H; intros [Heq | Hrev];
+    try discriminate; inversion Hrev.
+Qed.
+
 Lemma Region_eq_dec : forall g1 g2 : Region, {g1 = g2} + {g1 <> g2}.
 Proof. decide equality. Qed.
 
@@ -1149,9 +1160,41 @@ Definition endpoint_of (ls : list Segment) (p : Point) : Prop :=
 Parameter classify :
   list Segment -> list Segment -> list Segment -> Point -> Region.
 
+Definition above_head_extension (ls : list Segment) (p : Point) : Prop :=
+  exists q,
+    onHead_extend ls q /\ fst q = fst p /\ snd q < snd p.
+
+Definition below_head_extension (ls : list Segment) (p : Point) : Prop :=
+  exists q,
+    onHead_extend ls q /\ fst q = fst p /\ snd p < snd q.
+
+Definition above_last_extension (ls : list Segment) (p : Point) : Prop :=
+  exists q,
+    onLast_extend ls q /\ fst q = fst p /\ snd q < snd p.
+
+Definition below_last_extension (ls : list Segment) (p : Point) : Prop :=
+  exists q,
+    onLast_extend ls q /\ fst q = fst p /\ snd p < snd q.
+
 Record ClassificationSpec (l sub r : list Segment) : Prop := {
   classified_sub_fixed :
     forall p, endpoint_of sub p -> classify l sub r p = RegFix;
+
+  classified_segment_endpoints_monotone :
+    forall s,
+      In s (l ++ sub ++ r) ->
+      (snd (init s) < snd (term s) ->
+       region_at_or_above
+         (classify l sub r (term s)) (classify l sub r (init s)))
+      /\ (snd (term s) < snd (init s) ->
+          region_at_or_above
+            (classify l sub r (init s)) (classify l sub r (term s)));
+
+  classified_same_x_monotone :
+    forall p q,
+      fst p = fst q ->
+      snd p < snd q ->
+      region_at_or_above (classify l sub r q) (classify l sub r p);
 
   classified_head_same_region :
     l <> [] ->
@@ -1165,7 +1208,31 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
     classify l sub r (init (last_segment r)) =
       classify l sub r (term (last_segment r))
     \/ (init (last_segment r) = term (last_segment sub)
-        /\ fst (term (last_segment r)) < fst (term (last_segment sub)))
+        /\ fst (term (last_segment r)) < fst (term (last_segment sub)));
+
+  classified_above_head_up :
+    classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegUp ->
+    forall p,
+      above_head_extension (l ++ sub ++ r) p ->
+      classify l sub r p = RegUp;
+
+  classified_below_head_down :
+    classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegDown ->
+    forall p,
+      below_head_extension (l ++ sub ++ r) p ->
+      classify l sub r p = RegDown;
+
+  classified_above_last_up :
+    classify l sub r (term (last_segment (l ++ sub ++ r))) = RegUp ->
+    forall p,
+      above_last_extension (l ++ sub ++ r) p ->
+      classify l sub r p = RegUp;
+
+  classified_below_last_down :
+    classify l sub r (term (last_segment (l ++ sub ++ r))) = RegDown ->
+    forall p,
+      below_last_extension (l ++ sub ++ r) p ->
+      classify l sub r p = RegDown
 }.
 
 Axiom classify_spec :
@@ -1176,15 +1243,29 @@ Axiom classify_spec :
     sparse_embedding (l ++ sub ++ r) ->
     ClassificationSpec l sub r.
 
-(* 同じ x 座標では、端点の分類は Up, Fix, Down の順に上下へ並ぶ。 *)
-Lemma classified_endpoint_vertical_order :
+(* 同じ x 上の分類単調性から、異なる領域の点の上下順序を逆に読む。 *)
+Lemma classified_vertical_order :
   forall l sub r p q,
-    endpoint_of (l ++ sub ++ r) p ->
-    endpoint_of (l ++ sub ++ r) q ->
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
     fst p = fst q ->
     region_above (classify l sub r p) (classify l sub r q) ->
     snd q < snd p.
-Admitted.
+Proof.
+  intros l sub r p q Hne Hconn Hmono Hsparse Hx Habove.
+  destruct (total_order_T (snd q) (snd p)) as [[Hlt | Heq] | Hgt].
+  - exact Hlt.
+  - exfalso. apply (region_above_not_reverse _ _ Habove).
+    left. f_equal. destruct p as [xp yp], q as [xq yq].
+    simpl in Hx, Heq |- *. f_equal; lra.
+  - exfalso. apply (region_above_not_reverse _ _ Habove).
+    eapply classified_same_x_monotone.
+    + exact (classify_spec l sub r Hne Hconn Hmono Hsparse).
+    + exact Hx.
+    + exact Hgt.
+Qed.
 
 Definition shift (h : R) (g : Region) (p : Point) : Point :=
   match g with
@@ -1207,6 +1288,18 @@ Proof.
     simpl; f_equal; ring.
 Qed.
 
+Lemma shift_preserves_strict_vertical_order :
+  forall h p q gp gq,
+    0 < h ->
+    snd p < snd q ->
+    region_at_or_above gq gp ->
+    snd (shift h gp p) < snd (shift h gq q).
+Proof.
+  intros h [xp yp] [xq yq] gp gq Hh Hy [Heq | Habove].
+  - subst gq. destruct gp; simpl in Hy |- *; lra.
+  - destruct Habove; simpl in Hy |- *; lra.
+Qed.
+
 Definition operate_point
   (l sub r : list Segment) (h : R) (p : Point) : Point :=
   shift h (classify l sub r p) p.
@@ -1219,16 +1312,19 @@ Lemma operate_point_fst :
   forall l sub r h p, fst (operate_point l sub r h p) = fst p.
 Proof. intros. unfold operate_point. apply shift_fst. Qed.
 
-(* 正の高さによる上下移動は、元の曲線の端点集合上で単射である。 *)
-Lemma operate_point_injective_on_endpoints :
+(* 同じ x 上の分類単調性により、正の高さの上下移動は平面上で単射となる。 *)
+Lemma operate_point_injective :
   forall l sub r h p q,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
     0 < h ->
-    endpoint_of (l ++ sub ++ r) p ->
-    endpoint_of (l ++ sub ++ r) q ->
     operate_point l sub r h p = operate_point l sub r h q ->
     p = q.
 Proof.
-  intros l sub r h [xp yp] [xq yq] Hh Hp Hq Heq.
+  intros l sub r h [xp yp] [xq yq]
+    Hne Hconn Hmono Hsparse Hh Heq.
   destruct (classify l sub r (xp, yp)) eqn:Hrp;
   destruct (classify l sub r (xq, yq)) eqn:Hrq;
   unfold operate_point, shift in Heq; rewrite Hrp, Hrq in Heq;
@@ -1236,34 +1332,40 @@ Proof.
   pose proof (f_equal snd Heq) as Hy; simpl in Hx, Hy.
   - f_equal; lra.
   - exfalso.
-    pose proof (classified_endpoint_vertical_order
-                  l sub r (xq, yq) (xp, yp) Hq Hp ltac:(symmetry; exact Hx)
+    pose proof (classified_vertical_order
+                  l sub r (xq, yq) (xp, yp) Hne Hconn Hmono Hsparse
+                  ltac:(symmetry; exact Hx)
                   ltac:(rewrite Hrq, Hrp; constructor)) as Horder.
     simpl in Horder. lra.
   - exfalso.
-    pose proof (classified_endpoint_vertical_order
-                  l sub r (xp, yp) (xq, yq) Hp Hq ltac:(exact Hx)
+    pose proof (classified_vertical_order
+                  l sub r (xp, yp) (xq, yq) Hne Hconn Hmono Hsparse
+                  ltac:(exact Hx)
                   ltac:(rewrite Hrp, Hrq; constructor)) as Horder.
     simpl in Horder. lra.
   - exfalso.
-    pose proof (classified_endpoint_vertical_order
-                  l sub r (xp, yp) (xq, yq) Hp Hq ltac:(exact Hx)
+    pose proof (classified_vertical_order
+                  l sub r (xp, yp) (xq, yq) Hne Hconn Hmono Hsparse
+                  ltac:(exact Hx)
                   ltac:(rewrite Hrp, Hrq; constructor)) as Horder.
     simpl in Horder. lra.
   - f_equal; lra.
   - exfalso.
-    pose proof (classified_endpoint_vertical_order
-                  l sub r (xp, yp) (xq, yq) Hp Hq ltac:(exact Hx)
+    pose proof (classified_vertical_order
+                  l sub r (xp, yp) (xq, yq) Hne Hconn Hmono Hsparse
+                  ltac:(exact Hx)
                   ltac:(rewrite Hrp, Hrq; constructor)) as Horder.
     simpl in Horder. lra.
   - exfalso.
-    pose proof (classified_endpoint_vertical_order
-                  l sub r (xq, yq) (xp, yp) Hq Hp ltac:(symmetry; exact Hx)
+    pose proof (classified_vertical_order
+                  l sub r (xq, yq) (xp, yp) Hne Hconn Hmono Hsparse
+                  ltac:(symmetry; exact Hx)
                   ltac:(rewrite Hrq, Hrp; constructor)) as Horder.
     simpl in Horder. lra.
   - exfalso.
-    pose proof (classified_endpoint_vertical_order
-                  l sub r (xq, yq) (xp, yp) Hq Hp ltac:(symmetry; exact Hx)
+    pose proof (classified_vertical_order
+                  l sub r (xq, yq) (xp, yp) Hne Hconn Hmono Hsparse
+                  ltac:(symmetry; exact Hx)
                   ltac:(rewrite Hrq, Hrp; constructor)) as Horder.
     simpl in Horder. lra.
   - f_equal; lra.
@@ -1700,7 +1802,27 @@ Lemma operation_height_safe :
     In s (l ++ sub ++ r) ->
     snd (operate_point l sub r h (init s)) <>
     snd (operate_point l sub r h (term s)).
-Admitted.
+Proof.
+  intros l sub r h s Hne Hconn Hmono Hh Hsparse Hs.
+  pose proof (classified_segment_endpoints_monotone
+                l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse)
+                s Hs) as [HinitTerm HtermInit].
+  destruct (total_order_T (snd (init s)) (snd (term s)))
+    as [[Hlt | Heq] | Hgt].
+  - pose proof (shift_preserves_strict_vertical_order
+                  h (init s) (term s)
+                  (classify l sub r (init s))
+                  (classify l sub r (term s))
+                  (proj1 Hh) Hlt (HinitTerm Hlt)) as Hshift.
+    unfold operate_point. lra.
+  - exfalso. apply (neq_init_term_y s). exact Heq.
+  - pose proof (shift_preserves_strict_vertical_order
+                  h (term s) (init s)
+                  (classify l sub r (term s))
+                  (classify l sub r (init s))
+                  (proj1 Hh) Hgt (HtermInit Hgt)) as Hshift.
+    unfold operate_point. lra.
+Qed.
 
 (* 一つのセグメントについて、分類された両端点を元の向きで再接続できる。 *)
 Lemma operate_one_endpoints_reconnectable :
@@ -1989,8 +2111,8 @@ Proof.
     with (old := l ++ sub ++ r) (f := operate_point l sub r h).
   - now apply reconnect_split_endpoints_mapped.
   - intros p q Hp Hq Heq.
-    exact (operate_point_injective_on_endpoints
-             l sub r h p q (proj1 Hh) Hp Hq Heq).
+    exact (operate_point_injective
+             l sub r h p q Hne Hconn Hmono Hsparse (proj1 Hh) Heq).
   - now apply sparse_embedding_segment_endpoints_separated.
   - exact Hrect.
   - exact HextEnds.
