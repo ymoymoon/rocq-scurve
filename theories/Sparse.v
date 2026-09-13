@@ -932,6 +932,243 @@ Proof.
   now apply (point_injective s1).
 Qed.
 
+Lemma on_segment_term_from_x : forall s p,
+  onSegment s p -> fst p = fst (term s) -> p = term s.
+Proof.
+  intros s p Hp Hx.
+  destruct (segment_in_rect_or_endpoints s p Hp)
+    as [Hinit | [Hterm | Hinside]].
+  - subst p. exfalso. apply (neq_init_term_x s). exact Hx.
+  - exact Hterm.
+  - unfold in_segment_rect_or_endpoints, in_rect, rect_of in Hinside.
+    simpl in Hinside. destruct Hinside as [[Hmin Hmax] _].
+    rewrite Hx in Hmin, Hmax.
+    destruct (Rle_dec (fst (init s)) (fst (term s))) as [Hle | Hgt].
+    + rewrite Rmin_left in Hmin by exact Hle.
+      rewrite Rmax_right in Hmax by exact Hle.
+      exfalso. exact (Rlt_irrefl _ Hmax).
+    + assert (Hrev : fst (term s) <= fst (init s)).
+      { apply Rlt_le. now apply Rnot_le_lt. }
+      rewrite Rmin_right in Hmin by exact Hrev.
+      rewrite Rmax_left in Hmax by exact Hrev.
+      exfalso. exact (Rlt_irrefl _ Hmin).
+Qed.
+
+Lemma on_segment_term_from_y : forall s p,
+  onSegment s p -> snd p = snd (term s) -> p = term s.
+Proof.
+  intros s p Hp Hy.
+  destruct (segment_in_rect_or_endpoints s p Hp)
+    as [Hinit | [Hterm | Hinside]].
+  - subst p. exfalso. apply (neq_init_term_y s). exact Hy.
+  - exact Hterm.
+  - unfold in_segment_rect_or_endpoints, in_rect, rect_of in Hinside.
+    simpl in Hinside. destruct Hinside as [_ [Hmin Hmax]].
+    rewrite Hy in Hmin, Hmax.
+    destruct (Rle_dec (snd (init s)) (snd (term s))) as [Hle | Hgt].
+    + rewrite Rmin_left in Hmin by exact Hle.
+      rewrite Rmax_right in Hmax by exact Hle.
+      exfalso. exact (Rlt_irrefl _ Hmax).
+    + assert (Hrev : snd (term s) <= snd (init s)).
+      { apply Rlt_le. now apply Rnot_le_lt. }
+      rewrite Rmin_right in Hmin by exact Hrev.
+      rewrite Rmax_left in Hmax by exact Hrev.
+      exfalso. exact (Rlt_irrefl _ Hmin).
+Qed.
+
+(* 直接連結された二セグメントは共有端点以外では交わらない。 *)
+Lemma adjacent_not_intersect_except_junction :
+  forall ps1 ps2 s1 s2 p,
+    dc ps1 ps2 ->
+    embed ps1 s1 ->
+    embed ps2 s2 ->
+    term s1 = init s2 ->
+    onSegment s1 p ->
+    onSegment s2 p ->
+    p = term s1.
+Proof.
+  intros ps1 ps2 s1 s2 [x y] Hdc Hembed1 Hembed2 Hjoin Hp1 Hp2.
+  pose proof (f_equal fst Hjoin) as Hjoinx.
+  pose proof (f_equal snd Hjoin) as Hjoiny.
+  destruct Hdc as [v h c | h | h | h | h].
+  - destruct h.
+    + pose proof (e_onseg_relation s1 v c x y Hembed1 Hp1) as [_ Hx1].
+      pose proof (e_onseg_relation s2 v (i_c c) x y Hembed2 Hp2) as [Hx2 _].
+      apply on_segment_term_from_x; [exact Hp1 |]. simpl.
+      apply Rle_antisym; [exact Hx1 | now rewrite Hjoinx].
+    + pose proof (w_onseg_relation s1 v c x y Hembed1 Hp1) as [Hx1 _].
+      pose proof (w_onseg_relation s2 v (i_c c) x y Hembed2 Hp2) as [_ Hx2].
+      apply on_segment_term_from_x; [exact Hp1 |]. simpl.
+      apply Rle_antisym; [now rewrite Hjoinx | exact Hx1].
+  - destruct h.
+    + pose proof (e_onseg_relation s1 n cx x y Hembed1 Hp1) as [_ Hx1].
+      pose proof (e_onseg_relation s2 s cx x y Hembed2 Hp2) as [Hx2 _].
+      apply on_segment_term_from_x; [exact Hp1 |]. simpl.
+      apply Rle_antisym; [exact Hx1 | now rewrite Hjoinx].
+    + pose proof (w_onseg_relation s1 n cx x y Hembed1 Hp1) as [Hx1 _].
+      pose proof (w_onseg_relation s2 s cx x y Hembed2 Hp2) as [_ Hx2].
+      apply on_segment_term_from_x; [exact Hp1 |]. simpl.
+      apply Rle_antisym; [now rewrite Hjoinx | exact Hx1].
+  - destruct h.
+    + pose proof (e_onseg_relation s1 s cc x y Hembed1 Hp1) as [_ Hx1].
+      pose proof (e_onseg_relation s2 n cc x y Hembed2 Hp2) as [Hx2 _].
+      apply on_segment_term_from_x; [exact Hp1 |]. simpl.
+      apply Rle_antisym; [exact Hx1 | now rewrite Hjoinx].
+    + pose proof (w_onseg_relation s1 s cc x y Hembed1 Hp1) as [Hx1 _].
+      pose proof (w_onseg_relation s2 n cc x y Hembed2 Hp2) as [_ Hx2].
+      apply on_segment_term_from_x; [exact Hp1 |]. simpl.
+      apply Rle_antisym; [now rewrite Hjoinx | exact Hx1].
+  - pose proof (n_onseg_relation s1 h cc x y Hembed1 Hp1) as [_ Hy1].
+    pose proof (n_onseg_relation s2 (i_h h) cx x y Hembed2 Hp2) as [Hy2 _].
+    apply on_segment_term_from_y; [exact Hp1 |]. simpl.
+    apply Rle_antisym; [exact Hy1 | now rewrite Hjoiny].
+  - pose proof (s_onseg_relation s1 h cx x y Hembed1 Hp1) as [Hy1 _].
+    pose proof (s_onseg_relation s2 (i_h h) cc x y Hembed2 Hp2) as [_ Hy2].
+    apply on_segment_term_from_y; [exact Hp1 |]. simpl.
+    apply Rle_antisym; [now rewrite Hjoiny | exact Hy1].
+Qed.
+
+Lemma embed_scurve_nth_embed : forall sc ls,
+  embed_scurve sc ls ->
+  forall i s, nth_error ls i = Some s ->
+  exists ps, nth_error (proj1_sig sc) i = Some ps /\ embed ps s.
+Proof.
+  intros sc ls Hembed.
+  induction Hembed as
+    [| ps seg0 Hps | ps lp A s1 s2 rest Hps Htail IH Hjoin];
+    intros i seg Hnth.
+  - destruct i; discriminate.
+  - destruct i as [|i]; simpl in Hnth.
+    + injection Hnth as <-. exists ps. split; [reflexivity | exact Hps].
+    + destruct i; discriminate.
+  - destruct i as [|i]; simpl in Hnth.
+    + injection Hnth as <-. exists ps. split; [reflexivity | exact Hps].
+    + destruct (IH i seg Hnth) as [q [Hq Hqs]].
+      exists q. split; [exact Hq | exact Hqs].
+Qed.
+
+Lemma is_scurve_adjacent_dc : forall ps i ps1 ps2,
+  is_scurve ps ->
+  nth_error ps i = Some ps1 ->
+  nth_error ps (S i) = Some ps2 ->
+  dc ps1 ps2.
+Proof.
+  intros ps i ps1 ps2 Hcurve. revert i ps1 ps2.
+  induction Hcurve as [|p ps Hcurve IH Hhead]; intros i ps1 ps2 H1 H2.
+  - destruct i; discriminate.
+  - destruct i as [|i].
+    + simpl in H1, H2. injection H1 as <-.
+      destruct ps as [|q qs]; [discriminate|].
+      simpl in H2. injection H2 as <-.
+      inversion Hhead; subst. assumption.
+    + simpl in H1, H2. eapply IH; eauto.
+Qed.
+
+Lemma embed_scurve_adjacent_data : forall sc ls i s1 s2,
+  embed_scurve sc ls ->
+  nth_error ls i = Some s1 ->
+  nth_error ls (S i) = Some s2 ->
+  exists ps1 ps2,
+    embed ps1 s1 /\ embed ps2 s2 /\ dc ps1 ps2 /\ term s1 = init s2.
+Proof.
+  intros sc ls i s1 s2 Hembed H1 H2.
+  destruct (embed_scurve_nth_embed sc ls Hembed i s1 H1)
+    as [ps1 [Hp1 Hembed1]].
+  destruct (embed_scurve_nth_embed sc ls Hembed (S i) s2 H2)
+    as [ps2 [Hp2 Hembed2]].
+  exists ps1, ps2. repeat split; try assumption.
+  - eapply is_scurve_adjacent_dc; eauto. exact (proj2_sig sc).
+  - eapply embed_scurve_connected; eauto.
+Qed.
+
+Lemma nonadjacent_sides_prefix : forall a l r s,
+  In s (nonadjacent_sides l r) ->
+  In s (nonadjacent_sides (a :: l) r).
+Proof.
+  intros a l r s. unfold nonadjacent_sides.
+  destruct l as [|b l]; [simpl; tauto |].
+  intros H. rewrite in_app_iff in H. rewrite in_app_iff.
+  destruct H as [H | H].
+  - left. simpl. now right.
+  - now right.
+Qed.
+
+(* 添字が二つ以上離れた要素は、中心要素の非隣接部分に現れる。 *)
+Lemma nth_error_far_in_nonadjacent_sides : forall ls i j s t,
+  nth_error ls i = Some s ->
+  nth_error ls j = Some t ->
+  (S i < j \/ S j < i)%nat ->
+  exists l r,
+    ls = l ++ [s] ++ r /\ In t (nonadjacent_sides l r).
+Proof.
+  induction ls as [|a ls IH]; intros i j s t Hi Hj Hfar.
+  - destruct i; discriminate.
+  - destruct i as [|i], j as [|j].
+    + lia.
+    + simpl in Hi. injection Hi as <-.
+      destruct j as [|j]; [lia|].
+      simpl in Hj. destruct ls as [|b ls]; [discriminate|].
+      simpl in Hj. exists [], (b :: ls). split; [reflexivity|].
+      simpl. now apply nth_error_In in Hj.
+    + simpl in Hj. injection Hj as <-.
+      destruct i as [|i]; [lia|].
+      simpl in Hi.
+      destruct (@nth_error_split Segment ls (S i) s Hi)
+        as [l [r [Hls Hlen]]].
+      destruct l as [|b l]; [discriminate|].
+      exists (a :: b :: l), r. split.
+      * simpl. now rewrite Hls.
+      * unfold nonadjacent_sides. rewrite in_app_iff. left. simpl. tauto.
+    + simpl in Hi, Hj.
+      destruct (IH i j s t Hi Hj ltac:(lia)) as [l [r [Hls Hin]]].
+      exists (a :: l), r. split.
+      * simpl. now rewrite Hls.
+      * now apply nonadjacent_sides_prefix.
+Qed.
+
+(* 後のセグメントの始点以外の点は、それ以前のセグメント上に戻らない。 *)
+Lemma later_body_point_not_on_earlier_segment :
+  forall sc ls earlier later s_earlier s_later u,
+    embed_scurve sc ls ->
+    sparse_embedding ls ->
+    nth_error ls earlier = Some s_earlier ->
+    nth_error ls later = Some s_later ->
+    (earlier < later)%nat ->
+    0 < u <= 1 ->
+    onSegment s_earlier (point s_later u) ->
+    False.
+Proof.
+  intros sc ls earlier later s_earlier s_later u
+    Hembed Hsparse Hearlier Hlater Hlt Hu HonEarlier.
+  assert (HonLater : onSegment s_later (point s_later u)).
+  { exists u. split; [lra | reflexivity]. }
+  destruct (Nat.eq_dec later (S earlier)) as [Hadj | Hfar].
+  - subst later.
+    destruct (embed_scurve_adjacent_data
+                sc ls earlier s_earlier s_later
+                Hembed Hearlier Hlater)
+      as [ps1 [ps2 [Hembed1 [Hembed2 [Hdc Hjoin]]]]].
+    pose proof (adjacent_not_intersect_except_junction
+                  ps1 ps2 s_earlier s_later (point s_later u)
+                  Hdc Hembed1 Hembed2 Hjoin HonEarlier HonLater) as Hp.
+    assert (Hzero : u = 0).
+    { apply (point_injective s_later u 0).
+      change (point s_later u = init s_later).
+      now rewrite Hp. }
+    lra.
+  - assert (Hfar' : (S earlier < later)%nat) by lia.
+    destruct (nth_error_far_in_nonadjacent_sides
+                ls later earlier s_later s_earlier
+                Hlater Hearlier ltac:(right; exact Hfar'))
+      as [l [r [Hsplit Hin]]].
+    destruct (Hsparse l s_later r Hsplit) as [_ Hrect].
+    pose proof (Hrect s_earlier (point s_later u) Hin
+                  (segment_in_rect_or_endpoints
+                     s_earlier (point s_later u) HonEarlier)) as Havoid.
+    apply Havoid. change (in_segment_rect_or_endpoints s_later (point s_later u)).
+    exact (segment_in_rect_or_endpoints s_later (point s_later u) HonLater).
+Qed.
+
 Lemma sparse_body_collision_impossible : forall ls tb to sb so,
   ls <> [] ->
   (exists ds, embed_listDir ds ls) ->
@@ -943,13 +1180,80 @@ Lemma sparse_body_collision_impossible : forall ls tb to sb so,
   extend ls tb = point sb (extend_param ls tb) ->
   extend ls to = point so (extend_param ls to) ->
   extend ls tb = extend ls to ->
-  (onHead_extend ls (extend ls to)
-   \/ onSegment so (extend ls to)
-   \/ onLast_extend ls (extend ls to)) ->
   False.
 (* 非隣接なら sparse の長方形分離、隣接なら PrimitiveSegment
    埋め込みの方向条件から、異なる piece の衝突を除く。 *)
-Admitted.
+Proof.
+  intros ls tb to sb so Hne [ds [sc [_ Hembed]]] Hsparse
+    Hnthb Hntho Hindices Hbodyb Hreprb Hrepro Hcollision.
+  set (ib := extend_index ls tb) in *.
+  set (io := extend_index ls to) in *.
+  set (ub := extend_param ls tb) in *.
+  set (uo := extend_param ls to) in *.
+  assert (Hpoints : point sb ub = point so uo).
+  { rewrite <- Hreprb, <- Hrepro. exact Hcollision. }
+  assert (Honb : onSegment sb (point sb ub)).
+  { exists ub. split; [split; lra | reflexivity]. }
+  assert (Hboxb : in_rect_or_endpoints_at [sb] (point sb ub)).
+  { change (in_segment_rect_or_endpoints sb (point sb ub)).
+    now apply segment_in_rect_or_endpoints. }
+  destruct (extend_param_region ls to Hne)
+    as [Hbodyo | [[Hio0 Huo] | [Hiolast Huo]]].
+  - assert (Hono : onSegment so (point so uo)).
+    { exists uo. split.
+      - split; [now apply Rlt_le | exact (proj2 Hbodyo)].
+      - reflexivity. }
+    destruct (Nat.lt_trichotomy ib io) as [Hlt | [Heq | Hgt]].
+    + eapply (later_body_point_not_on_earlier_segment
+                sc ls ib io sb so uo Hembed Hsparse
+                Hnthb Hntho Hlt Hbodyo).
+      rewrite <- Hpoints. exact Honb.
+    + now apply Hindices.
+    + eapply (later_body_point_not_on_earlier_segment
+                sc ls io ib so sb ub Hembed Hsparse
+                Hntho Hnthb Hgt Hbodyb).
+      rewrite Hpoints. exact Hono.
+  - change (io = 0%nat) in Hio0.
+    change (uo <= 0) in Huo.
+    destruct (Rlt_dec uo 0) as [Huostrict | Huozero].
+    + destruct (@nth_error_split Segment ls ib sb Hnthb)
+        as [l [r [Hsplit _]]].
+      destruct (Hsparse l sb r Hsplit) as [Hextend _].
+      assert (Hwhole : l ++ [sb] ++ r = ls).
+      { change (l ++ sb :: r = ls). now symmetry. }
+      apply (Hextend (point sb ub)).
+      * left. rewrite Hwhole. unfold onHead_extend_strict.
+        assert (Hso : so = hd_segment ls).
+        { rewrite Hio0 in Hntho. unfold hd_segment. symmetry.
+          eapply nth_error_hd; exact Hntho. }
+        exists uo. split; [exact Huostrict |].
+        rewrite <- Hso, <- Hpoints. reflexivity.
+      * exact Hboxb.
+    + assert (Huo0 : uo = 0) by lra.
+      assert (Hlt : (io < ib)%nat) by lia.
+      eapply (later_body_point_not_on_earlier_segment
+                sc ls io ib so sb ub Hembed Hsparse
+                Hntho Hnthb Hlt Hbodyb).
+      rewrite Hpoints, Huo0. apply onInit.
+  - change (S io = length ls) in Hiolast.
+    change (1 < uo) in Huo.
+    destruct (@nth_error_split Segment ls ib sb Hnthb)
+      as [l [r [Hsplit _]]].
+    destruct (Hsparse l sb r Hsplit) as [Hextend _].
+    assert (Hwhole : l ++ [sb] ++ r = ls).
+    { change (l ++ sb :: r = ls). now symmetry. }
+    apply (Hextend (point sb ub)).
+    + right. rewrite Hwhole. unfold onLast_extend_strict.
+      assert (Hso : so = last_segment ls).
+      { unfold last_segment.
+        assert (K : io = (length ls - 1)%nat) by lia.
+        rewrite K in Hntho.
+        pose proof (@nth_error_last Segment ls default_segment Hne) as Hlast.
+        rewrite Hntho in Hlast. now injection Hlast. }
+      exists uo. split; [exact Huo |].
+      rewrite <- Hso, <- Hpoints. reflexivity.
+    + exact Hboxb.
+Qed.
 
 Lemma sparse_extensions_open :
   forall ds ls,
@@ -971,29 +1275,19 @@ Proof.
     + apply Hneq. exact (same_extend_piece_no_collision ls t1 t2 s1 s2 Hne Hnth1 Hnth2 Hi Hpoint).
     + eapply (sparse_body_collision_impossible ls t1 t2 s1 s2
                 Hne (ex_intro _ ds Hembed) Hsparse Hnth1 Hnth2 Hi Hbody1 Hrepr1 Hrepr2 Heq).
-      right; left.
-      exists (extend_param ls t2). split; [lra|exact (eq_sym Hrepr2)].
   - destruct (Nat.eq_dec (extend_index ls t1) (extend_index ls t2)) as [Hi|Hi].
     + apply Hneq. exact (same_extend_piece_no_collision ls t1 t2 s1 s2 Hne Hnth1 Hnth2 Hi Hpoint).
     + eapply (sparse_body_collision_impossible ls t1 t2 s1 s2
                 Hne (ex_intro _ ds Hembed) Hsparse Hnth1 Hnth2 Hi Hbody1 Hrepr1 Hrepr2 Heq).
-      left.
-      destruct Hhead2 as [Hi2 Hp2].
-      exact (extend_head_from_repr ls t2 s2 Hne Hnth2 Hrepr2 Hi2 Hp2).
   - destruct (Nat.eq_dec (extend_index ls t1) (extend_index ls t2)) as [Hi|Hi].
     + apply Hneq. exact (same_extend_piece_no_collision ls t1 t2 s1 s2 Hne Hnth1 Hnth2 Hi Hpoint).
     + eapply (sparse_body_collision_impossible ls t1 t2 s1 s2
                 Hne (ex_intro _ ds Hembed) Hsparse Hnth1 Hnth2 Hi Hbody1 Hrepr1 Hrepr2 Heq).
-      right; right.
-      destruct Hlast2 as [Hi2 Hp2].
-      exact (extend_last_from_repr ls t2 s2 Hne Hnth2 Hrepr2 Hi2 Hp2).
   - destruct (Nat.eq_dec (extend_index ls t1) (extend_index ls t2)) as [Hi|Hi].
     + apply Hneq. exact (same_extend_piece_no_collision ls t1 t2 s1 s2 Hne Hnth1 Hnth2 Hi Hpoint).
     + eapply (sparse_body_collision_impossible ls t2 t1 s2 s1
                 Hne (ex_intro _ ds Hembed) Hsparse Hnth2 Hnth1 ltac:(congruence) Hbody2
                 Hrepr2 Hrepr1 ltac:(congruence)).
-      left. destruct Hhead1 as [Hi1 Hp1].
-      exact (extend_head_from_repr ls t1 s1 Hne Hnth1 Hrepr1 Hi1 Hp1).
   - apply Hneq. eapply same_extend_piece_no_collision; eauto; lia.
   - apply (Hdisjoint (extend ls t1)).
     + destruct Hhead1 as [Hi1 Hp1].
@@ -1005,8 +1299,6 @@ Proof.
     + eapply (sparse_body_collision_impossible ls t2 t1 s2 s1
                 Hne (ex_intro _ ds Hembed) Hsparse Hnth2 Hnth1 ltac:(congruence) Hbody2
                 Hrepr2 Hrepr1 ltac:(congruence)).
-      right; right. destruct Hlast1 as [Hi1 Hp1].
-      exact (extend_last_from_repr ls t1 s1 Hne Hnth1 Hrepr1 Hi1 Hp1).
   - apply (Hdisjoint (extend ls t2)).
     + destruct Hhead2 as [Hi2 Hp2].
       exact (extend_head_from_repr ls t2 s2 Hne Hnth2 Hrepr2 Hi2 Hp2).
