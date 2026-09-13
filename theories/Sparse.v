@@ -1348,15 +1348,22 @@ Proof.
     rewrite Hab in Ha. lra.
 Qed.
 
-(* 連結な x 単調 sub は、始終点間の各 x 座標を通る。 *)
-Lemma x_monotone_sub_has_point :
-  forall sub x,
+(* x 単調な連結列では、全体長方形の左右端は列の始終点である。 *)
+Lemma x_monotone_rect_x_bounds :
+  forall sub,
     sub <> [] ->
     connected sub ->
     x_monotone_segs sub ->
-    rx0 (rect_of sub) <= x <= rx1 (rect_of sub) ->
-    exists q, onSegmentlist sub q /\ fst q = x.
-Admitted.
+    rx0 (rect_of sub) = fst (init (hd_segment sub))
+    /\ rx1 (rect_of sub) = fst (term (last_segment sub)).
+Proof.
+  intros sub Hne Hconn Hmono.
+  pose proof (connected_x_monotone_endpoints sub Hne Hconn Hmono) as Hends.
+  unfold rect_of; simpl.
+  rewrite Rmin_left by lra.
+  rewrite Rmax_right by lra.
+  split; reflexivity.
+Qed.
 
 (* セグメントの端点 x 区間内の各 x 座標は、セグメント上で実現される。 *)
 Lemma segment_has_point_at_x :
@@ -1407,6 +1414,66 @@ Proof.
                   ltac:(rewrite <- surjective_pairing; apply onInit)
                   ltac:(lra) (proj1 Hx) (proj2 Hx)) as [y [Hon _]].
       exists (x, y). split; [exact Hon | reflexivity].
+Qed.
+
+(* 連結な x 単調 sub は、始終点間の各 x 座標を通る。 *)
+Lemma x_monotone_sub_has_point :
+  forall sub x,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    rx0 (rect_of sub) <= x <= rx1 (rect_of sub) ->
+    exists q, onSegmentlist sub q /\ fst q = x.
+Proof.
+  intros sub x Hne. destruct sub as [|a tail]; [contradiction|].
+  clear Hne. revert a x.
+  induction tail as [|b tail IH]; intros a x Hconn Hmono Hx.
+  - destruct (segment_has_point_at_x a x Hx) as [q [Hon Hqx]].
+    exists q. split; [exists a; split; [now left | exact Hon] | exact Hqx].
+  - assert (Hab : term a = init b).
+    { apply (Hconn 0%nat a b); reflexivity. }
+    assert (HconnTail : connected (b :: tail)).
+    { intros i s1 s2 H1 H2.
+      apply (Hconn (S i) s1 s2); simpl; assumption. }
+    assert (HmonoTail : x_monotone_segs (b :: tail)).
+    { intros s Hs. apply Hmono. now right. }
+    pose proof (x_monotone_rect_x_bounds
+                  (a :: b :: tail) ltac:(discriminate) Hconn Hmono)
+      as [Hleft Hright].
+    change (rx0 (rect_of (a :: b :: tail)) = fst (init a)) in Hleft.
+    assert (Hlast :
+      last_segment (a :: b :: tail) = last_segment (b :: tail)).
+    { change (last_segment ([a] ++ b :: tail) = last_segment (b :: tail)).
+      apply last_app_nonnil. discriminate. }
+    rewrite Hleft, Hright in Hx.
+    destruct (Rle_dec x (fst (term a))) as [Hxa | Hax].
+    + assert (Hsingle :
+          rx0 (rect_of [a]) <= x <= rx1 (rect_of [a])).
+      { pose proof (Hmono a ltac:(now left)) as Ha.
+        unfold x_monotone_seg, init_x, term_x in Ha.
+        change (Rmin (fst (init a)) (fst (term a)) <= x <=
+                Rmax (fst (init a)) (fst (term a))).
+        rewrite Rmin_left by lra. rewrite Rmax_right by lra.
+        lra. }
+      destruct (segment_has_point_at_x a x Hsingle) as [q [Hon Hqx]].
+      exists q. split.
+      * exists a. split; [now left | exact Hon].
+      * exact Hqx.
+    + assert (Htailx :
+          rx0 (rect_of (b :: tail)) <= x <=
+          rx1 (rect_of (b :: tail))).
+      { pose proof (x_monotone_rect_x_bounds
+                      (b :: tail) ltac:(discriminate)
+                      HconnTail HmonoTail) as [HtailLeft HtailRight].
+        change (rx0 (rect_of (b :: tail)) = fst (init b)) in HtailLeft.
+        rewrite HtailLeft, HtailRight.
+        rewrite Hlast in Hx.
+        rewrite Hab in Hax. lra. }
+      destruct (IH b x HconnTail HmonoTail Htailx)
+        as [q [[s [Hs Hon]] Hqx]].
+      exists q. split.
+      * exists s. split; [now right | exact Hon].
+      * exact Hqx.
 Qed.
 
 Lemma classified_up_above_bbox_floor :
