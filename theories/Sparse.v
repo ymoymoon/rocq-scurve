@@ -1463,6 +1463,18 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
       snd p < snd q ->
       region_at_or_above (classify l sub r q) (classify l sub r p);
 
+  (* 非隣接セグメントの端点間で、上下移動が元の上下順序を逆転させない。 *)
+  classified_nonadjacent_endpoint_order :
+    forall i j s t ps pt,
+      nth_error (l ++ sub ++ r) i = Some s ->
+      nth_error (l ++ sub ++ r) j = Some t ->
+      (S i < j \/ S j < i)%nat ->
+      endpoint_of_seg s ps ->
+      endpoint_of_seg t pt ->
+      snd ps <= snd pt ->
+      region_at_or_above
+        (classify l sub r pt) (classify l sub r ps);
+
   classified_above_fix_up :
     forall p q,
       fst p = fst q ->
@@ -1841,6 +1853,18 @@ Lemma shift_preserves_strict_vertical_order :
     snd p < snd q ->
     region_at_or_above gq gp ->
     snd (shift h gp p) < snd (shift h gq q).
+Proof.
+  intros h [xp yp] [xq yq] gp gq Hh Hy [Heq | Habove].
+  - subst gq. destruct gp; simpl in Hy |- *; lra.
+  - destruct Habove; simpl in Hy |- *; lra.
+Qed.
+
+Lemma shift_preserves_vertical_order :
+  forall h p q gp gq,
+    0 < h ->
+    snd p <= snd q ->
+    region_at_or_above gq gp ->
+    snd (shift h gp p) <= snd (shift h gq q).
 Proof.
   intros h [xp yp] [xq yq] gp gq Hh Hy [Heq | Habove].
   - subst gq. destruct gp; simpl in Hy |- *; lra.
@@ -2519,6 +2543,328 @@ Proof.
                       i old1 old2 E1 E2).
 Qed.
 
+Lemma reconnect_split_length : forall l sub r h,
+  length (reconnect_split l sub r h) = length (l ++ sub ++ r).
+Proof.
+  intros. unfold reconnect_split. repeat rewrite length_app.
+  rewrite !reconnect_segs_length. reflexivity.
+Qed.
+
+(* 分割形式の非隣接性を、同じ二つの出現位置を表す添字へ変換する。 *)
+Lemma split_nonadjacent_nth_errors : forall ls l s r t,
+  ls = l ++ [s] ++ r ->
+  In t (nonadjacent_sides l r) ->
+  exists i j,
+    nth_error ls i = Some s /\ nth_error ls j = Some t
+    /\ (S i < j \/ S j < i)%nat.
+Proof.
+  intros ls l s r t Hsplit Hin. subst ls.
+  assert (Hs : nth_error (l ++ [s] ++ r) (length l) = Some s).
+  { rewrite nth_error_app2 by lia. replace (length l - length l)%nat with 0%nat by lia.
+    reflexivity. }
+  unfold nonadjacent_sides in Hin. rewrite in_app_iff in Hin.
+  destruct Hin as [Hin | Hin].
+  - induction l using rev_ind.
+    + simpl in Hin. contradiction.
+    + rewrite removelast_last in Hin.
+      destruct (In_nth_error l t Hin) as [j Hj].
+      assert (Hjlt : (j < length l)%nat).
+      { now apply nth_error_Some; rewrite Hj. }
+      exists (length (l ++ [x])), j. repeat split.
+      * change (nth_error ((l ++ [x]) ++ ([s] ++ r)) (length (l ++ [x])) = Some s).
+        rewrite nth_error_app2 by lia.
+        replace (length (l ++ [x]) - length (l ++ [x]))%nat with 0%nat by lia.
+        reflexivity.
+      * assert (Hprefix : nth_error (l ++ [x]) j = Some t).
+        { rewrite nth_error_app1 by exact Hjlt. exact Hj. }
+        eapply eq_trans.
+        -- apply nth_error_app1. rewrite length_app. simpl. lia.
+        -- exact Hprefix.
+      * right. rewrite length_app. simpl. lia.
+  - destruct r as [|a r]; [simpl in Hin; contradiction|].
+    simpl in Hin.
+    destruct (In_nth_error r t Hin) as [j Hj].
+    exists (length l), (length l + 2 + j)%nat. repeat split.
+    + exact Hs.
+    + rewrite nth_error_app2 by lia.
+      replace (length l + 2 + j - length l)%nat with (S (S j)) by lia.
+      simpl. exact Hj.
+    + left. lia.
+Qed.
+
+Lemma nth_error_exists_at_equal_length : forall (xs ys : list Segment) i y,
+  length xs = length ys ->
+  nth_error ys i = Some y ->
+  exists x, nth_error xs i = Some x.
+Proof.
+  intros xs ys i y Hlen Hy.
+  assert (Hi : (i < length xs)%nat).
+  { rewrite Hlen. now apply nth_error_lt in Hy. }
+  destruct (nth_error xs i) as [x |] eqn:Hx; [now exists x |].
+  exfalso. apply (proj2 (nth_error_Some xs i) Hi). exact Hx.
+Qed.
+
+Definition endpoint_rectangles_axis_separated (s t : Segment) : Prop :=
+     rx1 (rect_of [t]) <= rx0 (rect_of [s])
+  \/ rx1 (rect_of [s]) <= rx0 (rect_of [t])
+  \/ ry1 (rect_of [t]) <= ry0 (rect_of [s])
+  \/ ry1 (rect_of [s]) <= ry0 (rect_of [t]).
+
+Lemma singleton_rect_positive : forall s,
+  rx0 (rect_of [s]) < rx1 (rect_of [s])
+  /\ ry0 (rect_of [s]) < ry1 (rect_of [s]).
+Proof.
+  intros s. unfold rect_of; simpl. split.
+  - destruct (total_order_T (fst (init s)) (fst (term s)))
+      as [[Hlt | Heq] | Hgt].
+    + rewrite Rmin_left by now apply Rlt_le.
+      rewrite Rmax_right by now apply Rlt_le. exact Hlt.
+    + exfalso. apply (neq_init_term_x s). exact Heq.
+    + rewrite Rmin_right by now apply Rlt_le.
+      rewrite Rmax_left by now apply Rlt_le. exact Hgt.
+  - destruct (total_order_T (snd (init s)) (snd (term s)))
+      as [[Hlt | Heq] | Hgt].
+    + rewrite Rmin_left by now apply Rlt_le.
+      rewrite Rmax_right by now apply Rlt_le. exact Hlt.
+    + exfalso. apply (neq_init_term_y s). exact Heq.
+    + rewrite Rmin_right by now apply Rlt_le.
+      rewrite Rmax_left by now apply Rlt_le. exact Hgt.
+Qed.
+
+Lemma open_intervals_have_common_point :
+  forall a0 a1 b0 b1,
+    a0 < a1 -> b0 < b1 -> a0 < b1 -> b0 < a1 ->
+    exists x, a0 < x < a1 /\ b0 < x < b1.
+Proof.
+  intros a0 a1 b0 b1 Ha Hb Hab Hba.
+  exists ((Rmax a0 b0 + Rmin a1 b1) / 2).
+  unfold Rmax, Rmin.
+  destruct (Rle_dec a0 b0); destruct (Rle_dec a1 b1); lra.
+Qed.
+
+(* 一方の端点長方形が他方を避ければ、二長方形は軸方向に分離する。 *)
+Lemma rectangles_avoid_implies_axis_separated : forall s t,
+  (forall p,
+    in_segment_rect_or_endpoints t p ->
+    ~ in_rect_or_endpoints_at [s] p) ->
+  endpoint_rectangles_axis_separated s t.
+Proof.
+  intros s t Havoid. unfold endpoint_rectangles_axis_separated.
+  destruct (classic (rx1 (rect_of [t]) <= rx0 (rect_of [s]))) as [H | H]; [now left|].
+  destruct (classic (rx1 (rect_of [s]) <= rx0 (rect_of [t]))) as [H' | H']; [now right; left|].
+  destruct (classic (ry1 (rect_of [t]) <= ry0 (rect_of [s]))) as [Hy | Hy]; [now right; right; left|].
+  destruct (classic (ry1 (rect_of [s]) <= ry0 (rect_of [t]))) as [Hy' | Hy']; [now right; right; right|].
+  destruct (singleton_rect_positive s) as [Hsx Hsy].
+  destruct (singleton_rect_positive t) as [Htx Hty].
+  destruct (open_intervals_have_common_point
+              (rx0 (rect_of [s])) (rx1 (rect_of [s]))
+              (rx0 (rect_of [t])) (rx1 (rect_of [t]))
+              Hsx Htx ltac:(lra) ltac:(lra))
+    as [x [Hxs Hxt]].
+  destruct (open_intervals_have_common_point
+              (ry0 (rect_of [s])) (ry1 (rect_of [s]))
+              (ry0 (rect_of [t])) (ry1 (rect_of [t]))
+              Hsy Hty ltac:(lra) ltac:(lra))
+    as [y [Hys Hyt]].
+  exfalso.
+  apply (Havoid (x, y)).
+  - right; right. unfold in_rect. exact (conj Hxt Hyt).
+  - right; right. unfold in_rect. exact (conj Hxs Hys).
+Qed.
+
+Lemma in_segment_rect_or_endpoints_closed_bounds : forall s p,
+  in_segment_rect_or_endpoints s p ->
+  rx0 (rect_of [s]) <= fst p <= rx1 (rect_of [s])
+  /\ ry0 (rect_of [s]) <= snd p <= ry1 (rect_of [s]).
+Proof.
+  intros s p [Hp | [Hp | Hp]].
+  - subst p. unfold rect_of; simpl. split; split;
+      [apply Rmin_l | apply Rmax_l | apply Rmin_l | apply Rmax_l].
+  - subst p. unfold rect_of; simpl. split; split;
+      [apply Rmin_r | apply Rmax_r | apply Rmin_r | apply Rmax_r].
+  - unfold in_rect in Hp. lra.
+Qed.
+
+(* 軸方向に分離した二長方形は、端点衝突さえなければ sparse の分離を満たす。 *)
+Lemma axis_separated_boxes_avoid : forall s t,
+  endpoint_rectangles_axis_separated s t ->
+  (forall ps pt,
+    endpoint_of_seg s ps -> endpoint_of_seg t pt -> ps <> pt) ->
+  forall p,
+    in_segment_rect_or_endpoints t p ->
+    ~ in_rect_or_endpoints_at [s] p.
+Proof.
+  intros s t Haxis Hend p Hp Hs.
+  destruct Hs as [Hs | [Hs | Hs]].
+  - subst p. destruct Hp as [Hp | [Hp | Hp]].
+    + apply (Hend (init s) (init t)); [now left | now left |].
+      simpl in Hp. exact Hp.
+    + apply (Hend (init s) (term t)); [now left | now right |].
+      simpl in Hp. exact Hp.
+    + change (in_rect (rect_of [t]) (init s)) in Hp.
+      pose proof (in_segment_rect_or_endpoints_closed_bounds
+                    s (init s) (or_introl eq_refl)) as Hsb.
+      destruct Hsb as [[Hsx0 Hsx1] [Hsy0 Hsy1]].
+      unfold in_rect in Hp. destruct Hp as [[Htx0 Htx1] [Hty0 Hty1]].
+      unfold endpoint_rectangles_axis_separated in Haxis.
+      destruct Haxis as [Haxis | [Haxis | [Haxis | Haxis]]]; lra.
+  - subst p. destruct Hp as [Hp | [Hp | Hp]].
+    + apply (Hend (term s) (init t)); [now right | now left |].
+      simpl in Hp. exact Hp.
+    + apply (Hend (term s) (term t)); [now right | now right |].
+      simpl in Hp. exact Hp.
+    + change (in_rect (rect_of [t]) (term s)) in Hp.
+      pose proof (in_segment_rect_or_endpoints_closed_bounds s (term s)
+                    (or_intror (or_introl eq_refl))) as Hsb.
+      destruct Hsb as [[Hsx0 Hsx1] [Hsy0 Hsy1]].
+      unfold in_rect in Hp. destruct Hp as [[Htx0 Htx1] [Hty0 Hty1]].
+      unfold endpoint_rectangles_axis_separated in Haxis.
+      destruct Haxis as [Haxis | [Haxis | [Haxis | Haxis]]]; lra.
+  - pose proof (in_segment_rect_or_endpoints_closed_bounds t p Hp) as Htb.
+    destruct Htb as [[Htx0 Htx1] [Hty0 Hty1]].
+    unfold in_rect in Hs. destruct Hs as [[Hsx0 Hsx1] [Hsy0 Hsy1]].
+    unfold endpoint_rectangles_axis_separated in Haxis.
+    destruct Haxis as [Haxis | [Haxis | [Haxis | Haxis]]]; lra.
+Qed.
+
+(* 非隣接な旧端点は異なり、operate_point の単射性により移動後も異なる。 *)
+Lemma operated_nonadjacent_endpoints_distinct :
+  forall l sub r h i j s t ps pt,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    0 < h ->
+    nth_error (l ++ sub ++ r) i = Some s ->
+    nth_error (l ++ sub ++ r) j = Some t ->
+    (S i < j \/ S j < i)%nat ->
+    endpoint_of_seg s ps ->
+    endpoint_of_seg t pt ->
+    operate_point l sub r h ps <> operate_point l sub r h pt.
+Proof.
+  intros l sub r h i j s t ps pt Hne Hconn Hmono Hsparse Hh
+    Hs Ht Hfar Hps Hpt Heq.
+  assert (HpEq : ps = pt).
+  { eapply operate_point_injective; eauto. }
+  destruct (nth_error_far_in_nonadjacent_sides
+              (l ++ sub ++ r) i j s t Hs Ht Hfar)
+    as [l0 [r0 [Hsplit Hin]]].
+  destruct (Hsparse l0 s r0 Hsplit) as [_ Hrect].
+  pose proof (Hrect t pt Hin) as Havoid.
+  apply Havoid.
+  - destruct Hpt as [Hpt | Hpt]; subst pt.
+    + now left.
+    + now right; left.
+  - rewrite <- HpEq. destruct Hps as [Hps | Hps]; subst ps.
+    + now left.
+    + now right; left.
+Qed.
+
+(* 端点間の分類順序により、旧長方形の軸方向の分離は移動後も保たれる。 *)
+Lemma operated_endpoint_rectangles_axis_separated :
+  forall l sub r h i j s t s' t',
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    0 < h ->
+    nth_error (l ++ sub ++ r) i = Some s ->
+    nth_error (l ++ sub ++ r) j = Some t ->
+    (S i < j \/ S j < i)%nat ->
+    init s' = operate_point l sub r h (init s) ->
+    term s' = operate_point l sub r h (term s) ->
+    init t' = operate_point l sub r h (init t) ->
+    term t' = operate_point l sub r h (term t) ->
+    endpoint_rectangles_axis_separated s t ->
+    endpoint_rectangles_axis_separated s' t'.
+Proof.
+  intros l sub r h i j s t s' t' Hne Hconn Hmono Hsparse Hh
+    Hs Ht Hfar Hsinit Hsterm Htinit Htterm Haxis.
+  assert (Horder :
+    forall i0 j0 u v pu pv,
+      nth_error (l ++ sub ++ r) i0 = Some u ->
+      nth_error (l ++ sub ++ r) j0 = Some v ->
+      (S i0 < j0 \/ S j0 < i0)%nat ->
+      endpoint_of_seg u pu -> endpoint_of_seg v pv ->
+      snd pu <= snd pv ->
+      snd (operate_point l sub r h pu) <=
+      snd (operate_point l sub r h pv)).
+  { intros i0 j0 u v pu pv Hu Hv Hfar0 Hpu Hpv Hy.
+    unfold operate_point. eapply shift_preserves_vertical_order; [exact Hh | exact Hy |].
+    exact (classified_nonadjacent_endpoint_order
+             l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse)
+             i0 j0 u v pu pv Hu Hv Hfar0 Hpu Hpv Hy). }
+  unfold endpoint_rectangles_axis_separated in Haxis |- *.
+  destruct Haxis as [Hleft | [Hright | [Hbelow | Habove]]].
+  - left.
+    change (Rmax (fst (init t')) (fst (term t')) <=
+            Rmin (fst (init s')) (fst (term s'))).
+    change (Rmax (fst (init t)) (fst (term t)) <=
+            Rmin (fst (init s)) (fst (term s))) in Hleft.
+    rewrite Hsinit, Hsterm, Htinit, Htterm.
+    rewrite !operate_point_fst. exact Hleft.
+  - right; left.
+    change (Rmax (fst (init s')) (fst (term s')) <=
+            Rmin (fst (init t')) (fst (term t'))).
+    change (Rmax (fst (init s)) (fst (term s)) <=
+            Rmin (fst (init t)) (fst (term t))) in Hright.
+    rewrite Hsinit, Hsterm, Htinit, Htterm.
+    rewrite !operate_point_fst. exact Hright.
+  - right; right; left.
+    change (Rmax (snd (init t')) (snd (term t')) <=
+            Rmin (snd (init s')) (snd (term s'))).
+    rewrite Hsinit, Hsterm, Htinit, Htterm.
+    change (Rmax (snd (init t)) (snd (term t)) <=
+            Rmin (snd (init s)) (snd (term s))) in Hbelow.
+    assert (Hold : forall pt ps,
+      endpoint_of_seg t pt -> endpoint_of_seg s ps -> snd pt <= snd ps).
+    { intros pt ps Hpt Hps. destruct Hpt as [-> | ->]; destruct Hps as [-> | ->];
+        pose proof (Rmax_l (snd (init t)) (snd (term t)));
+        pose proof (Rmax_r (snd (init t)) (snd (term t)));
+        pose proof (Rmin_l (snd (init s)) (snd (term s)));
+        pose proof (Rmin_r (snd (init s)) (snd (term s))); lra. }
+    assert (Hfar' : (S j < i \/ S i < j)%nat) by tauto.
+    apply Rmax_lub; apply Rmin_glb.
+    + eapply (Horder j i t s (init t) (init s));
+        [exact Ht | exact Hs | exact Hfar' | now left | now left |].
+      apply Hold; now left.
+    + eapply (Horder j i t s (init t) (term s));
+        [exact Ht | exact Hs | exact Hfar' | now left | now right |].
+      apply Hold; [now left | now right].
+    + eapply (Horder j i t s (term t) (init s));
+        [exact Ht | exact Hs | exact Hfar' | now right | now left |].
+      apply Hold; [now right | now left].
+    + eapply (Horder j i t s (term t) (term s));
+        [exact Ht | exact Hs | exact Hfar' | now right | now right |].
+      apply Hold; now right.
+  - right; right; right.
+    change (Rmax (snd (init s')) (snd (term s')) <=
+            Rmin (snd (init t')) (snd (term t'))).
+    rewrite Hsinit, Hsterm, Htinit, Htterm.
+    change (Rmax (snd (init s)) (snd (term s)) <=
+            Rmin (snd (init t)) (snd (term t))) in Habove.
+    assert (Hold : forall ps pt,
+      endpoint_of_seg s ps -> endpoint_of_seg t pt -> snd ps <= snd pt).
+    { intros ps pt Hps Hpt. destruct Hps as [-> | ->]; destruct Hpt as [-> | ->];
+        pose proof (Rmax_l (snd (init s)) (snd (term s)));
+        pose proof (Rmax_r (snd (init s)) (snd (term s)));
+        pose proof (Rmin_l (snd (init t)) (snd (term t)));
+        pose proof (Rmin_r (snd (init t)) (snd (term t))); lra. }
+    apply Rmax_lub; apply Rmin_glb.
+    + eapply (Horder i j s t (init s) (init t));
+        [exact Hs | exact Ht | exact Hfar | now left | now left |].
+      apply Hold; now left.
+    + eapply (Horder i j s t (init s) (term t));
+        [exact Hs | exact Ht | exact Hfar | now left | now right |].
+      apply Hold; [now left | now right].
+    + eapply (Horder i j s t (term s) (init t));
+        [exact Hs | exact Ht | exact Hfar | now right | now left |].
+      apply Hold; [now right | now left].
+    + eapply (Horder i j s t (term s) (term t));
+        [exact Hs | exact Ht | exact Hfar | now right | now right |].
+      apply Hold; now right.
+Qed.
+
 (* 再接続後の異なるセグメントの端点長方形も互いを避ける。 *)
 Lemma reconnect_preserves_segment_rectangles_separated :
   forall l sub r h,
@@ -2529,7 +2875,60 @@ Lemma reconnect_preserves_segment_rectangles_separated :
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     sparse_embedding (l ++ sub ++ r) ->
     segment_rectangles_separated (reconnect_split l sub r h).
-Admitted.
+Proof.
+  intros l sub r h Hne Hconn Hmono Hh Hrec Hsparse.
+  unfold segment_rectangles_separated.
+  intros l' s' r' Hsplit t' Ht' p Hp.
+  destruct (split_nonadjacent_nth_errors
+              (reconnect_split l sub r h) l' s' r' t' Hsplit Ht')
+    as [i [j [Hs' [Ht'idx Hfar]]]].
+  assert (Hlen :
+    length (l ++ sub ++ r) = length (reconnect_split l sub r h)).
+  { symmetry. apply reconnect_split_length. }
+  destruct (nth_error_exists_at_equal_length
+              (l ++ sub ++ r) (reconnect_split l sub r h) i s' Hlen Hs')
+    as [s Hs].
+  destruct (nth_error_exists_at_equal_length
+              (l ++ sub ++ r) (reconnect_split l sub r h) j t' Hlen Ht'idx)
+    as [t Ht].
+  pose proof (reconnect_split_nth_spec
+                l sub r h i s s' Hne Hconn Hmono Hsparse Hrec Hs Hs')
+    as [_ [Hsinit Hsterm]].
+  pose proof (reconnect_split_nth_spec
+                l sub r h j t t' Hne Hconn Hmono Hsparse Hrec Ht Ht'idx)
+    as [_ [Htinit Htterm]].
+  destruct (nth_error_far_in_nonadjacent_sides
+              (l ++ sub ++ r) i j s t Hs Ht Hfar)
+    as [l0 [r0 [HoldSplit HoldIn]]].
+  destruct (Hsparse l0 s r0 HoldSplit) as [_ HoldRect].
+  assert (HoldAxis : endpoint_rectangles_axis_separated s t).
+  { apply rectangles_avoid_implies_axis_separated.
+    intros q Hq. exact (HoldRect t q HoldIn Hq). }
+  assert (HnewAxis : endpoint_rectangles_axis_separated s' t').
+  { eapply (operated_endpoint_rectangles_axis_separated
+              l sub r h i j s t s' t');
+      [exact Hne | exact Hconn | exact Hmono | exact Hsparse |
+       exact (proj1 Hh) | exact Hs | exact Ht | exact Hfar |
+       exact Hsinit | exact Hsterm | exact Htinit | exact Htterm |
+       exact HoldAxis]. }
+  apply (axis_separated_boxes_avoid s' t' HnewAxis); [|exact Hp].
+  assert (HendOld : forall ps pt,
+    endpoint_of_seg s ps -> endpoint_of_seg t pt ->
+    operate_point l sub r h ps <> operate_point l sub r h pt).
+  { intros ps pt Hps Hpt.
+    eapply (operated_nonadjacent_endpoints_distinct
+              l sub r h i j s t ps pt);
+      [exact Hne | exact Hconn | exact Hmono | exact Hsparse |
+       exact (proj1 Hh) | exact Hs | exact Ht | exact Hfar |
+       exact Hps | exact Hpt]. }
+  intros ps' pt' Hps' Hpt'.
+  destruct Hps' as [Hps' | Hps']; destruct Hpt' as [Hpt' | Hpt'];
+    subst ps' pt'.
+  - rewrite Hsinit, Htinit. apply HendOld; now left.
+  - rewrite Hsinit, Htterm. apply HendOld; [now left | now right].
+  - rewrite Hsterm, Htinit. apply HendOld; [now right | now left].
+  - rewrite Hsterm, Htterm. apply HendOld; now right.
+Qed.
 
 (* 再接続後の先頭・末尾延長線は、各セグメントの端点長方形を避ける。 *)
 Lemma reconnect_preserves_extensions_avoid_rectangles :
@@ -2620,17 +3019,6 @@ Definition endpoint_box_separated_from_sub
   \/ both_below_of_sub sub p q
   \/ both_left_of_sub sub p q
   \/ both_right_of_sub sub p q.
-
-Lemma open_intervals_have_common_point :
-  forall a0 a1 b0 b1,
-    a0 < a1 -> b0 < b1 -> a0 < b1 -> b0 < a1 ->
-    exists x, a0 < x < a1 /\ b0 < x < b1.
-Proof.
-  intros a0 a1 b0 b1 Ha Hb Hab Hba.
-  exists ((Rmax a0 b0 + Rmin a1 b1) / 2).
-  unfold Rmax, Rmin.
-  destruct (Rle_dec a0 b0); destruct (Rle_dec a1 b1); lra.
-Qed.
 
 Lemma sub_rect_has_positive_width :
   forall sub,
@@ -2968,17 +3356,6 @@ Proof.
     + apply Rmin_r.
     + apply Rmax_r.
   - unfold in_rect in Hp. lra.
-Qed.
-
-Lemma in_segment_rect_or_endpoints_closed_bounds :
-  forall s p,
-    in_segment_rect_or_endpoints s p ->
-    rx0 (rect_of [s]) <= fst p <= rx1 (rect_of [s])
-    /\ ry0 (rect_of [s]) <= snd p <= ry1 (rect_of [s]).
-Proof.
-  intros s p Hp.
-  apply in_rect_or_endpoints_at_closed_bounds.
-  exact Hp.
 Qed.
 
 Lemma in_sub_rect_or_endpoints_bbox_y :
