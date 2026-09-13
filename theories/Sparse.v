@@ -1137,6 +1137,21 @@ Definition below_last_extension (ls : list Segment) (p : Point) : Prop :=
   exists q,
     onLast_extend ls q /\ fst q = fst p /\ snd p < snd q.
 
+Definition in_sub_x_range (sub : list Segment) (p : Point) : Prop :=
+  rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub).
+
+Definition above_sub_at_x (sub : list Segment) (p : Point) : Prop :=
+  exists q,
+    onSegmentlist sub q
+    /\ fst p = fst q
+    /\ snd q < snd p.
+
+Definition below_sub_at_x (sub : list Segment) (p : Point) : Prop :=
+  exists q,
+    onSegmentlist sub q
+    /\ fst p = fst q
+    /\ snd p < snd q.
+
 Record ClassificationSpec (l sub r : list Segment) : Prop := {
   classified_sub_fixed :
     forall p, onSegmentlist sub p -> classify l sub r p = RegFix;
@@ -1169,6 +1184,20 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
       classify l sub r p = RegFix ->
       snd q < snd p ->
       classify l sub r q = RegDown;
+
+  (* sub と同じ x にあるセグメント上の点の上下側を、両端点へ伝える。 *)
+  classified_segment_at_sub_x :
+    forall s p,
+      In s (nonadjacent_sides l r) ->
+      onSegment s p ->
+      in_sub_x_range sub p ->
+      (above_sub_at_x sub p ->
+         classify l sub r (init s) = RegUp
+         /\ classify l sub r (term s) = RegUp)
+      /\
+      (below_sub_at_x sub p ->
+         classify l sub r (init s) = RegDown
+         /\ classify l sub r (term s) = RegDown);
 
   classified_head_same_region :
     l <> [] ->
@@ -1293,6 +1322,32 @@ Proof.
     congruence.
 Qed.
 
+Lemma connected_x_monotone_endpoints :
+  forall sub,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    fst (init (hd_segment sub)) < fst (term (last_segment sub)).
+Proof.
+  intros sub Hne. destruct sub as [|a tail]; [contradiction|].
+  clear Hne.
+  revert a. induction tail as [|b tail IH]; intros a Hconn Hmono.
+  - apply Hmono. now left.
+  - assert (Hab : term a = init b).
+    { apply (Hconn 0%nat a b); reflexivity. }
+    assert (HconnTail : connected (b :: tail)).
+    { intros i s1 s2 H1 H2.
+      apply (Hconn (S i) s1 s2); simpl; assumption. }
+    assert (HmonoTail : x_monotone_segs (b :: tail)).
+    { intros t Ht. apply Hmono. now right. }
+    pose proof (IH b HconnTail HmonoTail) as Htail.
+    pose proof (Hmono a ltac:(now left)) as Ha.
+    change (fst (init a) < fst (term (last_segment (b :: tail)))).
+    change (fst (init b) < fst (term (last_segment (b :: tail)))) in Htail.
+    unfold x_monotone_seg, init_x, term_x in Ha.
+    rewrite Hab in Ha. lra.
+Qed.
+
 (* 連結な x 単調 sub は、始終点間の各 x 座標を通る。 *)
 Lemma x_monotone_sub_has_point :
   forall sub x,
@@ -1302,6 +1357,57 @@ Lemma x_monotone_sub_has_point :
     rx0 (rect_of sub) <= x <= rx1 (rect_of sub) ->
     exists q, onSegmentlist sub q /\ fst q = x.
 Admitted.
+
+(* セグメントの端点 x 区間内の各 x 座標は、セグメント上で実現される。 *)
+Lemma segment_has_point_at_x :
+  forall s x,
+    rx0 (rect_of [s]) <= x <= rx1 (rect_of [s]) ->
+    exists p, onSegment s p /\ fst p = x.
+Proof.
+  intros s x Hx.
+  destruct (total_order_T (fst (init s)) (fst (term s)))
+    as [[Hix | Heq] | Htx].
+  - change (Rmin (fst (init s)) (fst (term s)) <= x <=
+            Rmax (fst (init s)) (fst (term s))) in Hx.
+    rewrite Rmin_left in Hx by lra.
+    rewrite Rmax_right in Hx by lra.
+    destruct (Rle_dec (snd (init s)) (snd (term s))) as [Hy | Hy].
+    + destruct (exist_between_x_pos s
+                  (fst (init s)) (fst (term s))
+                  (snd (init s)) (snd (term s)) x
+                  ltac:(rewrite <- surjective_pairing; apply onInit)
+                  ltac:(rewrite <- surjective_pairing; apply onTerm)
+                  Hy (proj1 Hx) (proj2 Hx)) as [y [Hon _]].
+      exists (x, y). split; [exact Hon | reflexivity].
+    + destruct (exist_between_x_neg s
+                  (fst (init s)) (fst (term s))
+                  (snd (init s)) (snd (term s)) x
+                  ltac:(rewrite <- surjective_pairing; apply onInit)
+                  ltac:(rewrite <- surjective_pairing; apply onTerm)
+                  ltac:(lra) (proj1 Hx) (proj2 Hx)) as [y [Hon _]].
+      exists (x, y). split; [exact Hon | reflexivity].
+  - exfalso. apply (neq_init_term_x s).
+    unfold init_x, term_x. exact Heq.
+  - change (Rmin (fst (init s)) (fst (term s)) <= x <=
+            Rmax (fst (init s)) (fst (term s))) in Hx.
+    rewrite Rmin_right in Hx by lra.
+    rewrite Rmax_left in Hx by lra.
+    destruct (Rle_dec (snd (term s)) (snd (init s))) as [Hy | Hy].
+    + destruct (exist_between_x_pos s
+                  (fst (term s)) (fst (init s))
+                  (snd (term s)) (snd (init s)) x
+                  ltac:(rewrite <- surjective_pairing; apply onTerm)
+                  ltac:(rewrite <- surjective_pairing; apply onInit)
+                  Hy (proj1 Hx) (proj2 Hx)) as [y [Hon _]].
+      exists (x, y). split; [exact Hon | reflexivity].
+    + destruct (exist_between_x_neg s
+                  (fst (term s)) (fst (init s))
+                  (snd (term s)) (snd (init s)) x
+                  ltac:(rewrite <- surjective_pairing; apply onTerm)
+                  ltac:(rewrite <- surjective_pairing; apply onInit)
+                  ltac:(lra) (proj1 Hx) (proj2 Hx)) as [y [Hon _]].
+      exists (x, y). split; [exact Hon | reflexivity].
+Qed.
 
 Lemma classified_up_above_bbox_floor :
   forall l sub r p,
@@ -2156,6 +2262,183 @@ Definition endpoint_box_separated_from_sub
   \/ both_left_of_sub sub p q
   \/ both_right_of_sub sub p q.
 
+Lemma open_intervals_have_common_point :
+  forall a0 a1 b0 b1,
+    a0 < a1 -> b0 < b1 -> a0 < b1 -> b0 < a1 ->
+    exists x, a0 < x < a1 /\ b0 < x < b1.
+Proof.
+  intros a0 a1 b0 b1 Ha Hb Hab Hba.
+  exists ((Rmax a0 b0 + Rmin a1 b1) / 2).
+  unfold Rmax, Rmin.
+  destruct (Rle_dec a0 b0); destruct (Rle_dec a1 b1); lra.
+Qed.
+
+Lemma sub_rect_has_positive_width :
+  forall sub,
+    sub <> [] -> connected sub -> x_monotone_segs sub ->
+    rx0 (rect_of sub) < rx1 (rect_of sub).
+Proof.
+  intros sub Hne Hconn Hmono.
+  pose proof (connected_x_monotone_endpoints sub Hne Hconn Hmono) as Hx.
+  unfold rect_of; simpl.
+  rewrite Rmin_left, Rmax_right by lra. exact Hx.
+Qed.
+
+Lemma segment_rect_has_positive_width :
+  forall s, rx0 (rect_of [s]) < rx1 (rect_of [s]).
+Proof.
+  intros s.
+  change (Rmin (fst (init s)) (fst (term s)) <
+          Rmax (fst (init s)) (fst (term s))).
+  destruct (total_order_T (fst (init s)) (fst (term s)))
+    as [[Hlt | Heq] | Hgt].
+  - rewrite Rmin_left by lra. rewrite Rmax_right by lra. exact Hlt.
+  - exfalso. apply (neq_init_term_x s).
+    unfold init_x, term_x. exact Heq.
+  - rewrite Rmin_right by lra. rewrite Rmax_left by lra. exact Hgt.
+Qed.
+
+(* 左右の同じ側に固まらない二端点の x 区間は、sub の x 区間と
+   内部で共通する。 *)
+Lemma nonhorizontal_sides_have_common_x :
+  forall sub s,
+    sub <> [] -> connected sub -> x_monotone_segs sub ->
+    ~ both_left_of_sub sub (init s) (term s) ->
+    ~ both_right_of_sub sub (init s) (term s) ->
+    exists x,
+      rx0 (rect_of sub) < x < rx1 (rect_of sub)
+      /\ rx0 (rect_of [s]) < x < rx1 (rect_of [s]).
+Proof.
+  intros sub s Hne Hconn Hmono Hleft Hright.
+  pose proof (sub_rect_has_positive_width sub Hne Hconn Hmono) as Hsub.
+  pose proof (segment_rect_has_positive_width s) as Hseg.
+  assert (HcrossL : rx0 (rect_of sub) < rx1 (rect_of [s])).
+  { apply Rnot_le_lt. intro Hle. apply Hleft.
+    unfold both_left_of_sub, rect_of in *; simpl in *.
+    split.
+    - eapply Rle_trans; [apply Rmax_l | exact Hle].
+    - eapply Rle_trans; [apply Rmax_r | exact Hle]. }
+  assert (HcrossR : rx0 (rect_of [s]) < rx1 (rect_of sub)).
+  { apply Rnot_le_lt. intro Hle. apply Hright.
+    unfold both_right_of_sub, rect_of in *; simpl in *.
+    split.
+    - eapply Rle_trans; [exact Hle | apply Rmin_l].
+    - eapply Rle_trans; [exact Hle | apply Rmin_r]. }
+  now apply open_intervals_have_common_point.
+Qed.
+
+(* 全域 sparse 性は、非隣接セグメントの端点長方形から sub 上の
+   任意の点を排除する。 *)
+Lemma sparse_nonadjacent_box_avoids_sub_points :
+  forall l sub r s q,
+    sparse_embedding (l ++ sub ++ r) ->
+    In s (nonadjacent_sides l r) ->
+    onSegmentlist sub q ->
+    ~ in_segment_rect_or_endpoints s q.
+Proof.
+  intros l sub r s q Hsparse Hs [t [Ht Hqt]] Hqbox.
+  destruct (in_app_app sub t Ht) as [sl [sr Hdecomp]].
+  assert (Hfull :
+      l ++ sub ++ r = (l ++ sl) ++ [t] ++ (sr ++ r)).
+  { transitivity (l ++ (sl ++ [t] ++ sr) ++ r).
+    - exact (f_equal (fun xs => l ++ xs ++ r) Hdecomp).
+    - repeat rewrite app_assoc. reflexivity. }
+  pose proof (Hsparse (l ++ sl) t (sr ++ r) Hfull) as Haround.
+  assert (Hs' : In s (nonadjacent_sides (l ++ sl) (sr ++ r))).
+  { apply nonadjacent_sides_extend_right.
+    now apply nonadjacent_sides_extend_left. }
+  apply ((proj2 Haround) s q Hs' Hqbox).
+  change (in_segment_rect_or_endpoints t q).
+  now apply segment_in_rect_or_endpoints.
+Qed.
+
+(* 同じ x の sub 上の点より上を通る非隣接セグメントは、両端とも
+   bbox の下端以上にある。 *)
+Lemma above_sub_point_bounds_segment_endpoints :
+  forall l sub r s p q,
+    sparse_embedding (l ++ sub ++ r) ->
+    In s (nonadjacent_sides l r) ->
+    onSegment s p ->
+    onSegmentlist sub q ->
+    rx0 (rect_of [s]) < fst q < rx1 (rect_of [s]) ->
+    snd q < snd p ->
+    ry0 (bbox_of sub) <= snd (init s)
+    /\ ry0 (bbox_of sub) <= snd (term s).
+Proof.
+  intros l sub r s p q Hsparse Hs Hp Hq Hqx Hy.
+  pose proof (bbox_of_bounds sub q Hq) as [Hqlo _].
+  pose proof (segment_in_rect_or_endpoints s p Hp) as Hpbox.
+  assert (Hpy : Rmin (snd (init s)) (snd (term s)) <= snd p
+                <= Rmax (snd (init s)) (snd (term s))).
+  { destruct Hpbox as [-> | [-> | Hpbox]].
+    - split; [apply Rmin_l | apply Rmax_l].
+    - split; [apply Rmin_r | apply Rmax_r].
+    - unfold in_rect in Hpbox. destruct Hpbox as [_ HpY].
+      change (Rmin (snd (init s)) (snd (term s)) < snd p <
+              Rmax (snd (init s)) (snd (term s))) in HpY.
+      lra. }
+  assert (Havoid := sparse_nonadjacent_box_avoids_sub_points
+                       l sub r s q Hsparse Hs Hq).
+  split; apply Rnot_lt_le; intro Hend.
+  - apply Havoid. right; right. unfold in_rect. split; [exact Hqx |].
+    change (Rmin (snd (init s)) (snd (term s)) < snd q <
+            Rmax (snd (init s)) (snd (term s))).
+    destruct Hpy as [Hpy0 Hpy1].
+    split.
+    + eapply Rle_lt_trans; [apply Rmin_l |]. lra.
+    + lra.
+  - apply Havoid. right; right. unfold in_rect. split; [exact Hqx |].
+    change (Rmin (snd (init s)) (snd (term s)) < snd q <
+            Rmax (snd (init s)) (snd (term s))).
+    destruct Hpy as [Hpy0 Hpy1].
+    split.
+    + eapply Rle_lt_trans; [apply Rmin_r |]. lra.
+    + lra.
+Qed.
+
+(* 下側の場合の双対。両端とも bbox の上端以下にある。 *)
+Lemma below_sub_point_bounds_segment_endpoints :
+  forall l sub r s p q,
+    sparse_embedding (l ++ sub ++ r) ->
+    In s (nonadjacent_sides l r) ->
+    onSegment s p ->
+    onSegmentlist sub q ->
+    rx0 (rect_of [s]) < fst q < rx1 (rect_of [s]) ->
+    snd p < snd q ->
+    snd (init s) <= ry1 (bbox_of sub)
+    /\ snd (term s) <= ry1 (bbox_of sub).
+Proof.
+  intros l sub r s p q Hsparse Hs Hp Hq Hqx Hy.
+  pose proof (bbox_of_bounds sub q Hq) as [_ Hqhi].
+  pose proof (segment_in_rect_or_endpoints s p Hp) as Hpbox.
+  assert (Hpy : Rmin (snd (init s)) (snd (term s)) <= snd p
+                <= Rmax (snd (init s)) (snd (term s))).
+  { destruct Hpbox as [-> | [-> | Hpbox]].
+    - split; [apply Rmin_l | apply Rmax_l].
+    - split; [apply Rmin_r | apply Rmax_r].
+    - unfold in_rect in Hpbox. destruct Hpbox as [_ HpY].
+      change (Rmin (snd (init s)) (snd (term s)) < snd p <
+              Rmax (snd (init s)) (snd (term s))) in HpY.
+      lra. }
+  assert (Havoid := sparse_nonadjacent_box_avoids_sub_points
+                       l sub r s q Hsparse Hs Hq).
+  split; apply Rnot_lt_le; intro Hend.
+  - apply Havoid. right; right. unfold in_rect. split; [exact Hqx |].
+    change (Rmin (snd (init s)) (snd (term s)) < snd q <
+            Rmax (snd (init s)) (snd (term s))).
+    destruct Hpy as [Hpy0 Hpy1].
+    split.
+    + lra.
+    + eapply Rlt_le_trans; [| apply Rmax_l]. lra.
+  - apply Havoid. right; right. unfold in_rect. split; [exact Hqx |].
+    change (Rmin (snd (init s)) (snd (term s)) < snd q <
+            Rmax (snd (init s)) (snd (term s))).
+    destruct Hpy as [Hpy0 Hpy1].
+    split.
+    + lra.
+    + eapply Rlt_le_trans; [| apply Rmax_r]. lra.
+Qed.
+
 (* x 範囲内の端点には classified_*_bbox を使う。範囲外の端点を
    含む場合は、端点長方形が sub を横切れば sparse に反する。 *)
 Lemma operated_nonadjacent_endpoints_separated :
@@ -2169,7 +2452,65 @@ Lemma operated_nonadjacent_endpoints_separated :
     endpoint_box_separated_from_sub sub
       (operate_point l sub r h (init s))
       (operate_point l sub r h (term s)).
-Admitted.
+Proof.
+  intros l sub r h s Hne Hconn Hmono Hh Hsparse Hs.
+  destruct (classic (both_left_of_sub sub (init s) (term s)))
+    as [Hleft | Hleft].
+  - right; right; left. unfold both_left_of_sub in *.
+    now rewrite !operate_point_fst.
+  - destruct (classic (both_right_of_sub sub (init s) (term s)))
+      as [Hright | Hright].
+    + right; right; right. unfold both_right_of_sub in *.
+      now rewrite !operate_point_fst.
+    + destruct (nonhorizontal_sides_have_common_x
+                  sub s Hne Hconn Hmono Hleft Hright)
+        as [x [Hsubx Hsegx]].
+      destruct (segment_has_point_at_x s x ltac:(lra))
+        as [p [Hp Hpx]].
+      destruct (x_monotone_sub_has_point sub x Hne Hconn Hmono ltac:(lra))
+        as [q [Hq Hqx]].
+      assert (Hprange : in_sub_x_range sub p).
+      { unfold in_sub_x_range. rewrite Hpx. lra. }
+      assert (Hsamex : fst p = fst q) by lra.
+      assert (Hpneq : p <> q).
+      { intro Heq. subst q.
+        apply (sparse_nonadjacent_box_avoids_sub_points
+                 l sub r s p Hsparse Hs Hq).
+        now apply segment_in_rect_or_endpoints. }
+      pose proof (classified_segment_at_sub_x
+                    l sub r
+                    (classify_spec l sub r Hne Hconn Hmono Hsparse)
+                    s p Hs Hp Hprange) as [Hup Hdown].
+      assert (Hy : snd q < snd p \/ snd p < snd q).
+      { destruct (total_order_T (snd q) (snd p))
+          as [[Hlt | Heq] | Hgt].
+        - now left.
+        - exfalso. apply Hpneq.
+          destruct p as [xp yp], q as [xq yq].
+          simpl in Hsamex, Heq |- *. f_equal; lra.
+        - now right. }
+      assert (Hqsegx :
+          rx0 (rect_of [s]) < fst q < rx1 (rect_of [s])) by lra.
+      destruct Hy as [Hy | Hy].
+      * assert (Habove : above_sub_at_x sub p).
+        { exists q. repeat split; assumption. }
+        destruct (Hup Habove) as [Hinit Hterm].
+        pose proof (above_sub_point_bounds_segment_endpoints
+                      l sub r s p q Hsparse Hs Hp Hq Hqsegx Hy)
+          as [HinitY HtermY].
+        left. unfold both_above_of_sub, operate_point, shift.
+        rewrite Hinit, Hterm. simpl.
+        unfold h_large, rect_height in Hh. lra.
+      * assert (Hbelow : below_sub_at_x sub p).
+        { exists q. repeat split; assumption. }
+        destruct (Hdown Hbelow) as [Hinit Hterm].
+        pose proof (below_sub_point_bounds_segment_endpoints
+                      l sub r s p q Hsparse Hs Hp Hq Hqsegx Hy)
+          as [HinitY HtermY].
+        right; left. unfold both_below_of_sub, operate_point, shift.
+        rewrite Hinit, Hterm. simpl.
+        unfold h_large, rect_height in Hh. lra.
+Qed.
 
 (* 元の sparse 性により、非隣接セグメントの端点は sub の両端点と
    一致しない。 *)
