@@ -268,6 +268,49 @@ Axiom make_seg_slope_spec : forall p q d slope_p slope_q H,
 Axiom reconnect_slope_reconnectable : forall p q d slope_p slope_q,
   reconnect_slope p q d slope_p slope_q -> reconnectable p q d.
 
+(* 先頭・末尾の延長線には、それぞれ対応する一方の端点傾きだけが必要。 *)
+Definition reconnect_init_slope
+  (p q : Point) (d : Direction) (slope_p : R) : Prop :=
+  exists slope_q, reconnect_slope p q d slope_p slope_q.
+
+Definition reconnect_term_slope
+  (p q : Point) (d : Direction) (slope_q : R) : Prop :=
+  exists slope_p, reconnect_slope p q d slope_p slope_q.
+
+Parameter make_seg_init_slope : forall p q d slope_p,
+  reconnect_init_slope p q d slope_p -> Segment.
+
+Parameter make_seg_term_slope : forall p q d slope_q,
+  reconnect_term_slope p q d slope_q -> Segment.
+
+Axiom make_seg_init_slope_spec : forall p q d slope_p H,
+  init (make_seg_init_slope p q d slope_p H) = p
+  /\ term (make_seg_init_slope p q d slope_p H) = q
+  /\ orn_seg (make_seg_init_slope p q d slope_p H) = d
+  /\ slope_init (make_seg_init_slope p q d slope_p H) = slope_p.
+
+Axiom make_seg_term_slope_spec : forall p q d slope_q H,
+  init (make_seg_term_slope p q d slope_q H) = p
+  /\ term (make_seg_term_slope p q d slope_q H) = q
+  /\ orn_seg (make_seg_term_slope p q d slope_q H) = d
+  /\ slope_term (make_seg_term_slope p q d slope_q H) = slope_q.
+
+Lemma reconnect_init_slope_reconnectable : forall p q d slope_p,
+  reconnect_init_slope p q d slope_p -> reconnectable p q d.
+Proof.
+  intros p q d slope_p [slope_q Hs].
+  now apply reconnect_slope_reconnectable with
+    (slope_p := slope_p) (slope_q := slope_q).
+Qed.
+
+Lemma reconnect_term_slope_reconnectable : forall p q d slope_q,
+  reconnect_term_slope p q d slope_q -> reconnectable p q d.
+Proof.
+  intros p q d slope_q [slope_p Hs].
+  now apply reconnect_slope_reconnectable with
+    (slope_p := slope_p) (slope_q := slope_q).
+Qed.
+
   (* onSegmentに関する述語ならばonExtendedSegmentに関する述語みたいな補題を入れると楽に示せる *)
 Lemma exist_between_x_pos_ex: forall (ls: list Segment) (seg: Segment) (x1 x2 y1 y2 x: R),
     onExtendSegment ls seg (x1, y1) -> onExtendSegment ls seg (x2, y2) -> y1 <= y2 -> x1 <= x -> x <= x2 -> exists y:R, onExtendSegment ls seg (x, y) /\ y1 <= y <= y2.

@@ -2095,6 +2095,24 @@ Definition reconnect_slope_after
     (operate_point l sub r h (term s))
     (orn_seg s) (slope_init s) (slope_term s).
 
+Definition reconnect_init_slope_after
+  (l sub r : list Segment) (h : R) (s : Segment) : Prop :=
+  reconnect_init_slope
+    (operate_point l sub r h (init s))
+    (operate_point l sub r h (term s))
+    (orn_seg s) (slope_init s).
+
+Definition reconnect_term_slope_after
+  (l sub r : list Segment) (h : R) (s : Segment) : Prop :=
+  reconnect_term_slope
+    (operate_point l sub r h (init s))
+    (operate_point l sub r h (term s))
+    (orn_seg s) (slope_term s).
+
+Definition head_init_slope_after
+  (l sub r : list Segment) (h : R) (s : Segment) : Prop :=
+  l <> [] /\ s = hd_segment l /\ reconnect_init_slope_after l sub r h s.
+
 Definition all_reconnectable
   (l sub r : list Segment) (h : R) (ls : list Segment) : Prop :=
   forall s, In s ls -> reconnectable_after l sub r h s.
@@ -2109,10 +2127,18 @@ Definition reconnect_one
           (operate_point l sub r h (init s))
           (operate_point l sub r h (term s))
           (orn_seg s) (slope_init s) (slope_term s) Hs
-      | right _ => make_seg
-          (operate_point l sub r h (init s))
-          (operate_point l sub r h (term s))
-          (orn_seg s) H
+      | right _ =>
+          match excluded_middle_informative
+                  (head_init_slope_after l sub r h s) with
+          | left Hs => make_seg_init_slope
+              (operate_point l sub r h (init s))
+              (operate_point l sub r h (term s))
+              (orn_seg s) (slope_init s) (proj2 (proj2 Hs))
+          | right _ => make_seg
+              (operate_point l sub r h (init s))
+              (operate_point l sub r h (term s))
+              (orn_seg s) H
+          end
       end
   | right _ => default_segment
   end.
@@ -2137,7 +2163,10 @@ Proof.
   - destruct (excluded_middle_informative
                 (reconnect_slope_after l sub r h s)) as [Hs | Hs].
     + exact (proj1 (make_seg_slope_spec _ _ _ _ _ Hs)).
-    + now apply make_seg_init.
+    + destruct (excluded_middle_informative
+                  (head_init_slope_after l sub r h s)) as [Hi | Hi].
+      * exact (proj1 (make_seg_init_slope_spec _ _ _ _ (proj2 (proj2 Hi)))).
+      * now apply make_seg_init.
   - contradiction.
 Qed.
 
@@ -2152,7 +2181,11 @@ Proof.
   - destruct (excluded_middle_informative
                 (reconnect_slope_after l sub r h s)) as [Hs | Hs].
     + exact (proj1 (proj2 (make_seg_slope_spec _ _ _ _ _ Hs))).
-    + now apply make_seg_term.
+    + destruct (excluded_middle_informative
+                  (head_init_slope_after l sub r h s)) as [Hi | Hi].
+      * exact (proj1 (proj2
+          (make_seg_init_slope_spec _ _ _ _ (proj2 (proj2 Hi))))).
+      * now apply make_seg_term.
   - contradiction.
 Qed.
 
@@ -2168,7 +2201,11 @@ Proof.
                 (reconnect_slope_after l sub r h s)) as [Hs | Hs].
     + exact (proj1 (proj2 (proj2
         (make_seg_slope_spec _ _ _ _ _ Hs)))).
-    + now apply make_seg_orn.
+    + destruct (excluded_middle_informative
+                  (head_init_slope_after l sub r h s)) as [Hi | Hi].
+      * exact (proj1 (proj2 (proj2
+          (make_seg_init_slope_spec _ _ _ _ (proj2 (proj2 Hi)))))).
+      * now apply make_seg_orn.
   - contradiction.
 Qed.
 
@@ -2208,6 +2245,54 @@ Proof.
       (slope_p := slope_init s) (slope_q := slope_term s).
 Qed.
 
+Lemma reconnect_slope_after_init :
+  forall l sub r h s,
+    reconnect_slope_after l sub r h s ->
+    reconnect_init_slope_after l sub r h s.
+Proof.
+  intros l sub r h s Hslope.
+  unfold reconnect_slope_after, reconnect_init_slope_after,
+    reconnect_init_slope.
+  now exists (slope_term s).
+Qed.
+
+Lemma reconnect_slope_after_term :
+  forall l sub r h s,
+    reconnect_slope_after l sub r h s ->
+    reconnect_term_slope_after l sub r h s.
+Proof.
+  intros l sub r h s Hslope.
+  unfold reconnect_slope_after, reconnect_term_slope_after,
+    reconnect_term_slope.
+  now exists (slope_init s).
+Qed.
+
+(* 先頭として選ばれた再接続は、片側の存在条件だけで始点傾きを保存する。 *)
+Lemma reconnect_one_head_slope_init :
+  forall l sub r h s,
+    l <> [] ->
+    s = hd_segment l ->
+    reconnect_init_slope_after l sub r h s ->
+    slope_init (reconnect_one l sub r h s) = slope_init s.
+Proof.
+  intros l sub r h s Hl Hhead Hslope. unfold reconnect_one.
+  destruct (excluded_middle_informative
+              (reconnectable_after l sub r h s)) as [Hrec | Hrec].
+  - destruct (excluded_middle_informative
+                (reconnect_slope_after l sub r h s)) as [Hs | Hs].
+    + exact (proj1 (proj2 (proj2 (proj2
+        (make_seg_slope_spec _ _ _ _ _ Hs))))).
+    + destruct (excluded_middle_informative
+                  (head_init_slope_after l sub r h s)) as [Hi | Hi].
+      * exact (proj2 (proj2 (proj2
+          (make_seg_init_slope_spec _ _ _ _ (proj2 (proj2 Hi)))))).
+      * exfalso. apply Hi. repeat split; assumption.
+  - exfalso. apply Hrec. unfold reconnectable_after.
+    unfold reconnect_init_slope_after in Hslope.
+    now apply reconnect_init_slope_reconnectable with
+      (slope_p := slope_init s).
+Qed.
+
 (* 両端点が同じ領域なら、元のセグメントの平行移動が傾き付き再接続を与える。 *)
 Lemma same_region_reconnect_slope_after :
   forall l sub r h s,
@@ -2228,9 +2313,7 @@ Proof.
   - apply translate_seg_slope_term.
 Qed.
 
-(* sub 側の端点だけを固定する先頭の特例でも、両端傾きを指定できる。 *)
-(* 考慮すべきは，例えば右上に向かって sub = [+-+], l = [(+ の埋め込み)] など．
-    l の始点は上下せざるを得ないが，うまくセグメントを取ることでそこでの傾きは保存できる *)
+(* sub 側の端点だけを固定する先頭の特例では、延長線に必要な始点傾きだけを指定する。 *)
 Lemma reconnect_head_fixed_endpoint_slope :
   forall l sub r h,
     sub <> [] ->
@@ -2240,7 +2323,7 @@ Lemma reconnect_head_fixed_endpoint_slope :
     l <> [] ->
     term (hd_segment l) = init (hd_segment sub) ->
     fst (init (hd_segment sub)) < fst (init (hd_segment l)) ->
-    reconnect_slope_after l sub r h (hd_segment l).
+    reconnect_init_slope_after l sub r h (hd_segment l).
 Admitted.
 
 (* sub 側の端点だけを固定する末尾の特例。 *)
@@ -2256,20 +2339,21 @@ Lemma reconnect_last_fixed_endpoint_slope :
     reconnect_slope_after l sub r h (last_segment r).
 Admitted.
 
-Lemma reconnect_head_slope_after :
+Lemma reconnect_head_init_slope_after :
   forall l sub r h,
     sub <> [] ->
     connected sub ->
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
     l <> [] ->
-    reconnect_slope_after l sub r h (hd_segment l).
+    reconnect_init_slope_after l sub r h (hd_segment l).
 Proof.
   intros l sub r h Hne Hconn Hmono Hsparse Hl.
   destruct (classified_head_same_region
               l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse) Hl)
     as [Hsame | [Hterm Hx]].
-  - now apply same_region_reconnect_slope_after.
+  - apply reconnect_slope_after_init.
+    now apply same_region_reconnect_slope_after.
   - now apply reconnect_head_fixed_endpoint_slope.
 Qed.
 
@@ -2347,20 +2431,23 @@ Proof.
   now apply onLast_translate.
 Qed.
 
-(* 傾き付き再接続が可能なら、始端延長線上の点も始点の分類どおり移る。 *)
+(* 先頭で始点傾きを保存できれば、始端延長線も始点の分類どおり移る。 *)
 Lemma reconnect_one_head_extension_operated :
   forall l sub r h s p,
-    reconnect_slope_after l sub r h s ->
+    l <> [] ->
+    s = hd_segment l ->
+    reconnect_init_slope_after l sub r h s ->
     onHead s p ->
     onHead (reconnect_one l sub r h s)
       (shift h (classify l sub r (init s)) p).
 Proof.
-  intros l sub r h s p Hslope Hp.
+  intros l sub r h s p Hl Hhead Hslope Hp.
   apply reconnect_one_head_extension_shift; try assumption.
   - unfold reconnectable_after.
-    now apply reconnect_slope_reconnectable with
-      (slope_p := slope_init s) (slope_q := slope_term s).
-  - now apply reconnect_one_slope_init.
+    unfold reconnect_init_slope_after in Hslope.
+    now apply reconnect_init_slope_reconnectable with
+      (slope_p := slope_init s).
+  - now apply reconnect_one_head_slope_init.
 Qed.
 
 (* 終端延長線上の点についての終点版。 *)
@@ -2382,17 +2469,20 @@ Qed.
 (* 傾きを保存した再接続の始端延長線点を，移動前へ戻す。 *)
 Lemma reconnect_one_head_extension_preimage :
   forall l sub r h s p,
-    reconnect_slope_after l sub r h s ->
+    l <> [] ->
+    s = hd_segment l ->
+    reconnect_init_slope_after l sub r h s ->
     onHead (reconnect_one l sub r h s) p ->
     exists q,
       onHead s q
       /\ p = shift h (classify l sub r (init s)) q.
 Proof.
-  intros l sub r h s p Hslope Hp.
+  intros l sub r h s p Hl Hhead Hslope Hp.
   assert (Hrec : reconnectable_after l sub r h s).
   { unfold reconnectable_after.
-    now apply reconnect_slope_reconnectable with
-      (slope_p := slope_init s) (slope_q := slope_term s). }
+    unfold reconnect_init_slope_after in Hslope.
+    now apply reconnect_init_slope_reconnectable with
+      (slope_p := slope_init s). }
   set (v := region_translation h (classify l sub r (init s))).
   assert (Hinit :
     init (reconnect_one l sub r h s) = init (translate_seg v s)).
@@ -2402,7 +2492,7 @@ Proof.
   assert (HslopeEq :
     slope_init (reconnect_one l sub r h s) =
     slope_init (translate_seg v s)).
-  { rewrite (reconnect_one_slope_init _ _ _ _ _ Hslope).
+  { rewrite (reconnect_one_head_slope_init _ _ _ _ _ Hl Hhead Hslope).
     symmetry. apply translate_seg_slope_init. }
   pose proof (proj1
     (head_extension_determined_by_init_slope
@@ -2460,7 +2550,7 @@ Lemma reconnect_head_extension_preimage :
     connected sub ->
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
-    (l <> [] -> reconnect_slope_after l sub r h (hd_segment l)) ->
+    (l <> [] -> reconnect_init_slope_after l sub r h (hd_segment l)) ->
     onHead_extend (reconnect_split l sub r h) p ->
     exists q,
       onHead_extend (l ++ sub ++ r) q
@@ -2482,6 +2572,8 @@ Proof.
   - simpl in Hp |- *.
     apply (reconnect_one_head_extension_preimage
              (a :: l') sub r h a p).
+    + discriminate.
+    + reflexivity.
     + now apply Hslope; discriminate.
     + exact Hp.
 Qed.
@@ -2576,14 +2668,15 @@ Proof.
   - simpl in Hstrict |- *.
     destruct Hstrict as [t [Ht Hpoint]].
     change (point (reconnect_one (a :: l') sub r h a) t = p) in Hpoint.
-    pose proof (reconnect_head_slope_after
+    pose proof (reconnect_head_init_slope_after
                   (a :: l') sub r h Hne Hconn Hmono Hsparse
                   ltac:(discriminate)) as Hslope.
     simpl in Hslope.
     assert (Hrec : reconnectable_after (a :: l') sub r h a).
     { unfold reconnectable_after.
-      now apply reconnect_slope_reconnectable with
-        (slope_p := slope_init a) (slope_q := slope_term a). }
+      unfold reconnect_init_slope_after in Hslope.
+      now apply reconnect_init_slope_reconnectable with
+        (slope_p := slope_init a). }
     set (v := region_translation h
                 (classify (a :: l') sub r (init a))).
     assert (Hinit :
@@ -2595,7 +2688,9 @@ Proof.
     assert (HslopeEq :
       slope_init (reconnect_one (a :: l') sub r h a) =
       slope_init (translate_seg v a)).
-    { rewrite (reconnect_one_slope_init _ _ _ _ _ Hslope).
+    { rewrite (reconnect_one_head_slope_init
+                 (a :: l') sub r h a ltac:(discriminate)
+                 ltac:(reflexivity) Hslope).
       symmetry. apply translate_seg_slope_init. }
     assert (HonNew : onHead (reconnect_one (a :: l') sub r h a) p).
     { exists t. split; [lra | exact Hpoint]. }
@@ -3601,7 +3696,7 @@ Lemma classified_extension_shifts_disjoint :
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     sparse_embedding (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
-    (l <> [] -> reconnect_slope_after l sub r h (hd_segment l)) ->
+    (l <> [] -> reconnect_init_slope_after l sub r h (hd_segment l)) ->
     (r <> [] -> reconnect_slope_after l sub r h (last_segment r)) ->
     extensions_disjoint (reconnect_split l sub r h).
 Proof.
@@ -3641,7 +3736,7 @@ Proof.
     rewrite <- HshiftLast, <- HshiftHead in Hshifted. lra.
 Qed.
 
-(* 先頭・末尾は make_seg_slope で傾きを保存するため、両延長線を保てる。 *)
+(* 先頭は始点傾き、末尾は終点傾きを保存するため、両延長線を保てる。 *)
 Lemma reconnect_preserves_extensions_disjoint :
   forall l sub r h,
     sub <> [] ->
@@ -3655,7 +3750,7 @@ Lemma reconnect_preserves_extensions_disjoint :
 Proof.
   intros l sub r h Hne Hconn Hmono Hh Hrec Hsparse Hext.
   apply classified_extension_shifts_disjoint; try assumption.
-  - intros Hl. now apply reconnect_head_slope_after.
+  - intros Hl. now apply reconnect_head_init_slope_after.
   - intros Hr. now apply reconnect_last_slope_after.
 Qed.
 
