@@ -249,6 +249,32 @@ Axiom translate_seg_slope_init :
 Axiom translate_seg_slope_term :
   forall v s, slope_term (translate_seg v s) = slope_term s.
 
+(* 北向き，西向き，下に凸のセグメントの始点を下げる変形では、始点側の延長線の傾きを保てる。 *)
+Axiom northwest_cc_lower_init_slope : forall (seg : Segment) (p : Point),
+  embed (n, w, cc) seg ->
+  fst p = fst (init seg) ->
+  snd p <= snd (init seg) ->
+  reconnect_init_slope p (term seg) (orn_seg seg) (slope_init seg).
+
+Axiom southwest_cx_raise_init_slope : forall (seg : Segment) (p : Point),
+  embed (s, w, cx) seg ->
+  fst p = fst (init seg) ->
+  snd (init seg) <= snd p ->
+  reconnect_init_slope p (term seg) (orn_seg seg) (slope_init seg).
+
+(* 北向き，西向き，上に凸のセグメントの終点を上げる変形では、終点側の延長線の傾きを保てる。 *)
+Axiom northwest_cx_raise_term_slope : forall (seg : Segment) (p : Point),
+  embed (n, w, cx) seg ->
+  fst p = fst (term seg) ->
+  snd (term seg) <= snd p ->
+  reconnect_term_slope (init seg) p (orn_seg seg) (slope_term seg).
+
+Axiom southwest_cc_lower_term_slope : forall (seg : Segment) (p : Point),
+  embed (s, w, cc) seg ->
+  fst p = fst (term seg) ->
+  snd p <= snd (term seg) ->
+  reconnect_term_slope (init seg) p (orn_seg seg) (slope_term seg).
+
 (* 逆向きの平行移動により元のセグメントへ戻る。 *)
 Axiom translate_seg_inverse :
   forall v s, translate_seg (opposite_translation v) (translate_seg v s) = s.
