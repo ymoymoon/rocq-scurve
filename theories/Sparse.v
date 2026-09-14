@@ -1519,6 +1519,23 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
       classify l sub r (term (last_segment (l ++ sub ++ r))) = RegUp
       \/ classify l sub r (term (last_segment (l ++ sub ++ r))) = RegDown;
 
+  (* 同じ x 上の両延長線の上下順序を，それぞれの移動量を
+     決める基点の領域順序へ伝える。 *)
+  classified_head_last_extension_order :
+    forall ph pl,
+      onHead_extend (l ++ sub ++ r) ph ->
+      onLast_extend (l ++ sub ++ r) pl ->
+      fst ph = fst pl ->
+      (snd ph < snd pl ->
+         region_at_or_above
+           (classify l sub r (term (last_segment (l ++ sub ++ r))))
+           (classify l sub r (init (hd_segment (l ++ sub ++ r)))))
+      /\
+      (snd pl < snd ph ->
+         region_at_or_above
+           (classify l sub r (init (hd_segment (l ++ sub ++ r))))
+           (classify l sub r (term (last_segment (l ++ sub ++ r)))));
+
   classified_head_same_region :
     l <> [] ->
     classify l sub r (init (hd_segment l)) =
@@ -2297,6 +2314,174 @@ Proof.
     now apply reconnect_slope_reconnectable with
       (slope_p := slope_init s) (slope_q := slope_term s).
   - now apply reconnect_one_slope_term.
+Qed.
+
+(* 傾きを保存した再接続の始端延長線点を，移動前へ戻す。 *)
+Lemma reconnect_one_head_extension_preimage :
+  forall l sub r h s p,
+    reconnect_slope_after l sub r h s ->
+    onHead (reconnect_one l sub r h s) p ->
+    exists q,
+      onHead s q
+      /\ p = shift h (classify l sub r (init s)) q.
+Proof.
+  intros l sub r h s p Hslope Hp.
+  assert (Hrec : reconnectable_after l sub r h s).
+  { unfold reconnectable_after.
+    now apply reconnect_slope_reconnectable with
+      (slope_p := slope_init s) (slope_q := slope_term s). }
+  set (v := region_translation h (classify l sub r (init s))).
+  assert (Hinit :
+    init (reconnect_one l sub r h s) = init (translate_seg v s)).
+  { rewrite reconnect_one_init by exact Hrec.
+    rewrite translate_seg_init. unfold operate_point, v.
+    now rewrite shift_as_translation. }
+  assert (HslopeEq :
+    slope_init (reconnect_one l sub r h s) =
+    slope_init (translate_seg v s)).
+  { rewrite (reconnect_one_slope_init _ _ _ _ _ Hslope).
+    symmetry. apply translate_seg_slope_init. }
+  pose proof (proj1
+    (head_extension_determined_by_init_slope
+       (reconnect_one l sub r h s) (translate_seg v s)
+       Hinit HslopeEq p) Hp) as Htranslated.
+  destruct Htranslated as [t [Ht Hpoint]].
+  exists (point s t). split.
+  - exists t. split; [exact Ht | reflexivity].
+  - rewrite shift_as_translation. unfold v in Hpoint.
+    rewrite translate_seg_point in Hpoint. simpl in Hpoint.
+    symmetry. exact Hpoint.
+Qed.
+
+(* 傾き保存した再接続の終端延長線点の移動前の像。 *)
+Lemma reconnect_one_last_extension_preimage :
+  forall l sub r h s p,
+    reconnect_slope_after l sub r h s ->
+    onLast (reconnect_one l sub r h s) p ->
+    exists q,
+      onLast s q
+      /\ p = shift h (classify l sub r (term s)) q.
+Proof.
+  intros l sub r h s p Hslope Hp.
+  assert (Hrec : reconnectable_after l sub r h s).
+  { unfold reconnectable_after.
+    now apply reconnect_slope_reconnectable with
+      (slope_p := slope_init s) (slope_q := slope_term s). }
+  set (v := region_translation h (classify l sub r (term s))).
+  assert (Hterm :
+    term (reconnect_one l sub r h s) = term (translate_seg v s)).
+  { rewrite reconnect_one_term by exact Hrec.
+    rewrite translate_seg_term. unfold operate_point, v.
+    now rewrite shift_as_translation. }
+  assert (HslopeEq :
+    slope_term (reconnect_one l sub r h s) =
+    slope_term (translate_seg v s)).
+  { rewrite (reconnect_one_slope_term _ _ _ _ _ Hslope).
+    symmetry. apply translate_seg_slope_term. }
+  pose proof (proj1
+    (last_extension_determined_by_term_slope
+       (reconnect_one l sub r h s) (translate_seg v s)
+       Hterm HslopeEq p) Hp) as Htranslated.
+  destruct Htranslated as [t [Ht Hpoint]].
+  exists (point s t). split.
+  - exists t. split; [exact Ht | reflexivity].
+  - rewrite shift_as_translation. unfold v in Hpoint.
+    rewrite translate_seg_point in Hpoint. simpl in Hpoint.
+    symmetry. exact Hpoint.
+Qed.
+
+(* 再接続後の先頭延長線は，旧先頭延長線の一律な上下移動である。 *)
+Lemma reconnect_head_extension_preimage :
+  forall l sub r h p,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    (l <> [] -> reconnect_slope_after l sub r h (hd_segment l)) ->
+    onHead_extend (reconnect_split l sub r h) p ->
+    exists q,
+      onHead_extend (l ++ sub ++ r) q
+      /\ p = shift h
+          (classify l sub r (init (hd_segment (l ++ sub ++ r)))) q.
+Proof.
+  intros l sub r h p Hne Hconn Hmono Hsparse Hslope Hp.
+  destruct l as [|a l'].
+  - destruct sub as [|b sub']; [contradiction|].
+    assert (Hfix : classify [] (b :: sub') r (init b) = RegFix).
+    { apply (classified_sub_fixed
+               [] (b :: sub') r
+               (classify_spec [] (b :: sub') r
+                  ltac:(discriminate) Hconn Hmono Hsparse)).
+      apply onSegmentlist_init_hd. discriminate. }
+    exists p. split.
+    + exact Hp.
+    + simpl in Hfix |- *. now rewrite Hfix.
+  - simpl in Hp |- *.
+    apply (reconnect_one_head_extension_preimage
+             (a :: l') sub r h a p).
+    + now apply Hslope; discriminate.
+    + exact Hp.
+Qed.
+
+(* 再接続後の末尾延長線の移動前の像。 *)
+Lemma reconnect_last_extension_preimage :
+  forall l sub r h p,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    (r <> [] -> reconnect_slope_after l sub r h (last_segment r)) ->
+    onLast_extend (reconnect_split l sub r h) p ->
+    exists q,
+      onLast_extend (l ++ sub ++ r) q
+      /\ p = shift h
+          (classify l sub r (term (last_segment (l ++ sub ++ r)))) q.
+Proof.
+  intros l sub r h p Hne Hconn Hmono Hsparse Hslope Hp.
+  destruct r as [|a r'].
+  - assert (HoldLast : last_segment (l ++ sub ++ []) = last_segment sub).
+    { rewrite app_nil_r. apply last_app_nonnil. exact Hne. }
+    assert (HnewLast :
+      last_segment (reconnect_split l sub [] h) = last_segment sub).
+    { unfold reconnect_split, reconnect_segs. simpl. rewrite app_nil_r.
+      apply last_app_nonnil. exact Hne. }
+    assert (Hfix : classify l sub [] (term (last_segment sub)) = RegFix).
+    { apply (classified_sub_fixed
+               l sub []
+               (classify_spec l sub [] Hne Hconn Hmono Hsparse)).
+      apply onSegmentlist_term_last. exact Hne. }
+    exists p. split.
+    + unfold onLast_extend in *. now rewrite HnewLast in Hp; rewrite HoldLast.
+    + rewrite HoldLast, Hfix. reflexivity.
+  - assert (HoldLast :
+      last_segment (l ++ sub ++ a :: r') = last_segment (a :: r')).
+    { assert (Htail : sub ++ a :: r' <> []) by
+        (destruct sub; discriminate).
+      rewrite (last_app_nonnil l (sub ++ a :: r')) by exact Htail.
+      apply last_app_nonnil. discriminate. }
+    assert (HnewLast :
+      last_segment (reconnect_split l sub (a :: r') h) =
+      reconnect_one l sub (a :: r') h (last_segment (a :: r'))).
+    { unfold reconnect_split, reconnect_segs.
+      assert (Hmap : map (reconnect_one l sub (a :: r') h) (a :: r') <> [])
+        by discriminate.
+      assert (Htail :
+        sub ++ map (reconnect_one l sub (a :: r') h) (a :: r') <> []) by
+        (destruct sub; discriminate).
+      rewrite (last_app_nonnil
+                 (map (reconnect_one l sub (a :: r') h) l)
+                 (sub ++ map (reconnect_one l sub (a :: r') h) (a :: r')))
+        by exact Htail.
+      rewrite (last_app_nonnil sub
+                 (map (reconnect_one l sub (a :: r') h) (a :: r')))
+        by exact Hmap.
+      apply last_map_nonnil. discriminate. }
+    unfold onLast_extend in Hp |- *.
+    rewrite HnewLast in Hp. rewrite HoldLast.
+    apply (reconnect_one_last_extension_preimage
+             l sub (a :: r') h (last_segment (a :: r')) p).
+    + now apply Hslope; discriminate.
+    + exact Hp.
 Qed.
 
 (* 再接続後の strict 先頭延長線点は，移動前の strict
@@ -3153,7 +3338,42 @@ Lemma classified_extension_shifts_disjoint :
     (l <> [] -> reconnect_slope_after l sub r h (hd_segment l)) ->
     (r <> [] -> reconnect_slope_after l sub r h (last_segment r)) ->
     extensions_disjoint (reconnect_split l sub r h).
-Admitted.
+Proof.
+  intros l sub r h Hne Hconn Hmono Hh _ Hsparse Hdisjoint
+    HheadSlope HlastSlope p Hhead Hlast.
+  destruct (reconnect_head_extension_preimage
+              l sub r h p Hne Hconn Hmono Hsparse HheadSlope Hhead)
+    as [ph [Hph HshiftHead]].
+  destruct (reconnect_last_extension_preimage
+              l sub r h p Hne Hconn Hmono Hsparse HlastSlope Hlast)
+    as [pl [Hpl HshiftLast]].
+  assert (Hx : fst ph = fst pl).
+  { assert (HheadX : fst p = fst ph).
+    { rewrite HshiftHead, shift_fst. reflexivity. }
+    assert (HlastX : fst p = fst pl).
+    { rewrite HshiftLast, shift_fst. reflexivity. }
+    lra. }
+  assert (Hneq : ph <> pl).
+  { intro Heq. subst pl. exact (Hdisjoint ph Hph Hpl). }
+  pose proof (classified_head_last_extension_order
+                l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse)
+                ph pl Hph Hpl Hx) as [HorderHeadLast HorderLastHead].
+  destruct (total_order_T (snd ph) (snd pl)) as [[Hlt | Heq] | Hgt].
+  - pose proof (shift_preserves_strict_vertical_order
+                  h ph pl
+                  (classify l sub r (init (hd_segment (l ++ sub ++ r))))
+                  (classify l sub r (term (last_segment (l ++ sub ++ r))))
+                  (proj1 Hh) Hlt (HorderHeadLast Hlt)) as Hshifted.
+    rewrite <- HshiftHead, <- HshiftLast in Hshifted. lra.
+  - apply Hneq. destruct ph as [xh yh], pl as [xl yl].
+    simpl in Hx, Heq |- *. f_equal; lra.
+  - pose proof (shift_preserves_strict_vertical_order
+                  h pl ph
+                  (classify l sub r (term (last_segment (l ++ sub ++ r))))
+                  (classify l sub r (init (hd_segment (l ++ sub ++ r))))
+                  (proj1 Hh) Hgt (HorderLastHead Hgt)) as Hshifted.
+    rewrite <- HshiftLast, <- HshiftHead in Hshifted. lra.
+Qed.
 
 (* 先頭・末尾は make_seg_slope で傾きを保存するため、両延長線を保てる。 *)
 Lemma reconnect_preserves_extensions_disjoint :
