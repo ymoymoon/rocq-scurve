@@ -1382,26 +1382,6 @@ Qed.
 Parameter classify :
   list Segment -> list Segment -> list Segment -> Point -> Region.
 
-Definition above_head_extension (ls : list Segment) (p : Point) : Prop :=
-  exists q,
-    onHead_extend ls q /\ ~ onHead_extend ls p
-    /\ fst q = fst p /\ snd q < snd p.
-
-Definition below_head_extension (ls : list Segment) (p : Point) : Prop :=
-  exists q,
-    onHead_extend ls q /\ ~ onHead_extend ls p
-    /\ fst q = fst p /\ snd p < snd q.
-
-Definition above_last_extension (ls : list Segment) (p : Point) : Prop :=
-  exists q,
-    onLast_extend ls q /\ ~ onLast_extend ls p
-    /\ fst q = fst p /\ snd q < snd p.
-
-Definition below_last_extension (ls : list Segment) (p : Point) : Prop :=
-  exists q,
-    onLast_extend ls q /\ ~ onLast_extend ls p
-    /\ fst q = fst p /\ snd p < snd q.
-
 Definition in_sub_x_range (sub : list Segment) (p : Point) : Prop :=
   rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub).
 
@@ -1417,10 +1397,18 @@ Definition below_sub_at_x (sub : list Segment) (p : Point) : Prop :=
     /\ fst p = fst q
     /\ snd p < snd q.
 
+(* x 方向だけでは分離されていない二つの端点長方形。 *)
+Definition segment_x_ranges_overlap (s t : Segment) : Prop :=
+  rx0 (rect_of [s]) < rx1 (rect_of [t])
+  /\ rx0 (rect_of [t]) < rx1 (rect_of [s]).
+
 Record ClassificationSpec (l sub r : list Segment) : Prop := {
+
+  (* sub は固定 *)
   classified_sub_fixed :
     forall p, onSegmentlist sub p -> classify l sub r p = RegFix;
 
+  (* セグメントの始点が終点より低く，始点の領域が Up なら終点も Up など *)
   classified_segment_endpoints_monotone :
     forall s,
       In s (l ++ sub ++ r) ->
@@ -1430,39 +1418,27 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
       (snd (term s) < snd (init s) ->
         region_at_or_above (classify l sub r (init s)) (classify l sub r (term s)));
 
+  (* ある点が Up なら，それより上の点も Up など *)
   classified_same_x_monotone :
     forall p q,
       fst p = fst q ->
       snd p < snd q ->
       region_at_or_above (classify l sub r q) (classify l sub r p);
 
-  (* 非隣接セグメントの端点間で、上下移動が元の上下順序を逆転させない。 *)
+  (* x 範囲が重なる非隣接セグメントについては，下側の長方形が Up なら上側の長方形も Up など *)
   classified_nonadjacent_endpoint_order :
     forall i j s t ps pt,
       nth_error (l ++ sub ++ r) i = Some s ->
       nth_error (l ++ sub ++ r) j = Some t ->
       (S i < j \/ S j < i)%nat ->
+      segment_x_ranges_overlap s t ->
       endpoint_of_seg s ps ->
       endpoint_of_seg t pt ->
       snd ps <= snd pt ->
       region_at_or_above
         (classify l sub r pt) (classify l sub r ps);
 
-  classified_above_fix_up :
-    forall p q,
-      fst p = fst q ->
-      classify l sub r p = RegFix ->
-      snd p < snd q ->
-      classify l sub r q = RegUp;
-
-  classified_below_fix_down :
-    forall p q,
-      fst p = fst q ->
-      classify l sub r p = RegFix ->
-      snd q < snd p ->
-      classify l sub r q = RegDown;
-
-  (* sub と同じ x にあるセグメント上の点の上下側を、両端点へ伝える。 *)
+  (* sub と同じ x 座標を持つセグメントは Up もしくは Down *)
   classified_segment_at_sub_x :
     forall s p,
       In s (nonadjacent_sides l r) ->
@@ -1492,8 +1468,7 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
       classify l sub r (term (last_segment (l ++ sub ++ r))) = RegUp
       \/ classify l sub r (term (last_segment (l ++ sub ++ r))) = RegDown;
 
-  (* 同じ x 上の両延長線の上下順序を，それぞれの移動量を
-     決める基点の領域順序へ伝える。 *)
+  (* 延長線が同じ x 座標の点を持つ時，下側が Up なら上側も Up など *)
   classified_head_last_extension_order :
     forall ph pl,
       onHead_extend (l ++ sub ++ r) ph ->
@@ -1509,8 +1484,7 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
            (classify l sub r (init (hd_segment (l ++ sub ++ r))))
            (classify l sub r (term (last_segment (l ++ sub ++ r)))));
 
-  (* 同じ x 上で先頭延長線と交わるセグメント点の上下関係を，
-     そのセグメントの両端点が受ける移動の順序へ伝える。 *)
+  (* セグメントと延長線が同じ x 座標の点を持つ時，下側が Up なら上側も Up など *)
   classified_head_segment_crossing_order :
     forall s e q,
       In s (l ++ sub ++ r) ->
@@ -1533,7 +1507,6 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
            (classify l sub r (init (hd_segment (l ++ sub ++ r))))
            (classify l sub r (term s)));
 
-  (* 末尾延長線についての対称な交差順序。 *)
   classified_last_segment_crossing_order :
     forall s e q,
       In s (l ++ sub ++ r) ->
@@ -1556,6 +1529,7 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
            (classify l sub r (term (last_segment (l ++ sub ++ r))))
            (classify l sub r (term s)));
 
+  (* 先頭セグメントの両端点は基本的に同じ領域，例外は sub に先頭セグメントが隣接している時 *)
   classified_head_same_region :
     l <> [] ->
     classify l sub r (init (hd_segment l)) =
@@ -1570,36 +1544,7 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
       classify l sub r (term (last_segment r))
     \/ exists s,
         r = [s]
-        /\ fst (term s) < fst (term (last_segment sub));
-
-  (* 先頭延長線自身を除き，その移動領域が Up/Fix なら上側は Up。 *)
-  classified_above_head_up :
-    (classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegUp
-     \/ classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegFix) ->
-    forall p,
-      above_head_extension (l ++ sub ++ r) p ->
-      classify l sub r p = RegUp;
-
-  classified_below_head_down :
-    (classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegDown
-     \/ classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegFix) ->
-    forall p,
-      below_head_extension (l ++ sub ++ r) p ->
-      classify l sub r p = RegDown;
-
-  classified_above_last_up :
-    (classify l sub r (term (last_segment (l ++ sub ++ r))) = RegUp
-     \/ classify l sub r (term (last_segment (l ++ sub ++ r))) = RegFix) ->
-    forall p,
-      above_last_extension (l ++ sub ++ r) p ->
-      classify l sub r p = RegUp;
-
-  classified_below_last_down :
-    (classify l sub r (term (last_segment (l ++ sub ++ r))) = RegDown
-     \/ classify l sub r (term (last_segment (l ++ sub ++ r))) = RegFix) ->
-    forall p,
-      below_last_extension (l ++ sub ++ r) p ->
-      classify l sub r p = RegDown
+        /\ fst (term s) < fst (term (last_segment sub))
 }.
 
 Axiom classify_spec :
@@ -3365,17 +3310,27 @@ Proof.
       nth_error (l ++ sub ++ r) i0 = Some u ->
       nth_error (l ++ sub ++ r) j0 = Some v ->
       (S i0 < j0 \/ S j0 < i0)%nat ->
+      segment_x_ranges_overlap u v ->
       endpoint_of_seg u pu -> endpoint_of_seg v pv ->
       snd pu <= snd pv ->
       snd (operate_point l sub r h pu) <=
       snd (operate_point l sub r h pv)).
-  { intros i0 j0 u v pu pv Hu Hv Hfar0 Hpu Hpv Hy.
+  { intros i0 j0 u v pu pv Hu Hv Hfar0 Hoverlap Hpu Hpv Hy.
     unfold operate_point. eapply shift_preserves_vertical_order; [exact Hh | exact Hy |].
     exact (classified_nonadjacent_endpoint_order
              l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse)
-             i0 j0 u v pu pv Hu Hv Hfar0 Hpu Hpv Hy). }
+             i0 j0 u v pu pv Hu Hv Hfar0 Hoverlap Hpu Hpv Hy). }
   unfold endpoint_rectangles_axis_separated in Haxis |- *.
-  destruct Haxis as [Hleft | [Hright | [Hbelow | Habove]]].
+  assert (Hhorizontal_or_overlap :
+      rx1 (rect_of [t]) <= rx0 (rect_of [s])
+      \/ rx1 (rect_of [s]) <= rx0 (rect_of [t])
+      \/ segment_x_ranges_overlap s t).
+  { destruct (classic (rx1 (rect_of [t]) <= rx0 (rect_of [s])))
+      as [Hleft | Hleft]; [now left|].
+    destruct (classic (rx1 (rect_of [s]) <= rx0 (rect_of [t])))
+      as [Hright | Hright]; [now right; left|].
+    right; right. unfold segment_x_ranges_overlap. lra. }
+  destruct Hhorizontal_or_overlap as [Hleft | [Hright | Hoverlap]].
   - left.
     change (Rmax (fst (init t')) (fst (term t')) <=
             Rmin (fst (init s')) (fst (term s'))).
@@ -3390,7 +3345,10 @@ Proof.
             Rmin (fst (init t)) (fst (term t))) in Hright.
     rewrite Hsinit, Hsterm, Htinit, Htterm.
     rewrite !operate_point_fst. exact Hright.
-  - right; right; left.
+  - destruct Haxis as [Hleft' | [Hright' | [Hbelow | Habove]]].
+    + unfold segment_x_ranges_overlap in Hoverlap. lra.
+    + unfold segment_x_ranges_overlap in Hoverlap. lra.
+    + right; right; left.
     change (Rmax (snd (init t')) (snd (term t')) <=
             Rmin (snd (init s')) (snd (term s'))).
     rewrite Hsinit, Hsterm, Htinit, Htterm.
@@ -3404,20 +3362,26 @@ Proof.
         pose proof (Rmin_l (snd (init s)) (snd (term s)));
         pose proof (Rmin_r (snd (init s)) (snd (term s))); lra. }
     assert (Hfar' : (S j < i \/ S i < j)%nat) by tauto.
+    assert (Hoverlap' : segment_x_ranges_overlap t s).
+    { unfold segment_x_ranges_overlap in *. tauto. }
     apply Rmax_lub; apply Rmin_glb.
-    + eapply (Horder j i t s (init t) (init s));
-        [exact Ht | exact Hs | exact Hfar' | now left | now left |].
+    * eapply (Horder j i t s (init t) (init s));
+        [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
+         now left | now left |].
       apply Hold; now left.
-    + eapply (Horder j i t s (init t) (term s));
-        [exact Ht | exact Hs | exact Hfar' | now left | now right |].
+    * eapply (Horder j i t s (init t) (term s));
+        [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
+         now left | now right |].
       apply Hold; [now left | now right].
-    + eapply (Horder j i t s (term t) (init s));
-        [exact Ht | exact Hs | exact Hfar' | now right | now left |].
+    * eapply (Horder j i t s (term t) (init s));
+        [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
+         now right | now left |].
       apply Hold; [now right | now left].
-    + eapply (Horder j i t s (term t) (term s));
-        [exact Ht | exact Hs | exact Hfar' | now right | now right |].
+    * eapply (Horder j i t s (term t) (term s));
+        [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
+         now right | now right |].
       apply Hold; now right.
-  - right; right; right.
+    + right; right; right.
     change (Rmax (snd (init s')) (snd (term s')) <=
             Rmin (snd (init t')) (snd (term t'))).
     rewrite Hsinit, Hsterm, Htinit, Htterm.
@@ -3431,17 +3395,21 @@ Proof.
         pose proof (Rmin_l (snd (init t)) (snd (term t)));
         pose proof (Rmin_r (snd (init t)) (snd (term t))); lra. }
     apply Rmax_lub; apply Rmin_glb.
-    + eapply (Horder i j s t (init s) (init t));
-        [exact Hs | exact Ht | exact Hfar | now left | now left |].
+    * eapply (Horder i j s t (init s) (init t));
+        [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
+         now left | now left |].
       apply Hold; now left.
-    + eapply (Horder i j s t (init s) (term t));
-        [exact Hs | exact Ht | exact Hfar | now left | now right |].
+    * eapply (Horder i j s t (init s) (term t));
+        [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
+         now left | now right |].
       apply Hold; [now left | now right].
-    + eapply (Horder i j s t (term s) (init t));
-        [exact Hs | exact Ht | exact Hfar | now right | now left |].
+    * eapply (Horder i j s t (term s) (init t));
+        [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
+         now right | now left |].
       apply Hold; [now right | now left].
-    + eapply (Horder i j s t (term s) (term t));
-        [exact Hs | exact Ht | exact Hfar | now right | now right |].
+    * eapply (Horder i j s t (term s) (term t));
+        [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
+         now right | now right |].
       apply Hold; now right.
 Qed.
 
