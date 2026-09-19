@@ -232,6 +232,13 @@ Definition translate_pt (v p : Point) : Point :=
 Definition opposite_translation (v : Point) : Point :=
   (- fst v, - snd v).
 
+Lemma translate_pt_opposite_left : forall v p,
+  translate_pt v (translate_pt (opposite_translation v) p) = p.
+Proof.
+  intros [vx vy] [x y]. unfold translate_pt, opposite_translation. simpl.
+  f_equal; ring.
+Qed.
+
 Parameter translate_seg : (R * R) -> Segment -> Segment.
 
 (* 平行移動したセグメントの各点は、元の点を同じベクトルだけ移したもの。 *)
@@ -262,6 +269,19 @@ Axiom southwest_cx_raise_init_slope : forall (seg : Segment) (p : Point),
   snd (init seg) <= snd p ->
   reconnect_init_slope p (term seg) (orn_seg seg) (slope_init seg).
 
+(* 東向きの場合も、始点だけを外向きへ動かす変形で始点傾きを保てる。 *)
+Axiom northeast_cc_lower_init_slope : forall (seg : Segment) (p : Point),
+  embed (n, e, cc) seg ->
+  fst p = fst (init seg) ->
+  snd p <= snd (init seg) ->
+  reconnect_init_slope p (term seg) (orn_seg seg) (slope_init seg).
+
+Axiom southeast_cx_raise_init_slope : forall (seg : Segment) (p : Point),
+  embed (s, e, cx) seg ->
+  fst p = fst (init seg) ->
+  snd (init seg) <= snd p ->
+  reconnect_init_slope p (term seg) (orn_seg seg) (slope_init seg).
+
 (* 北向き，西向き，上に凸のセグメントの終点を上げる変形では、終点側の延長線の傾きを保てる。 *)
 Axiom northwest_cx_raise_term_slope : forall (seg : Segment) (p : Point),
   embed (n, w, cx) seg ->
@@ -271,6 +291,19 @@ Axiom northwest_cx_raise_term_slope : forall (seg : Segment) (p : Point),
 
 Axiom southwest_cc_lower_term_slope : forall (seg : Segment) (p : Point),
   embed (s, w, cc) seg ->
+  fst p = fst (term seg) ->
+  snd p <= snd (term seg) ->
+  reconnect_term_slope (init seg) p (orn_seg seg) (slope_term seg).
+
+(* 東向きの場合も、終点だけを外向きへ動かす変形で終点傾きを保てる。 *)
+Axiom northeast_cx_raise_term_slope : forall (seg : Segment) (p : Point),
+  embed (n, e, cx) seg ->
+  fst p = fst (term seg) ->
+  snd (term seg) <= snd p ->
+  reconnect_term_slope (init seg) p (orn_seg seg) (slope_term seg).
+
+Axiom southeast_cc_lower_term_slope : forall (seg : Segment) (p : Point),
+  embed (s, e, cc) seg ->
   fst p = fst (term seg) ->
   snd p <= snd (term seg) ->
   reconnect_term_slope (init seg) p (orn_seg seg) (slope_term seg).
@@ -286,6 +319,45 @@ Proof. intros v s. unfold init. apply translate_seg_point. Qed.
 Lemma translate_seg_term :
   forall v s, term (translate_seg v s) = translate_pt v (term s).
 Proof. intros v s. unfold term. apply translate_seg_point. Qed.
+
+(* 傾き付き再接続は、両端を同じベクトルだけ平行移動しても保たれる。 *)
+Lemma reconnect_init_slope_translate :
+  forall v p q d slope,
+    reconnect_init_slope p q d slope ->
+    reconnect_init_slope
+      (translate_pt v p) (translate_pt v q) d slope.
+Proof.
+  intros v p q d slope [slope_q Hrec].
+  unfold reconnect_init_slope. exists slope_q.
+  apply (proj2 (reconnect_slope_spec _ _ _ _ _)).
+  destruct (proj1 (reconnect_slope_spec _ _ _ _ _) Hrec)
+    as [seg [Hinit [Hterm [Horn [HinitSlope HtermSlope]]]]].
+  exists (translate_seg v seg). repeat split.
+  - rewrite translate_seg_init, Hinit. reflexivity.
+  - rewrite translate_seg_term, Hterm. reflexivity.
+  - now rewrite translate_seg_orn.
+  - now rewrite translate_seg_slope_init.
+  - now rewrite translate_seg_slope_term.
+Qed.
+
+Lemma reconnect_term_slope_translate :
+  forall v p q d slope,
+    reconnect_term_slope p q d slope ->
+    reconnect_term_slope
+      (translate_pt v p) (translate_pt v q) d slope.
+Proof.
+  intros v p q d slope [slope_p Hrec].
+  unfold reconnect_term_slope. exists slope_p.
+  apply (proj2 (reconnect_slope_spec _ _ _ _ _)).
+  destruct (proj1 (reconnect_slope_spec _ _ _ _ _) Hrec)
+    as [seg [Hinit [Hterm [Horn [HinitSlope HtermSlope]]]]].
+  exists (translate_seg v seg). repeat split.
+  - rewrite translate_seg_init, Hinit. reflexivity.
+  - rewrite translate_seg_term, Hterm. reflexivity.
+  - now rewrite translate_seg_orn.
+  - now rewrite translate_seg_slope_init.
+  - now rewrite translate_seg_slope_term.
+Qed.
 
 Lemma onSegment_translate :
   forall v s p,

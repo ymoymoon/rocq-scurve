@@ -1529,22 +1529,29 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
            (classify l sub r (term (last_segment (l ++ sub ++ r))))
            (classify l sub r (term s)));
 
-  (* 先頭セグメントの両端点は基本的に同じ領域，例外は sub に先頭セグメントが隣接している時 *)
-  classified_head_same_region :
+  (* 先頭の両端が別領域なら、始点傾きを保てる向き・凸性に限る。 *)
+  classified_head_slope_case :
     l <> [] ->
     classify l sub r (init (hd_segment l)) =
       classify l sub r (term (hd_segment l))
-    \/ exists s,
-        l = [s]
-        /\ fst (init (hd_segment sub)) < fst (init s);
+    \/ (classify l sub r (init (hd_segment l)) = RegUp
+        /\ (embed (s, w, cx) (hd_segment l)
+            \/ embed (s, e, cx) (hd_segment l)))
+    \/ (classify l sub r (init (hd_segment l)) = RegDown
+        /\ (embed (n, w, cc) (hd_segment l)
+            \/ embed (n, e, cc) (hd_segment l)));
 
-  classified_last_same_region :
+  (* 末尾では双対的に、終点傾きを保てる場合だけ別領域を許す。 *)
+  classified_last_slope_case :
     r <> [] ->
     classify l sub r (init (last_segment r)) =
       classify l sub r (term (last_segment r))
-    \/ exists s,
-        r = [s]
-        /\ fst (term s) < fst (term (last_segment sub))
+    \/ (classify l sub r (term (last_segment r)) = RegUp
+        /\ (embed (n, w, cx) (last_segment r)
+            \/ embed (n, e, cx) (last_segment r)))
+    \/ (classify l sub r (term (last_segment r)) = RegDown
+        /\ (embed (s, w, cc) (last_segment r)
+            \/ embed (s, e, cc) (last_segment r)))
 }.
 
 Axiom classify_spec :
@@ -2129,6 +2136,157 @@ Proof.
   - apply translate_seg_slope_term.
 Qed.
 
+(* 始点を Up にする場合、終点の移動を差し引くと始点だけを上げる変形になる。 *)
+Lemma raised_init_reconnect_slope_after :
+  forall l sub r h seg,
+    0 <= h ->
+    classify l sub r (init seg) = RegUp ->
+    (forall p,
+      fst p = fst (init seg) ->
+      snd (init seg) <= snd p ->
+      reconnect_init_slope
+        p (term seg) (orn_seg seg) (slope_init seg)) ->
+    reconnect_init_slope_after l sub r h seg.
+Proof.
+  intros l sub r h seg Hh Hregion Hraise.
+  set (g := classify l sub r (term seg)).
+  set (v := region_translation h g).
+  set (p0 := translate_pt (opposite_translation v)
+               (shift h RegUp (init seg))).
+  assert (Hx : fst p0 = fst (init seg)).
+  { unfold p0, v, opposite_translation, translate_pt, region_translation,
+      shift. destruct g; destruct (init seg); simpl; ring. }
+  assert (Hy : snd (init seg) <= snd p0).
+  { unfold p0, v, opposite_translation, translate_pt, region_translation,
+      shift. destruct g; destruct (init seg); simpl; lra. }
+  pose proof (Hraise p0 Hx Hy) as Hbase.
+  pose proof (reconnect_init_slope_translate
+                v p0 (term seg) (orn_seg seg) (slope_init seg) Hbase)
+    as Htranslated.
+  assert (Hp : translate_pt v p0 = shift h RegUp (init seg)).
+  { unfold p0. apply translate_pt_opposite_left. }
+  assert (Hq : translate_pt v (term seg) = shift h g (term seg)).
+  { unfold v. symmetry. apply shift_as_translation. }
+  unfold reconnect_init_slope_after, operate_point. rewrite Hregion.
+  change (reconnect_init_slope
+            (shift h RegUp (init seg)) (shift h g (term seg))
+            (orn_seg seg) (slope_init seg)).
+  now rewrite <- Hp, <- Hq.
+Qed.
+
+(* 始点を Down にする場合は、同様に始点だけを下げる変形へ帰着する。 *)
+Lemma lowered_init_reconnect_slope_after :
+  forall l sub r h seg,
+    0 <= h ->
+    classify l sub r (init seg) = RegDown ->
+    (forall p,
+      fst p = fst (init seg) ->
+      snd p <= snd (init seg) ->
+      reconnect_init_slope
+        p (term seg) (orn_seg seg) (slope_init seg)) ->
+    reconnect_init_slope_after l sub r h seg.
+Proof.
+  intros l sub r h seg Hh Hregion Hlower.
+  set (g := classify l sub r (term seg)).
+  set (v := region_translation h g).
+  set (p0 := translate_pt (opposite_translation v)
+               (shift h RegDown (init seg))).
+  assert (Hx : fst p0 = fst (init seg)).
+  { unfold p0, v, opposite_translation, translate_pt, region_translation,
+      shift. destruct g; destruct (init seg); simpl; ring. }
+  assert (Hy : snd p0 <= snd (init seg)).
+  { unfold p0, v, opposite_translation, translate_pt, region_translation,
+      shift. destruct g; destruct (init seg); simpl; lra. }
+  pose proof (Hlower p0 Hx Hy) as Hbase.
+  pose proof (reconnect_init_slope_translate
+                v p0 (term seg) (orn_seg seg) (slope_init seg) Hbase)
+    as Htranslated.
+  assert (Hp : translate_pt v p0 = shift h RegDown (init seg)).
+  { unfold p0. apply translate_pt_opposite_left. }
+  assert (Hq : translate_pt v (term seg) = shift h g (term seg)).
+  { unfold v. symmetry. apply shift_as_translation. }
+  unfold reconnect_init_slope_after, operate_point. rewrite Hregion.
+  change (reconnect_init_slope
+            (shift h RegDown (init seg)) (shift h g (term seg))
+            (orn_seg seg) (slope_init seg)).
+  now rewrite <- Hp, <- Hq.
+Qed.
+
+(* 終点側についても、始点の移動を差し引いて片端変形へ帰着する。 *)
+Lemma raised_term_reconnect_slope_after :
+  forall l sub r h seg,
+    0 <= h ->
+    classify l sub r (term seg) = RegUp ->
+    (forall p,
+      fst p = fst (term seg) ->
+      snd (term seg) <= snd p ->
+      reconnect_term_slope
+        (init seg) p (orn_seg seg) (slope_term seg)) ->
+    reconnect_term_slope_after l sub r h seg.
+Proof.
+  intros l sub r h seg Hh Hregion Hraise.
+  set (g := classify l sub r (init seg)).
+  set (v := region_translation h g).
+  set (q0 := translate_pt (opposite_translation v)
+               (shift h RegUp (term seg))).
+  assert (Hx : fst q0 = fst (term seg)).
+  { unfold q0, v, opposite_translation, translate_pt, region_translation,
+      shift. destruct g; destruct (term seg); simpl; ring. }
+  assert (Hy : snd (term seg) <= snd q0).
+  { unfold q0, v, opposite_translation, translate_pt, region_translation,
+      shift. destruct g; destruct (term seg); simpl; lra. }
+  pose proof (Hraise q0 Hx Hy) as Hbase.
+  pose proof (reconnect_term_slope_translate
+                v (init seg) q0 (orn_seg seg) (slope_term seg) Hbase)
+    as Htranslated.
+  assert (Hp : translate_pt v (init seg) = shift h g (init seg)).
+  { unfold v. symmetry. apply shift_as_translation. }
+  assert (Hq : translate_pt v q0 = shift h RegUp (term seg)).
+  { unfold q0. apply translate_pt_opposite_left. }
+  unfold reconnect_term_slope_after, operate_point. rewrite Hregion.
+  change (reconnect_term_slope
+            (shift h g (init seg)) (shift h RegUp (term seg))
+            (orn_seg seg) (slope_term seg)).
+  now rewrite <- Hp, <- Hq.
+Qed.
+
+Lemma lowered_term_reconnect_slope_after :
+  forall l sub r h seg,
+    0 <= h ->
+    classify l sub r (term seg) = RegDown ->
+    (forall p,
+      fst p = fst (term seg) ->
+      snd p <= snd (term seg) ->
+      reconnect_term_slope
+        (init seg) p (orn_seg seg) (slope_term seg)) ->
+    reconnect_term_slope_after l sub r h seg.
+Proof.
+  intros l sub r h seg Hh Hregion Hlower.
+  set (g := classify l sub r (init seg)).
+  set (v := region_translation h g).
+  set (q0 := translate_pt (opposite_translation v)
+               (shift h RegDown (term seg))).
+  assert (Hx : fst q0 = fst (term seg)).
+  { unfold q0, v, opposite_translation, translate_pt, region_translation,
+      shift. destruct g; destruct (term seg); simpl; ring. }
+  assert (Hy : snd q0 <= snd (term seg)).
+  { unfold q0, v, opposite_translation, translate_pt, region_translation,
+      shift. destruct g; destruct (term seg); simpl; lra. }
+  pose proof (Hlower q0 Hx Hy) as Hbase.
+  pose proof (reconnect_term_slope_translate
+                v (init seg) q0 (orn_seg seg) (slope_term seg) Hbase)
+    as Htranslated.
+  assert (Hp : translate_pt v (init seg) = shift h g (init seg)).
+  { unfold v. symmetry. apply shift_as_translation. }
+  assert (Hq : translate_pt v q0 = shift h RegDown (term seg)).
+  { unfold q0. apply translate_pt_opposite_left. }
+  unfold reconnect_term_slope_after, operate_point. rewrite Hregion.
+  change (reconnect_term_slope
+            (shift h g (init seg)) (shift h RegDown (term seg))
+            (orn_seg seg) (slope_term seg)).
+  now rewrite <- Hp, <- Hq.
+Qed.
+
 (* 東向きの sub に西向きから直接つながる先頭は、dc の水平反転二場合に限られる。 *)
 Lemma singleton_head_before_x_monotone_sub_shape :
   forall ds seg sub r,
@@ -2413,12 +2571,19 @@ Lemma reconnect_head_init_slope_after :
     reconnect_init_slope_after l sub r h (hd_segment l).
 Proof.
   intros ds l sub r h Hne Hconn Hmono Hsparse Hembed Hh Hl.
-  destruct (classified_head_same_region
+  destruct (classified_head_slope_case
               l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse) Hl)
-    as [Hsame | [s [Hl' Hx]]].
+    as [Hsame | [[Hup [Hsw | Hse]] | [Hdown [Hnw | Hneast]]]].
   - apply reconnect_slope_after_init.
     now apply same_region_reconnect_slope_after.
-  - now apply reconnect_head_fixed_endpoint_slope with (ds := ds) (s := s).
+  - eapply raised_init_reconnect_slope_after; [exact Hh | exact Hup |].
+    intros p Hx Hy. now apply southwest_cx_raise_init_slope.
+  - eapply raised_init_reconnect_slope_after; [exact Hh | exact Hup |].
+    intros p Hx Hy. now apply southeast_cx_raise_init_slope.
+  - eapply lowered_init_reconnect_slope_after; [exact Hh | exact Hdown |].
+    intros p Hx Hy. now apply northwest_cc_lower_init_slope.
+  - eapply lowered_init_reconnect_slope_after; [exact Hh | exact Hdown |].
+    intros p Hx Hy. now apply northeast_cc_lower_init_slope.
 Qed.
 
 Lemma reconnect_last_term_slope_after :
@@ -2433,12 +2598,19 @@ Lemma reconnect_last_term_slope_after :
     reconnect_term_slope_after l sub r h (last_segment r).
 Proof.
   intros ds l sub r h Hne Hconn Hmono Hsparse Hembed Hh Hr.
-  destruct (classified_last_same_region
+  destruct (classified_last_slope_case
               l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse) Hr)
-    as [Hsame | [s [Hr' Hx]]].
+    as [Hsame | [[Hup [Hnw | Hneast]] | [Hdown [Hsw | Hse]]]].
   - apply reconnect_slope_after_term.
     now apply same_region_reconnect_slope_after.
-  - now apply reconnect_last_fixed_endpoint_slope with (ds := ds) (s := s).
+  - eapply raised_term_reconnect_slope_after; [exact Hh | exact Hup |].
+    intros p Hx Hy. now apply northwest_cx_raise_term_slope.
+  - eapply raised_term_reconnect_slope_after; [exact Hh | exact Hup |].
+    intros p Hx Hy. now apply northeast_cx_raise_term_slope.
+  - eapply lowered_term_reconnect_slope_after; [exact Hh | exact Hdown |].
+    intros p Hx Hy. now apply southwest_cc_lower_term_slope.
+  - eapply lowered_term_reconnect_slope_after; [exact Hh | exact Hdown |].
+    intros p Hx Hy. now apply southeast_cc_lower_term_slope.
 Qed.
 
 (* 傾きを保存した再接続の始端延長線点を，移動前へ戻す。 *)
