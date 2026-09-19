@@ -11,6 +11,8 @@ theories/Example3.v
 theories/Reduction.v
 theories/Admissible.v
 theories/SegmentsTranslation.v
-theories/Sparse.v
+theories/Sparsity.v
+theories/Classify.v
+theories/SparseEmbedding.v
 theories/AdmissibilityPreservation.v
 theories/ConcreteExtend.v

@@ -6,7 +6,7 @@ Require Import PrimitiveSegment.
 Require Import Segment.
 Require Import SegmentsTranslation.
 Require Import ListExt.
-Require Import Sparse.
+Require Import SparseEmbedding.
 Import ListNotations.
 From Stdlib Require Import Lra.
 From Stdlib Require Import Lia.
