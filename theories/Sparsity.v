@@ -71,6 +71,44 @@ Qed.
 Definition onSegment' (seg: Segment) (rr : R * R) := exists (t:R), 0 < t <= 1 /\ point seg t = rr.
 (* TODO: 空リストを省く *)
 Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
+
+(* セグメント本体と両側の延長を、同じ連続 trace として扱う。 *)
+Inductive SegmentTracePart : Type :=
+  | TraceBody
+  | TraceHead
+  | TraceLast.
+
+Definition onSegmentTrace
+    (part : SegmentTracePart) (seg : Segment) (p : Point) : Prop :=
+  match part with
+  | TraceBody => onSegment seg p
+  | TraceHead => onHead seg p
+  | TraceLast => onLast seg p
+  end.
+
+Definition trace_disjoint_from_segmentlist
+    (part : SegmentTracePart) (seg : Segment) (ls : list Segment) : Prop :=
+  forall p, onSegmentTrace part seg p -> ~ onSegmentlist ls p.
+
+(* 二つの連続な非交差 x-グラフの上下関係は、共通 x 区間上で反転しない。
+   Segment の連続性・単調性と sub の連結な x 単調性をまとめた幾何補題。 *)
+Lemma disjoint_trace_sub_vertical_order_constant :
+  forall part seg sub,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    trace_disjoint_from_segmentlist part seg sub ->
+    forall p0 q0 p q,
+      onSegmentTrace part seg p0 ->
+      onSegmentlist sub q0 ->
+      fst p0 = fst q0 ->
+      onSegmentTrace part seg p ->
+      onSegmentlist sub q ->
+      fst p = fst q ->
+      (snd q0 < snd p0 -> snd q < snd p)
+      /\ (snd p0 < snd q0 -> snd p < snd q).
+Admitted.
+
 (* TODO: extend に関する公理を完成させた後， onExtendSegment と整合することを確認
 		特に空リストの扱い *)
 Definition onExtend ls rr := exists t, rr = extend ls t.
@@ -660,12 +698,12 @@ Proof.
   rewrite in_app_iff. left. now apply in_removelast_in.
 Qed.
 
-(* strict 延長線と非隣接セグメントは、sub の閉長方形を避ける。
-   隣接セグメントと sub の共有端点は、埋め込みの連結性側で扱う。 *)
+(* sub の外側に実在する strict 延長線と非隣接セグメントは、sub の
+   閉長方形を避ける。sub 自身の延長線と共有端点はここでは扱わない。 *)
 Definition sparse_around (l sub r : list Segment) : Prop :=
   (forall p,
-     (onHead_extend_strict (l ++ sub ++ r) p
-      \/ onLast_extend_strict (l ++ sub ++ r) p) ->
+     ((l <> [] /\ onHead_extend_strict (l ++ sub ++ r) p)
+      \/ (r <> [] /\ onLast_extend_strict (l ++ sub ++ r) p)) ->
      ~ in_rect_or_endpoints_at sub p)
   /\ (forall s p,
         In s (nonadjacent_sides l r) ->
@@ -678,6 +716,31 @@ Definition sparse_embedding (ls : list Segment) : Prop :=
   forall l s r,
     ls = l ++ [s] ++ r ->
     sparse_around l [s] r.
+
+(* 全域 sparse 性は、非隣接セグメントの閉端点長方形から sub 上の
+   任意の点を排除する。 *)
+Lemma sparse_nonadjacent_box_avoids_sub_points :
+  forall l sub r s q,
+    sparse_embedding (l ++ sub ++ r) ->
+    In s (nonadjacent_sides l r) ->
+    onSegmentlist sub q ->
+    ~ in_segment_rect_or_endpoints s q.
+Proof.
+  intros l sub r s q Hsparse Hs [t [Ht Hqt]] Hqbox.
+  destruct (in_app_app sub t Ht) as [sl [sr Hdecomp]].
+  assert (Hfull :
+      l ++ sub ++ r = (l ++ sl) ++ [t] ++ (sr ++ r)).
+  { transitivity (l ++ (sl ++ [t] ++ sr) ++ r).
+    - exact (f_equal (fun xs => l ++ xs ++ r) Hdecomp).
+    - repeat rewrite app_assoc. reflexivity. }
+  pose proof (Hsparse (l ++ sl) t (sr ++ r) Hfull) as Haround.
+  assert (Hs' : In s (nonadjacent_sides (l ++ sl) (sr ++ r))).
+  { apply nonadjacent_sides_extend_right.
+    now apply nonadjacent_sides_extend_left. }
+  apply ((proj2 Haround) s q Hs' Hqbox).
+  change (in_segment_rect_or_endpoints t q).
+  now apply segment_in_rect_or_endpoints.
+Qed.
 
 (* 全域で疎であり、さらに指定した部分列 sub の周りでも疎である。 *)
 Definition sparse (l sub r : list Segment) : Prop :=
@@ -693,11 +756,14 @@ Definition segment_rectangles_separated (ls : list Segment) : Prop :=
       in_segment_rect_or_endpoints t p ->
       ~ in_rect_or_endpoints_at [s] p.
 
+(* 各セグメントの閉長方形を、そのセグメントの外側から来る
+   先頭・末尾延長線が避ける。自己延長は単射性側で扱う。 *)
 Definition extensions_avoid_segment_rectangles (ls : list Segment) : Prop :=
   forall l s r,
     ls = l ++ [s] ++ r ->
     forall p,
-      (onHead_extend_strict ls p \/ onLast_extend_strict ls p) ->
+      ((l <> [] /\ onHead_extend_strict ls p)
+       \/ (r <> [] /\ onLast_extend_strict ls p)) ->
       ~ in_rect_or_endpoints_at [s] p.
 
 (* 矩形・延長線・端点についての局所的な分離条件から全域疎性を組み立てる。 *)
@@ -709,9 +775,11 @@ Lemma geometric_sparse_embedding :
 Proof.
   intros ls Hrect Hext l s r Heq.
   split.
-  - intros p [Hhead | Hlast].
-    + apply (Hext l s r Heq p). left. rewrite Heq. exact Hhead.
-    + apply (Hext l s r Heq p). right. rewrite Heq. exact Hlast.
+  - intros p [[Hl Hhead] | [Hr Hlast]].
+    + apply (Hext l s r Heq p). left. split; [exact Hl |].
+      rewrite Heq. exact Hhead.
+    + apply (Hext l s r Heq p). right. split; [exact Hr |].
+      rewrite Heq. exact Hlast.
   - intros t p Ht Hp. eapply Hrect; eauto.
 Qed.
 
@@ -1047,17 +1115,19 @@ Proof.
     change (uo <= 0) in Huo.
     destruct (Rlt_dec uo 0) as [Huostrict | Huozero].
     + destruct (@nth_error_split Segment ls ib sb Hnthb)
-        as [l [r [Hsplit _]]].
+        as [l [r [Hsplit Hlen]]].
       destruct (Hsparse l sb r Hsplit) as [Hextend _].
       assert (Hwhole : l ++ [sb] ++ r = ls).
       { change (l ++ sb :: r = ls). now symmetry. }
       apply (Hextend (point sb ub)).
-      * left. rewrite Hwhole. unfold onHead_extend_strict.
+      * left. split.
+        -- intros Hl. subst l. simpl in Hlen. lia.
+        -- rewrite Hwhole. unfold onHead_extend_strict.
         assert (Hso : so = hd_segment ls).
         { rewrite Hio0 in Hntho. unfold hd_segment. symmetry.
           eapply nth_error_hd; exact Hntho. }
-        exists uo. split; [exact Huostrict |].
-        rewrite <- Hso, <- Hpoints. reflexivity.
+           exists uo. split; [exact Huostrict |].
+           rewrite <- Hso, <- Hpoints. reflexivity.
       * exact Hboxb.
     + assert (Huo0 : uo = 0) by lra.
       assert (Hlt : (io < ib)%nat) by lia.
@@ -1068,20 +1138,23 @@ Proof.
   - change (S io = length ls) in Hiolast.
     change (1 < uo) in Huo.
     destruct (@nth_error_split Segment ls ib sb Hnthb)
-      as [l [r [Hsplit _]]].
+      as [l [r [Hsplit Hlen]]].
     destruct (Hsparse l sb r Hsplit) as [Hextend _].
     assert (Hwhole : l ++ [sb] ++ r = ls).
     { change (l ++ sb :: r = ls). now symmetry. }
     apply (Hextend (point sb ub)).
-    + right. rewrite Hwhole. unfold onLast_extend_strict.
+    + right. split.
+      * intros Hr. subst r. simpl in Hsplit.
+        subst ls. rewrite length_app in Hiolast. simpl in Hiolast. lia.
+      * rewrite Hwhole. unfold onLast_extend_strict.
       assert (Hso : so = last_segment ls).
       { unfold last_segment.
         assert (K : io = (length ls - 1)%nat) by lia.
         rewrite K in Hntho.
         pose proof (@nth_error_last Segment ls default_segment Hne) as Hlast.
         rewrite Hntho in Hlast. now injection Hlast. }
-      exists uo. split; [exact Huo |].
-      rewrite <- Hso, <- Hpoints. reflexivity.
+        exists uo. split; [exact Huo |].
+        rewrite <- Hso, <- Hpoints. reflexivity.
     + exact Hboxb.
 Qed.
 

@@ -1490,14 +1490,14 @@ Proof.
   assert (Hin : In s (l ++ sub ++ r)).
   { now apply nth_error_In in Hs. }
   destruct (@nth_error_split Segment (l ++ sub ++ r) (length l') s Hs)
-    as [oldl [oldr [HoldSplit _]]].
+    as [oldl [oldr [HoldSplit HoldLen]]].
   destruct (Hsparse oldl s oldr HoldSplit) as [HoldExtension _].
   pose proof (reconnect_split_nth_spec
                 l sub r h (length l') s s'
                 Hne Hconn Hmono Hsparse Hwhole (ex_intro _ ds Hembed)
                 Hrec Hs Hs')
     as [_ [Hinit Hterm]].
-  destruct Hextension as [Hhead | Hlast].
+  destruct Hextension as [[Hl' Hhead] | [Hr' Hlast]].
   - destruct (reconnect_head_strict_extension_preimage
                 ds l sub r h p Hne Hconn Hmono Hsparse Hembed
                 Hext (Rlt_le _ _ (proj1 Hh)) Hhead)
@@ -1512,9 +1512,11 @@ Proof.
     + exact (proj1 Hh).
     + unfold operate_point in Hinit. exact Hinit.
     + unfold operate_point in Hterm. exact Hterm.
-    + apply (HoldExtension q). left.
-      change (onHead_extend_strict (oldl ++ s :: oldr) q).
-      now rewrite <- HoldSplit.
+    + apply (HoldExtension q). left. split.
+      * intros Holdnil. subst oldl. simpl in HoldLen.
+        apply Hl'. apply length_zero_iff_nil. lia.
+      * change (onHead_extend_strict (oldl ++ s :: oldr) q).
+        now rewrite <- HoldSplit.
     + intros e He Hxe.
       exact (classified_head_segment_crossing_order
                l sub r
@@ -1536,9 +1538,14 @@ Proof.
     + exact (proj1 Hh).
     + unfold operate_point in Hinit. exact Hinit.
     + unfold operate_point in Hterm. exact Hterm.
-    + apply (HoldExtension q). right.
-      change (onLast_extend_strict (oldl ++ s :: oldr) q).
-      now rewrite <- HoldSplit.
+    + apply (HoldExtension q). right. split.
+      * intros Holdnil. subst oldr. simpl in HoldSplit.
+        assert (Hlengths := Hlen).
+        rewrite HoldSplit, Hsplit in Hlengths.
+        rewrite !length_app in Hlengths. simpl in Hlengths.
+        apply Hr'. apply length_zero_iff_nil. lia.
+      * change (onLast_extend_strict (oldl ++ s :: oldr) q).
+        now rewrite <- HoldSplit.
     + intros e He Hxe.
       exact (classified_last_segment_crossing_order
                l sub r
@@ -1738,31 +1745,6 @@ Proof.
     - eapply Rlt_le_trans; [exact Hlt | apply Rmin_l].
     - eapply Rlt_le_trans; [exact Hlt | apply Rmin_r]. }
   apply closed_intervals_have_common_point; lra.
-Qed.
-
-(* 全域 sparse 性は、非隣接セグメントの端点長方形から sub 上の
-   任意の点を排除する。 *)
-Lemma sparse_nonadjacent_box_avoids_sub_points :
-  forall l sub r s q,
-    sparse_embedding (l ++ sub ++ r) ->
-    In s (nonadjacent_sides l r) ->
-    onSegmentlist sub q ->
-    ~ in_segment_rect_or_endpoints s q.
-Proof.
-  intros l sub r s q Hsparse Hs [t [Ht Hqt]] Hqbox.
-  destruct (in_app_app sub t Ht) as [sl [sr Hdecomp]].
-  assert (Hfull :
-      l ++ sub ++ r = (l ++ sl) ++ [t] ++ (sr ++ r)).
-  { transitivity (l ++ (sl ++ [t] ++ sr) ++ r).
-    - exact (f_equal (fun xs => l ++ xs ++ r) Hdecomp).
-    - repeat rewrite app_assoc. reflexivity. }
-  pose proof (Hsparse (l ++ sl) t (sr ++ r) Hfull) as Haround.
-  assert (Hs' : In s (nonadjacent_sides (l ++ sl) (sr ++ r))).
-  { apply nonadjacent_sides_extend_right.
-    now apply nonadjacent_sides_extend_left. }
-  apply ((proj2 Haround) s q Hs' Hqbox).
-  change (in_segment_rect_or_endpoints t q).
-  now apply segment_in_rect_or_endpoints.
 Qed.
 
 (* 同じ x の sub 上の点より上を通る非隣接セグメントは、両端とも
@@ -2135,15 +2117,15 @@ Lemma reconnect_extensions_avoid_sub_rect :
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
-    (onHead_extend_strict (reconnect_split l sub r h) p
-     \/ onLast_extend_strict (reconnect_split l sub r h) p) ->
+    ((l <> [] /\ onHead_extend_strict (reconnect_split l sub r h) p)
+     \/ (r <> [] /\ onLast_extend_strict (reconnect_split l sub r h) p)) ->
     ~ in_rect_or_endpoints_at sub p.
 Proof.
   intros ds l sub r h p Hconn Hws Hh Hsparse Hembed Hext Hextend.
   destruct Hws as [Hne [Hmono _]].
   assert (HconnSub : connected sub).
   { eapply connected_middle. exact Hconn. }
-  destruct Hextend as [Hhead | Hlast].
+  destruct Hextend as [[Hl Hhead] | [Hr Hlast]].
   - destruct (reconnect_head_strict_extension_preimage
                 ds l sub r h p Hne HconnSub Hmono Hsparse Hembed
                 Hext (Rlt_le _ _ (proj1 Hh)) Hhead)
@@ -2205,7 +2187,7 @@ Proof.
                l sub r
                (classify_spec l sub r Hne Hmono Hsparse
                   (ex_intro _ ds Hembed) Hext)
-               q Hq Hx).
+               Hl q Hq Hx).
     + exact Hshift.
   - destruct (reconnect_last_strict_extension_preimage
                 ds l sub r h p Hne HconnSub Hmono Hsparse Hembed
@@ -2268,7 +2250,7 @@ Proof.
                l sub r
                (classify_spec l sub r Hne Hmono Hsparse
                   (ex_intro _ ds Hembed) Hext)
-               q Hq Hx).
+               Hr q Hq Hx).
     + exact Hshift.
 Qed.
 
@@ -2297,7 +2279,13 @@ Proof.
   - intros p Hextend.
     apply (reconnect_extensions_avoid_sub_rect
              ds l sub r h p Hconn Hws Hh Hsparse Hembed Hext).
-    exact Hextend.
+    destruct Hextend as [[Hl Hhead] | [Hr Hlast]].
+    + left. split.
+      * intros ->. apply Hl. reflexivity.
+      * exact Hhead.
+    + right. split.
+      * intros ->. apply Hr. reflexivity.
+      * exact Hlast.
   - intros s p Hs Hp.
     exact (reconnect_sides_avoid_sub_rect
              l sub r h s p Hsubne HconnSub Hmono Hh
