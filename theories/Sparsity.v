@@ -50,6 +50,24 @@ Proof.
     apply nth_error_Some. rewrite H2. discriminate.
 Qed.
 
+Lemma connected_app_junction :
+  forall l r,
+    connected (l ++ r) ->
+    l <> [] ->
+    r <> [] ->
+    term (last_segment l) = init (hd_segment r).
+Proof.
+  intros [|a l] r Hconn Hl Hr; [contradiction |].
+  apply (Hconn (length l) (last_segment (a :: l)) (hd_segment r)).
+  - rewrite nth_error_app1 by (simpl; lia).
+    replace (length l) with (length (a :: l) - 1)%nat by (simpl; lia).
+    apply nth_error_last. discriminate.
+  - replace (S (length l)) with (length (a :: l)) by reflexivity.
+    rewrite nth_error_app2 by lia.
+    replace (length (a :: l) - length (a :: l))%nat with 0%nat by lia.
+    destruct r; [contradiction | reflexivity].
+Qed.
+
 Definition onSegment' (seg: Segment) (rr : R * R) := exists (t:R), 0 < t <= 1 /\ point seg t = rr.
 (* TODO: 空リストを省く *)
 Definition onSegmentlist l rr := exists seg, In seg l /\ onSegment seg rr.
@@ -504,6 +522,34 @@ Proof.
 Qed.
 
 
+Definition horizontal_order (h : H) (x1 x2 : R) : Prop :=
+  match h with
+  | e => x1 <= x2
+  | w => x2 <= x1
+  end.
+
+Definition vertical_order (v : V) (y1 y2 : R) : Prop :=
+  match v with
+  | n => y1 <= y2
+  | s => y2 <= y1
+  end.
+
+(* 延長部分でも PrimitiveSegment の向きに逆行しない。弱い単調性なので、
+   水平または垂直になる区間は許している。 *)
+Axiom embedded_head_extension_monotone :
+  forall s v h c t1 t2,
+    embed (v, h, c) s ->
+    t1 <= t2 -> t2 <= 0 ->
+    horizontal_order h (fst (point s t1)) (fst (point s t2))
+    /\ vertical_order v (snd (point s t1)) (snd (point s t2)).
+
+Axiom embedded_last_extension_monotone :
+  forall s v h c t1 t2,
+    embed (v, h, c) s ->
+    1 <= t1 -> t1 <= t2 ->
+    horizontal_order h (fst (point s t1)) (fst (point s t2))
+    /\ vertical_order v (snd (point s t1)) (snd (point s t2)).
+
 
 (* ================================================================= *)
 (*  2.  長方形と sparse                                               *)
@@ -525,32 +571,42 @@ Definition rect_of (sub : list Segment) : Rect :=
 
 Definition rect_height (Rc : Rect) : R := ry1 Rc - ry0 Rc.
 
-(* 点が old の両端点、または old の開長方形の内部にある。 *)
+(* 境界を含む閉長方形。疎性では、境界上だけの接触も排除する。 *)
+Definition in_closed_rect (Rc : Rect) (p : Point) : Prop :=
+  rx0 Rc <= fst p <= rx1 Rc /\ ry0 Rc <= snd p <= ry1 Rc.
+
+(* 旧名は互換性のため残すが、意味は閉長方形への所属そのもの。 *)
 Definition in_rect_or_endpoints_at (old : list Segment) (p : Point) : Prop :=
-  p = init (hd_segment old)
-  \/ p = term (last_segment old)
-  \/ in_rect (rect_of old) p.
+  in_closed_rect (rect_of old) p.
 
 Definition in_segment_rect_or_endpoints (s : Segment) (p : Point) : Prop :=
-  p = init s \/ p = term s \/ in_rect (rect_of [s]) p.
+  in_closed_rect (rect_of [s]) p.
 
-(* new の全ての点が old の両端点、または開長方形の内部にある。 *)
+(* new の全ての点が old の閉長方形内にある。 *)
 Definition in_rect_or_endpoints (old new : list Segment) : Prop :=
   forall p, onSegmentlist new p ->
     in_rect_or_endpoints_at old p.
 
-(* [Segment.v] の基本契約を、このファイルの [Rect] 表現へ読み替える。 *)
+(* [Segment.v] の基本契約を、閉長方形の表現へ読み替える。 *)
 Lemma segment_in_rect_or_endpoints :
   forall s p, onSegment s p -> in_segment_rect_or_endpoints s p.
 Proof.
   intros s p Hp.
-  destruct (segment_in_rectangle_or_endpoints s p Hp) as [Hinit | [Hterm | Hinside]].
-  - now left.
-  - now right; left.
-  - right; right.
-    unfold in_open_segment_rectangle, in_rect, rect_between in Hinside.
-    unfold in_rect, rect_of; simpl in *.
-    exact Hinside.
+  destruct (segment_in_rectangle_or_endpoints s p Hp)
+    as [-> | [-> | Hinside]].
+  - unfold in_segment_rect_or_endpoints, in_closed_rect, rect_of; simpl.
+    split; split; [apply Rmin_l | apply Rmax_l | apply Rmin_l | apply Rmax_l].
+  - unfold in_segment_rect_or_endpoints, in_closed_rect, rect_of; simpl.
+    split; split; [apply Rmin_r | apply Rmax_r | apply Rmin_r | apply Rmax_r].
+  - unfold in_open_segment_rectangle, in_rect, rect_between in Hinside.
+    unfold in_segment_rect_or_endpoints, in_closed_rect, rect_of; simpl.
+    change
+      (Rmin (fst (init s)) (fst (term s)) < fst p <
+         Rmax (fst (init s)) (fst (term s)) /\
+       Rmin (snd (init s)) (snd (term s)) < snd p <
+         Rmax (snd (init s)) (snd (term s))) in Hinside.
+    destruct Hinside as [[Hx0 Hx1] [Hy0 Hy1]].
+    split; split; apply Rlt_le; assumption.
 Qed.
 
 (* 全体の始点・終点そのものを除いた両端延長線。 *)
@@ -604,7 +660,7 @@ Proof.
   rewrite in_app_iff. left. now apply in_removelast_in.
 Qed.
 
-(* strict 延長線と非隣接セグメントは、sub の開長方形と両端点を避ける。
+(* strict 延長線と非隣接セグメントは、sub の閉長方形を避ける。
    隣接セグメントと sub の共有端点は、埋め込みの連結性側で扱う。 *)
 Definition sparse_around (l sub r : list Segment) : Prop :=
   (forall p,
@@ -628,7 +684,7 @@ Definition sparse (l sub r : list Segment) : Prop :=
   let ls := l ++ sub ++ r in
   sparse_embedding ls /\ sparse_around l sub r.
 
-(* 各セグメントに対し、非隣接セグメントの端点長方形を分離する。 *)
+(* 各セグメントに対し、非隣接セグメントの閉端点長方形を分離する。 *)
 Definition segment_rectangles_separated (ls : list Segment) : Prop :=
   forall l s r,
     ls = l ++ [s] ++ r ->
@@ -723,45 +779,31 @@ Qed.
 Lemma on_segment_term_from_x : forall s p,
   onSegment s p -> fst p = fst (term s) -> p = term s.
 Proof.
-  intros s p Hp Hx.
-  destruct (segment_in_rect_or_endpoints s p Hp)
-    as [Hinit | [Hterm | Hinside]].
-  - subst p. exfalso. apply (neq_init_term_x s). exact Hx.
-  - exact Hterm.
-  - unfold in_segment_rect_or_endpoints, in_rect, rect_of in Hinside.
-    simpl in Hinside. destruct Hinside as [[Hmin Hmax] _].
-    rewrite Hx in Hmin, Hmax.
-    destruct (Rle_dec (fst (init s)) (fst (term s))) as [Hle | Hgt].
-    + rewrite Rmin_left in Hmin by exact Hle.
-      rewrite Rmax_right in Hmax by exact Hle.
-      exfalso. exact (Rlt_irrefl _ Hmax).
-    + assert (Hrev : fst (term s) <= fst (init s)).
-      { apply Rlt_le. now apply Rnot_le_lt. }
-      rewrite Rmin_right in Hmin by exact Hrev.
-      rewrite Rmax_left in Hmax by exact Hrev.
-      exfalso. exact (Rlt_irrefl _ Hmin).
+  intros s p [t [[Ht0 Ht1] <-]] Hx.
+  assert (Ht : t = 1).
+  { destruct (Req_dec t 1) as [-> | Hneq]; [reflexivity |].
+    assert (Hlt : t < 1) by lra.
+    destruct (x_strictly_monotone_seg s) as [Hinc | Hdec].
+    - pose proof (Hinc t 1 ltac:(lra)) as Hstrict.
+      unfold term in Hx. lra.
+    - pose proof (Hdec t 1 ltac:(lra)) as Hstrict.
+      unfold term in Hx. lra. }
+  subst t. reflexivity.
 Qed.
 
 Lemma on_segment_term_from_y : forall s p,
   onSegment s p -> snd p = snd (term s) -> p = term s.
 Proof.
-  intros s p Hp Hy.
-  destruct (segment_in_rect_or_endpoints s p Hp)
-    as [Hinit | [Hterm | Hinside]].
-  - subst p. exfalso. apply (neq_init_term_y s). exact Hy.
-  - exact Hterm.
-  - unfold in_segment_rect_or_endpoints, in_rect, rect_of in Hinside.
-    simpl in Hinside. destruct Hinside as [_ [Hmin Hmax]].
-    rewrite Hy in Hmin, Hmax.
-    destruct (Rle_dec (snd (init s)) (snd (term s))) as [Hle | Hgt].
-    + rewrite Rmin_left in Hmin by exact Hle.
-      rewrite Rmax_right in Hmax by exact Hle.
-      exfalso. exact (Rlt_irrefl _ Hmax).
-    + assert (Hrev : snd (term s) <= snd (init s)).
-      { apply Rlt_le. now apply Rnot_le_lt. }
-      rewrite Rmin_right in Hmin by exact Hrev.
-      rewrite Rmax_left in Hmax by exact Hrev.
-      exfalso. exact (Rlt_irrefl _ Hmin).
+  intros s p [t [[Ht0 Ht1] <-]] Hy.
+  assert (Ht : t = 1).
+  { destruct (Req_dec t 1) as [-> | Hneq]; [reflexivity |].
+    assert (Hlt : t < 1) by lra.
+    destruct (y_strictly_monotone_seg s) as [Hinc | Hdec].
+    - pose proof (Hinc t 1 ltac:(lra)) as Hstrict.
+      unfold term in Hy. lra.
+    - pose proof (Hdec t 1 ltac:(lra)) as Hstrict.
+      unfold term in Hy. lra. }
+  subst t. reflexivity.
 Qed.
 
 (* 直接連結された二セグメントは共有端点以外では交わらない。 *)

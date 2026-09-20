@@ -624,8 +624,9 @@ Proof.
       apply in_or_app. right. exact HinR. }
   specialize (Hrect (last_segment (c :: r')) (init a) Hin).
   apply Hrect.
-  - rewrite <- Heq. now left.
-  - now left.
+  - rewrite <- Heq. now apply segment_in_rect_or_endpoints, onInit.
+  - change (in_segment_rect_or_endpoints a (init a)).
+    now apply segment_in_rect_or_endpoints, onInit.
 Qed.
 
 (* sub 側の端点だけを固定する先頭の特例では、延長線に必要な始点傾きだけを指定する。 *)
@@ -643,6 +644,9 @@ Lemma reconnect_head_fixed_endpoint_slope :
 Proof.
   intros ds l sub r h s0 Hne Hconn Hmono Hsparse Hembed Hh Hl Hx.
   subst l. simpl in *.
+  assert (Hwhole : connected ([s0] ++ sub ++ r)).
+  { change (connected (s0 :: sub ++ r)).
+    exact (embed_listDir_connected ds (s0 :: sub ++ r) Hembed). }
   assert (Hterm : term s0 = init (hd_segment sub)).
   { apply (embed_listDir_connected ds ([s0] ++ sub ++ r) Hembed 0%nat s0
              (hd_segment sub)); [reflexivity |].
@@ -651,7 +655,7 @@ Proof.
   { rewrite Hterm.
     exact (classified_sub_fixed
              [s0] sub r
-             (classify_spec [s0] sub r Hne Hconn Hmono Hsparse)
+             (classify_spec [s0] sub r Hne Hconn Hmono Hsparse Hwhole)
              (init (hd_segment sub))
              (onSegmentlist_init_hd sub Hne)). }
   destruct (singleton_head_before_x_monotone_sub_shape
@@ -660,7 +664,7 @@ Proof.
   - pose proof (n_end_relation s0 w cc Hnorth) as Hy.
     pose proof (proj1 (classified_segment_endpoints_monotone
                          [s0] sub r
-                         (classify_spec [s0] sub r Hne Hconn Hmono Hsparse)
+                         (classify_spec [s0] sub r Hne Hconn Hmono Hsparse Hwhole)
                          s0 ltac:(simpl; auto)) Hy) as Horder.
     destruct (classify [s0] sub r (init s0)) eqn:HinitRegion.
     + apply reconnect_slope_after_init.
@@ -677,7 +681,7 @@ Proof.
   - pose proof (s_end_relation s0 w cx Hsouth) as Hy.
     pose proof (proj2 (classified_segment_endpoints_monotone
                          [s0] sub r
-                         (classify_spec [s0] sub r Hne Hconn Hmono Hsparse)
+                         (classify_spec [s0] sub r Hne Hconn Hmono Hsparse Hwhole)
                          s0 ltac:(simpl; auto)) Hy) as Horder.
     destruct (classify [s0] sub r (init s0)) eqn:HinitRegion.
     + apply reconnect_slope_after_init.
@@ -709,6 +713,10 @@ Proof.
   intros ds l sub r h s0 Hne Hconn Hmono Hsparse Hembed Hh Hr Hx.
   subst r. simpl in *.
   destruct Hembed as [sc [Hdir Hcurve]].
+  assert (HembedList : embed_listDir ds (l ++ sub ++ [s0])).
+  { exists sc. now split. }
+  assert (Hwhole : connected (l ++ sub ++ [s0])).
+  { exact (embed_listDir_connected ds (l ++ sub ++ [s0]) HembedList). }
   assert (Hinit : init s0 = term (last_segment sub)).
   { symmetry.
     assert (Hcurve' : embed_scurve sc ((l ++ sub) ++ [s0])).
@@ -724,18 +732,16 @@ Proof.
   { rewrite Hinit.
     exact (classified_sub_fixed
              l sub [s0]
-             (classify_spec l sub [s0] Hne Hconn Hmono Hsparse)
+             (classify_spec l sub [s0] Hne Hconn Hmono Hsparse Hwhole)
              (term (last_segment sub))
              (onSegmentlist_term_last sub Hne)). }
-  assert (HembedList : embed_listDir ds (l ++ sub ++ [s0])).
-  { exists sc. now split. }
   destruct (singleton_last_after_x_monotone_sub_shape
               ds l sub s0 Hne Hmono HembedList Hx)
     as [[_ Hnorth] | [_ Hsouth]].
   - pose proof (n_end_relation s0 w cx Hnorth) as Hy.
     pose proof (proj1 (classified_segment_endpoints_monotone
                          l sub [s0]
-                         (classify_spec l sub [s0] Hne Hconn Hmono Hsparse)
+                         (classify_spec l sub [s0] Hne Hconn Hmono Hsparse Hwhole)
                          s0 ltac:(rewrite !in_app_iff; simpl; auto)) Hy) as Horder.
     destruct (classify l sub [s0] (term s0)) eqn:HtermRegion.
     + apply reconnect_slope_after_term.
@@ -757,7 +763,7 @@ Proof.
   - pose proof (s_end_relation s0 w cc Hsouth) as Hy.
     pose proof (proj2 (classified_segment_endpoints_monotone
                          l sub [s0]
-                         (classify_spec l sub [s0] Hne Hconn Hmono Hsparse)
+                         (classify_spec l sub [s0] Hne Hconn Hmono Hsparse Hwhole)
                          s0 ltac:(rewrite !in_app_iff; simpl; auto)) Hy) as Horder.
     destruct (classify l sub [s0] (term s0)) eqn:HtermRegion.
     + apply reconnect_slope_after_term.
@@ -790,8 +796,11 @@ Lemma reconnect_head_init_slope_after :
     reconnect_init_slope_after l sub r h (hd_segment l).
 Proof.
   intros ds l sub r h Hne Hconn Hmono Hsparse Hembed Hh Hl.
+  assert (Hwhole : connected (l ++ sub ++ r)).
+  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
   destruct (classified_head_slope_case
-              l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse) Hl)
+              l sub r
+              (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole) Hl)
     as [Hsame | [[Hup [Hsw | Hse]] | [Hdown [Hnw | Hneast]]]].
   - apply reconnect_slope_after_init.
     now apply same_region_reconnect_slope_after.
@@ -817,8 +826,11 @@ Lemma reconnect_last_term_slope_after :
     reconnect_term_slope_after l sub r h (last_segment r).
 Proof.
   intros ds l sub r h Hne Hconn Hmono Hsparse Hembed Hh Hr.
+  assert (Hwhole : connected (l ++ sub ++ r)).
+  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
   destruct (classified_last_slope_case
-              l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse) Hr)
+              l sub r
+              (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole) Hr)
     as [Hsame | [[Hup [Hnw | Hneast]] | [Hdown [Hsw | Hse]]]].
   - apply reconnect_slope_after_term.
     now apply same_region_reconnect_slope_after.
@@ -921,6 +933,7 @@ Lemma reconnect_head_extension_preimage :
     connected sub ->
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     (l <> [] -> reconnect_init_slope_after l sub r h (hd_segment l)) ->
     onHead_extend (reconnect_split l sub r h) p ->
     exists q,
@@ -928,14 +941,14 @@ Lemma reconnect_head_extension_preimage :
       /\ p = shift h
           (classify l sub r (init (hd_segment (l ++ sub ++ r)))) q.
 Proof.
-  intros l sub r h p Hne Hconn Hmono Hsparse Hslope Hp.
+  intros l sub r h p Hne Hconn Hmono Hsparse Hwhole Hslope Hp.
   destruct l as [|a l'].
   - destruct sub as [|b sub']; [contradiction|].
     assert (Hfix : classify [] (b :: sub') r (init b) = RegFix).
     { apply (classified_sub_fixed
                [] (b :: sub') r
                (classify_spec [] (b :: sub') r
-                  ltac:(discriminate) Hconn Hmono Hsparse)).
+                  ltac:(discriminate) Hconn Hmono Hsparse Hwhole)).
       apply onSegmentlist_init_hd. discriminate. }
     exists p. split.
     + exact Hp.
@@ -956,6 +969,7 @@ Lemma reconnect_last_extension_preimage :
     connected sub ->
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     (r <> [] -> reconnect_term_slope_after l sub r h (last_segment r)) ->
     onLast_extend (reconnect_split l sub r h) p ->
     exists q,
@@ -963,7 +977,7 @@ Lemma reconnect_last_extension_preimage :
       /\ p = shift h
           (classify l sub r (term (last_segment (l ++ sub ++ r)))) q.
 Proof.
-  intros l sub r h p Hne Hconn Hmono Hsparse Hslope Hp.
+  intros l sub r h p Hne Hconn Hmono Hsparse Hwhole Hslope Hp.
   destruct r as [|a r'].
   - assert (HoldLast : last_segment (l ++ sub ++ []) = last_segment sub).
     { rewrite app_nil_r. apply last_app_nonnil. exact Hne. }
@@ -974,7 +988,7 @@ Proof.
     assert (Hfix : classify l sub [] (term (last_segment sub)) = RegFix).
     { apply (classified_sub_fixed
                l sub []
-               (classify_spec l sub [] Hne Hconn Hmono Hsparse)).
+               (classify_spec l sub [] Hne Hconn Hmono Hsparse Hwhole)).
       apply onSegmentlist_term_last. exact Hne. }
     exists p. split.
     + unfold onLast_extend in *. now rewrite HnewLast in Hp; rewrite HoldLast.
@@ -1034,13 +1048,15 @@ Lemma reconnect_head_strict_extension_preimage :
           (classify l sub r (init (hd_segment (l ++ sub ++ r)))) q.
 Proof.
   intros ds l sub r h p Hne Hconn Hmono Hsparse Hembed Hh Hstrict.
+  assert (Hwhole : connected (l ++ sub ++ r)).
+  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
   destruct l as [|a l'].
   - destruct sub as [|b sub']; [contradiction|].
     assert (Hfix : classify [] (b :: sub') r (init b) = RegFix).
     { apply (classified_sub_fixed
                [] (b :: sub') r
                (classify_spec [] (b :: sub') r
-                  ltac:(discriminate) Hconn Hmono Hsparse)).
+                  ltac:(discriminate) Hconn Hmono Hsparse Hwhole)).
       apply onSegmentlist_init_hd. discriminate. }
     exists p. split.
     + exact Hstrict.
@@ -1113,6 +1129,8 @@ Lemma reconnect_last_strict_extension_preimage :
           (classify l sub r (term (last_segment (l ++ sub ++ r)))) q.
 Proof.
   intros ds l sub r h p Hne Hconn Hmono Hsparse Hembed Hh Hstrict.
+  assert (Hwhole : connected (l ++ sub ++ r)).
+  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
   destruct r as [|a r'].
   - assert (HoldLast : last_segment (l ++ sub ++ []) = last_segment sub).
     { rewrite app_nil_r. apply last_app_nonnil. exact Hne. }
@@ -1123,7 +1141,7 @@ Proof.
     assert (Hfix : classify l sub [] (term (last_segment sub)) = RegFix).
     { apply (classified_sub_fixed
                l sub []
-               (classify_spec l sub [] Hne Hconn Hmono Hsparse)).
+               (classify_spec l sub [] Hne Hconn Hmono Hsparse Hwhole)).
       apply onSegmentlist_term_last. exact Hne. }
     exists p. split.
     + unfold onLast_extend_strict in *. now rewrite HnewLast in Hstrict;
@@ -1286,13 +1304,15 @@ Lemma operation_height_safe :
     x_monotone_segs sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     In s (l ++ sub ++ r) ->
     snd (operate_point l sub r h (init s)) <>
     snd (operate_point l sub r h (term s)).
 Proof.
-  intros l sub r h s Hne Hconn Hmono Hh Hsparse Hs.
+  intros l sub r h s Hne Hconn Hmono Hh Hsparse Hwhole Hs.
   pose proof (classified_segment_endpoints_monotone
-                l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse)
+                l sub r
+                (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole)
                 s Hs) as [HinitTerm HtermInit].
   destruct (total_order_T (snd (init s)) (snd (term s)))
     as [[Hlt | Heq] | Hgt].
@@ -1319,10 +1339,11 @@ Lemma operate_one_endpoints_reconnectable :
     x_monotone_segs sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     In s (l ++ sub ++ r) ->
     reconnectable_after l sub r h s.
 Proof.
-  intros l sub r h s Hne Hconn Hmono Hh Hsparse Hs.
+  intros l sub r h s Hne Hconn Hmono Hh Hsparse Hwhole Hs.
   unfold reconnectable_after, reconnectable. split.
   - rewrite !operate_point_fst. apply neq_init_term_x.
   - now apply operation_height_safe.
@@ -1335,9 +1356,10 @@ Lemma operate_endpoints_reconnectable :
     x_monotone_segs sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     all_reconnectable l sub r h (l ++ sub ++ r).
 Proof.
-  intros l sub r h Hne Hconn Hmono Hh Hsparse s Hs.
+  intros l sub r h Hne Hconn Hmono Hh Hsparse Hwhole s Hs.
   now apply (operate_one_endpoints_reconnectable
                l sub r h s Hne Hconn Hmono Hh Hsparse).
 Qed.
@@ -1349,6 +1371,7 @@ Lemma reconnect_split_nth_spec :
     connected sub ->
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     nth_error (l ++ sub ++ r) i = Some s ->
     nth_error (reconnect_split l sub r h) i = Some s' ->
@@ -1356,7 +1379,7 @@ Lemma reconnect_split_nth_spec :
     /\ init s' = operate_point l sub r h (init s)
     /\ term s' = operate_point l sub r h (term s).
 Proof.
-  intros l sub r h i s s' Hne Hconn Hmono Hsparse Hrec Hold Hnew.
+  intros l sub r h i s s' Hne Hconn Hmono Hsparse Hwhole Hrec Hold Hnew.
   destruct (Nat.lt_ge_cases i (length l)) as [Hil | Hil].
   - assert (Holdl : nth_error l i = Some s).
     { rewrite <- (nth_error_app1 l (sub ++ r) Hil). exact Hold. }
@@ -1428,12 +1451,14 @@ Proof.
   assert (Hconn : connected sub).
   { apply connected_middle with (l := l) (r := r).
     now apply embed_listDir_connected with (ds := ds). }
+  assert (Hwhole : connected (l ++ sub ++ r)).
+  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
   eapply embed_scurve_transfer; [exact Hembed | | |].
   - unfold reconnect_split. repeat rewrite length_app.
     rewrite !reconnect_segs_length. reflexivity.
   - intros i s s' Hold Hnew.
     exact (proj1 (reconnect_split_nth_spec
-                    l sub r h i s s' Hne Hconn Hmono Hsparse Hrec
+                    l sub r h i s s' Hne Hconn Hmono Hsparse Hwhole Hrec
                     Hold Hnew)).
   - intros i s1 s2 H1 H2.
     assert (Hlen :
@@ -1449,10 +1474,10 @@ Proof.
     destruct (nth_error (l ++ sub ++ r) (S i)) as [old2 |] eqn:E2.
     2: exfalso; apply (proj2 (nth_error_Some _ _) HSi); exact E2.
     pose proof (reconnect_split_nth_spec
-                  l sub r h i old1 s1 Hne Hconn Hmono Hsparse Hrec E1 H1)
+                  l sub r h i old1 s1 Hne Hconn Hmono Hsparse Hwhole Hrec E1 H1)
       as [_ [_ Hterm]].
     pose proof (reconnect_split_nth_spec
-                  l sub r h (S i) old2 s2 Hne Hconn Hmono Hsparse Hrec E2 H2)
+                  l sub r h (S i) old2 s2 Hne Hconn Hmono Hsparse Hwhole Hrec E2 H2)
       as [_ [Hinit _]].
     rewrite Hterm, Hinit.
     f_equal. exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed
@@ -1521,10 +1546,10 @@ Proof.
 Qed.
 
 Definition endpoint_rectangles_axis_separated (s t : Segment) : Prop :=
-     rx1 (rect_of [t]) <= rx0 (rect_of [s])
-  \/ rx1 (rect_of [s]) <= rx0 (rect_of [t])
-  \/ ry1 (rect_of [t]) <= ry0 (rect_of [s])
-  \/ ry1 (rect_of [s]) <= ry0 (rect_of [t]).
+     rx1 (rect_of [t]) < rx0 (rect_of [s])
+  \/ rx1 (rect_of [s]) < rx0 (rect_of [t])
+  \/ ry1 (rect_of [t]) < ry0 (rect_of [s])
+  \/ ry1 (rect_of [s]) < ry0 (rect_of [t]).
 
 Lemma singleton_rect_positive : forall s,
   rx0 (rect_of [s]) < rx1 (rect_of [s])
@@ -1547,17 +1572,6 @@ Proof.
       rewrite Rmax_left by now apply Rlt_le. exact Hgt.
 Qed.
 
-Lemma open_intervals_have_common_point :
-  forall a0 a1 b0 b1,
-    a0 < a1 -> b0 < b1 -> a0 < b1 -> b0 < a1 ->
-    exists x, a0 < x < a1 /\ b0 < x < b1.
-Proof.
-  intros a0 a1 b0 b1 Ha Hb Hab Hba.
-  exists ((Rmax a0 b0 + Rmin a1 b1) / 2).
-  unfold Rmax, Rmin.
-  destruct (Rle_dec a0 b0); destruct (Rle_dec a1 b1); lra.
-Qed.
-
 (* 一方の端点長方形が他方を避ければ、二長方形は軸方向に分離する。 *)
 Lemma rectangles_avoid_implies_axis_separated : forall s t,
   (forall p,
@@ -1566,26 +1580,32 @@ Lemma rectangles_avoid_implies_axis_separated : forall s t,
   endpoint_rectangles_axis_separated s t.
 Proof.
   intros s t Havoid. unfold endpoint_rectangles_axis_separated.
-  destruct (classic (rx1 (rect_of [t]) <= rx0 (rect_of [s]))) as [H | H]; [now left|].
-  destruct (classic (rx1 (rect_of [s]) <= rx0 (rect_of [t]))) as [H' | H']; [now right; left|].
-  destruct (classic (ry1 (rect_of [t]) <= ry0 (rect_of [s]))) as [Hy | Hy]; [now right; right; left|].
-  destruct (classic (ry1 (rect_of [s]) <= ry0 (rect_of [t]))) as [Hy' | Hy']; [now right; right; right|].
+  destruct (classic (rx1 (rect_of [t]) < rx0 (rect_of [s]))) as [H | H]; [now left|].
+  destruct (classic (rx1 (rect_of [s]) < rx0 (rect_of [t]))) as [H' | H']; [now right; left|].
+  destruct (classic (ry1 (rect_of [t]) < ry0 (rect_of [s]))) as [Hy | Hy]; [now right; right; left|].
+  destruct (classic (ry1 (rect_of [s]) < ry0 (rect_of [t]))) as [Hy' | Hy']; [now right; right; right|].
   destruct (singleton_rect_positive s) as [Hsx Hsy].
   destruct (singleton_rect_positive t) as [Htx Hty].
-  destruct (open_intervals_have_common_point
-              (rx0 (rect_of [s])) (rx1 (rect_of [s]))
-              (rx0 (rect_of [t])) (rx1 (rect_of [t]))
-              Hsx Htx ltac:(lra) ltac:(lra))
-    as [x [Hxs Hxt]].
-  destruct (open_intervals_have_common_point
-              (ry0 (rect_of [s])) (ry1 (rect_of [s]))
-              (ry0 (rect_of [t])) (ry1 (rect_of [t]))
-              Hsy Hty ltac:(lra) ltac:(lra))
-    as [y [Hys Hyt]].
+  set (x := Rmax (rx0 (rect_of [s])) (rx0 (rect_of [t]))).
+  set (y := Rmax (ry0 (rect_of [s])) (ry0 (rect_of [t]))).
+  assert (Hxs : rx0 (rect_of [s]) <= x <= rx1 (rect_of [s])).
+  { split; [unfold x; apply Rmax_l |].
+    unfold x. apply Rmax_lub; [lra | now apply Rnot_lt_le]. }
+  assert (Hxt : rx0 (rect_of [t]) <= x <= rx1 (rect_of [t])).
+  { split; [unfold x; apply Rmax_r |].
+    unfold x. apply Rmax_lub; [now apply Rnot_lt_le | lra]. }
+  assert (Hys : ry0 (rect_of [s]) <= y <= ry1 (rect_of [s])).
+  { split; [unfold y; apply Rmax_l |].
+    unfold y. apply Rmax_lub; [lra | now apply Rnot_lt_le]. }
+  assert (Hyt : ry0 (rect_of [t]) <= y <= ry1 (rect_of [t])).
+  { split; [unfold y; apply Rmax_r |].
+    unfold y. apply Rmax_lub; [now apply Rnot_lt_le | lra]. }
   exfalso.
   apply (Havoid (x, y)).
-  - right; right. unfold in_rect. exact (conj Hxt Hyt).
-  - right; right. unfold in_rect. exact (conj Hxs Hys).
+  - unfold in_segment_rect_or_endpoints, in_closed_rect; simpl.
+    exact (conj Hxt Hyt).
+  - unfold in_rect_or_endpoints_at, in_closed_rect; simpl.
+    exact (conj Hxs Hys).
 Qed.
 
 Lemma in_segment_rect_or_endpoints_closed_bounds : forall s p,
@@ -1593,87 +1613,21 @@ Lemma in_segment_rect_or_endpoints_closed_bounds : forall s p,
   rx0 (rect_of [s]) <= fst p <= rx1 (rect_of [s])
   /\ ry0 (rect_of [s]) <= snd p <= ry1 (rect_of [s]).
 Proof.
-  intros s p [Hp | [Hp | Hp]].
-  - subst p. unfold rect_of; simpl. split; split;
-      [apply Rmin_l | apply Rmax_l | apply Rmin_l | apply Rmax_l].
-  - subst p. unfold rect_of; simpl. split; split;
-      [apply Rmin_r | apply Rmax_r | apply Rmin_r | apply Rmax_r].
-  - unfold in_rect in Hp. lra.
+  intros s p Hp. exact Hp.
 Qed.
 
-(* 軸方向に分離した二長方形は、端点衝突さえなければ sparse の分離を満たす。 *)
+(* 軸方向に厳密に分離した二閉長方形は互いに交わらない。 *)
 Lemma axis_separated_boxes_avoid : forall s t,
   endpoint_rectangles_axis_separated s t ->
-  (forall ps pt,
-    endpoint_of_seg s ps -> endpoint_of_seg t pt -> ps <> pt) ->
   forall p,
     in_segment_rect_or_endpoints t p ->
     ~ in_rect_or_endpoints_at [s] p.
 Proof.
-  intros s t Haxis Hend p Hp Hs.
-  destruct Hs as [Hs | [Hs | Hs]].
-  - subst p. destruct Hp as [Hp | [Hp | Hp]].
-    + apply (Hend (init s) (init t)); [now left | now left |].
-      simpl in Hp. exact Hp.
-    + apply (Hend (init s) (term t)); [now left | now right |].
-      simpl in Hp. exact Hp.
-    + change (in_rect (rect_of [t]) (init s)) in Hp.
-      pose proof (in_segment_rect_or_endpoints_closed_bounds
-                    s (init s) (or_introl eq_refl)) as Hsb.
-      destruct Hsb as [[Hsx0 Hsx1] [Hsy0 Hsy1]].
-      unfold in_rect in Hp. destruct Hp as [[Htx0 Htx1] [Hty0 Hty1]].
-      unfold endpoint_rectangles_axis_separated in Haxis.
-      destruct Haxis as [Haxis | [Haxis | [Haxis | Haxis]]]; lra.
-  - subst p. destruct Hp as [Hp | [Hp | Hp]].
-    + apply (Hend (term s) (init t)); [now right | now left |].
-      simpl in Hp. exact Hp.
-    + apply (Hend (term s) (term t)); [now right | now right |].
-      simpl in Hp. exact Hp.
-    + change (in_rect (rect_of [t]) (term s)) in Hp.
-      pose proof (in_segment_rect_or_endpoints_closed_bounds s (term s)
-                    (or_intror (or_introl eq_refl))) as Hsb.
-      destruct Hsb as [[Hsx0 Hsx1] [Hsy0 Hsy1]].
-      unfold in_rect in Hp. destruct Hp as [[Htx0 Htx1] [Hty0 Hty1]].
-      unfold endpoint_rectangles_axis_separated in Haxis.
-      destruct Haxis as [Haxis | [Haxis | [Haxis | Haxis]]]; lra.
-  - pose proof (in_segment_rect_or_endpoints_closed_bounds t p Hp) as Htb.
-    destruct Htb as [[Htx0 Htx1] [Hty0 Hty1]].
-    unfold in_rect in Hs. destruct Hs as [[Hsx0 Hsx1] [Hsy0 Hsy1]].
-    unfold endpoint_rectangles_axis_separated in Haxis.
-    destruct Haxis as [Haxis | [Haxis | [Haxis | Haxis]]]; lra.
-Qed.
-
-(* 非隣接な旧端点は異なり、operate_point の単射性により移動後も異なる。 *)
-Lemma operated_nonadjacent_endpoints_distinct :
-  forall l sub r h i j s t ps pt,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    0 < h ->
-    nth_error (l ++ sub ++ r) i = Some s ->
-    nth_error (l ++ sub ++ r) j = Some t ->
-    (S i < j \/ S j < i)%nat ->
-    endpoint_of_seg s ps ->
-    endpoint_of_seg t pt ->
-    operate_point l sub r h ps <> operate_point l sub r h pt.
-Proof.
-  intros l sub r h i j s t ps pt Hne Hconn Hmono Hsparse Hh
-    Hs Ht Hfar Hps Hpt Heq.
-  assert (HpEq : ps = pt).
-  { eapply operate_point_injective; eauto. }
-  destruct (nth_error_far_in_nonadjacent_sides
-              (l ++ sub ++ r) i j s t Hs Ht Hfar)
-    as [l0 [r0 [Hsplit Hin]]].
-  destruct (Hsparse l0 s r0 Hsplit) as [_ Hrect].
-  pose proof (Hrect t pt Hin) as Havoid.
-  apply Havoid.
-  - destruct Hpt as [Hpt | Hpt]; subst pt.
-    + now left.
-    + now right; left.
-  - rewrite <- HpEq. destruct Hps as [Hps | Hps]; subst ps.
-    + now left.
-    + now right; left.
+  intros s t Haxis p Hp Hs.
+  unfold in_segment_rect_or_endpoints, in_rect_or_endpoints_at,
+    in_closed_rect in Hp, Hs.
+  unfold endpoint_rectangles_axis_separated in Haxis.
+  destruct Haxis as [Haxis | [Haxis | [Haxis | Haxis]]]; lra.
 Qed.
 
 (* 端点間の分類順序により、旧長方形の軸方向の分離は移動後も保たれる。 *)
@@ -1683,6 +1637,7 @@ Lemma operated_endpoint_rectangles_axis_separated :
     connected sub ->
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     0 < h ->
     nth_error (l ++ sub ++ r) i = Some s ->
     nth_error (l ++ sub ++ r) j = Some t ->
@@ -1694,7 +1649,7 @@ Lemma operated_endpoint_rectangles_axis_separated :
     endpoint_rectangles_axis_separated s t ->
     endpoint_rectangles_axis_separated s' t'.
 Proof.
-  intros l sub r h i j s t s' t' Hne Hconn Hmono Hsparse Hh
+  intros l sub r h i j s t s' t' Hne Hconn Hmono Hsparse Hwhole Hh
     Hs Ht Hfar Hsinit Hsterm Htinit Htterm Haxis.
   assert (Horder :
     forall i0 j0 u v pu pv,
@@ -1703,36 +1658,39 @@ Proof.
       (S i0 < j0 \/ S j0 < i0)%nat ->
       segment_x_ranges_overlap u v ->
       endpoint_of_seg u pu -> endpoint_of_seg v pv ->
-      snd pu <= snd pv ->
-      snd (operate_point l sub r h pu) <=
+      snd pu < snd pv ->
+      snd (operate_point l sub r h pu) <
       snd (operate_point l sub r h pv)).
   { intros i0 j0 u v pu pv Hu Hv Hfar0 Hoverlap Hpu Hpv Hy.
-    unfold operate_point. eapply shift_preserves_vertical_order; [exact Hh | exact Hy |].
+    unfold operate_point. eapply shift_preserves_strict_vertical_order;
+      [exact Hh | exact Hy |].
     exact (classified_nonadjacent_endpoint_order
-             l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse)
-             i0 j0 u v pu pv Hu Hv Hfar0 Hoverlap Hpu Hpv Hy). }
+             l sub r
+             (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole)
+             i0 j0 u v pu pv Hu Hv Hfar0 Hoverlap Hpu Hpv
+             (Rlt_le _ _ Hy)). }
   unfold endpoint_rectangles_axis_separated in Haxis |- *.
   assert (Hhorizontal_or_overlap :
-      rx1 (rect_of [t]) <= rx0 (rect_of [s])
-      \/ rx1 (rect_of [s]) <= rx0 (rect_of [t])
+      rx1 (rect_of [t]) < rx0 (rect_of [s])
+      \/ rx1 (rect_of [s]) < rx0 (rect_of [t])
       \/ segment_x_ranges_overlap s t).
-  { destruct (classic (rx1 (rect_of [t]) <= rx0 (rect_of [s])))
+  { destruct (classic (rx1 (rect_of [t]) < rx0 (rect_of [s])))
       as [Hleft | Hleft]; [now left|].
-    destruct (classic (rx1 (rect_of [s]) <= rx0 (rect_of [t])))
+    destruct (classic (rx1 (rect_of [s]) < rx0 (rect_of [t])))
       as [Hright | Hright]; [now right; left|].
     right; right. unfold segment_x_ranges_overlap. lra. }
   destruct Hhorizontal_or_overlap as [Hleft | [Hright | Hoverlap]].
   - left.
-    change (Rmax (fst (init t')) (fst (term t')) <=
+    change (Rmax (fst (init t')) (fst (term t')) <
             Rmin (fst (init s')) (fst (term s'))).
-    change (Rmax (fst (init t)) (fst (term t)) <=
+    change (Rmax (fst (init t)) (fst (term t)) <
             Rmin (fst (init s)) (fst (term s))) in Hleft.
     rewrite Hsinit, Hsterm, Htinit, Htterm.
     rewrite !operate_point_fst. exact Hleft.
   - right; left.
-    change (Rmax (fst (init s')) (fst (term s')) <=
+    change (Rmax (fst (init s')) (fst (term s')) <
             Rmin (fst (init t')) (fst (term t'))).
-    change (Rmax (fst (init s)) (fst (term s)) <=
+    change (Rmax (fst (init s)) (fst (term s)) <
             Rmin (fst (init t)) (fst (term t))) in Hright.
     rewrite Hsinit, Hsterm, Htinit, Htterm.
     rewrite !operate_point_fst. exact Hright.
@@ -1740,13 +1698,13 @@ Proof.
     + unfold segment_x_ranges_overlap in Hoverlap. lra.
     + unfold segment_x_ranges_overlap in Hoverlap. lra.
     + right; right; left.
-    change (Rmax (snd (init t')) (snd (term t')) <=
+    change (Rmax (snd (init t')) (snd (term t')) <
             Rmin (snd (init s')) (snd (term s'))).
     rewrite Hsinit, Hsterm, Htinit, Htterm.
-    change (Rmax (snd (init t)) (snd (term t)) <=
+    change (Rmax (snd (init t)) (snd (term t)) <
             Rmin (snd (init s)) (snd (term s))) in Hbelow.
     assert (Hold : forall pt ps,
-      endpoint_of_seg t pt -> endpoint_of_seg s ps -> snd pt <= snd ps).
+      endpoint_of_seg t pt -> endpoint_of_seg s ps -> snd pt < snd ps).
     { intros pt ps Hpt Hps. destruct Hpt as [-> | ->]; destruct Hps as [-> | ->];
         pose proof (Rmax_l (snd (init t)) (snd (term t)));
         pose proof (Rmax_r (snd (init t)) (snd (term t)));
@@ -1755,7 +1713,7 @@ Proof.
     assert (Hfar' : (S j < i \/ S i < j)%nat) by tauto.
     assert (Hoverlap' : segment_x_ranges_overlap t s).
     { unfold segment_x_ranges_overlap in *. tauto. }
-    apply Rmax_lub; apply Rmin_glb.
+    apply Rmax_lub_lt; apply Rmin_glb_lt.
     * eapply (Horder j i t s (init t) (init s));
         [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
          now left | now left |].
@@ -1773,19 +1731,19 @@ Proof.
          now right | now right |].
       apply Hold; now right.
     + right; right; right.
-    change (Rmax (snd (init s')) (snd (term s')) <=
+    change (Rmax (snd (init s')) (snd (term s')) <
             Rmin (snd (init t')) (snd (term t'))).
     rewrite Hsinit, Hsterm, Htinit, Htterm.
-    change (Rmax (snd (init s)) (snd (term s)) <=
+    change (Rmax (snd (init s)) (snd (term s)) <
             Rmin (snd (init t)) (snd (term t))) in Habove.
     assert (Hold : forall ps pt,
-      endpoint_of_seg s ps -> endpoint_of_seg t pt -> snd ps <= snd pt).
+      endpoint_of_seg s ps -> endpoint_of_seg t pt -> snd ps < snd pt).
     { intros ps pt Hps Hpt. destruct Hps as [-> | ->]; destruct Hpt as [-> | ->];
         pose proof (Rmax_l (snd (init s)) (snd (term s)));
         pose proof (Rmax_r (snd (init s)) (snd (term s)));
         pose proof (Rmin_l (snd (init t)) (snd (term t)));
         pose proof (Rmin_r (snd (init t)) (snd (term t))); lra. }
-    apply Rmax_lub; apply Rmin_glb.
+    apply Rmax_lub_lt; apply Rmin_glb_lt.
     * eapply (Horder i j s t (init s) (init t));
         [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
          now left | now left |].
@@ -1813,9 +1771,10 @@ Lemma reconnect_preserves_segment_rectangles_separated :
     h_large h sub ->
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     segment_rectangles_separated (reconnect_split l sub r h).
 Proof.
-  intros l sub r h Hne Hconn Hmono Hh Hrec Hsparse.
+  intros l sub r h Hne Hconn Hmono Hh Hrec Hsparse Hwhole.
   unfold segment_rectangles_separated.
   intros l' s' r' Hsplit t' Ht' p Hp.
   destruct (split_nonadjacent_nth_errors
@@ -1831,10 +1790,10 @@ Proof.
               (l ++ sub ++ r) (reconnect_split l sub r h) j t' Hlen Ht'idx)
     as [t Ht].
   pose proof (reconnect_split_nth_spec
-                l sub r h i s s' Hne Hconn Hmono Hsparse Hrec Hs Hs')
+                l sub r h i s s' Hne Hconn Hmono Hsparse Hwhole Hrec Hs Hs')
     as [_ [Hsinit Hsterm]].
   pose proof (reconnect_split_nth_spec
-                l sub r h j t t' Hne Hconn Hmono Hsparse Hrec Ht Ht'idx)
+                l sub r h j t t' Hne Hconn Hmono Hsparse Hwhole Hrec Ht Ht'idx)
     as [_ [Htinit Htterm]].
   destruct (nth_error_far_in_nonadjacent_sides
               (l ++ sub ++ r) i j s t Hs Ht Hfar)
@@ -1847,26 +1806,10 @@ Proof.
   { eapply (operated_endpoint_rectangles_axis_separated
               l sub r h i j s t s' t');
       [exact Hne | exact Hconn | exact Hmono | exact Hsparse |
-       exact (proj1 Hh) | exact Hs | exact Ht | exact Hfar |
+       exact Hwhole | exact (proj1 Hh) | exact Hs | exact Ht | exact Hfar |
        exact Hsinit | exact Hsterm | exact Htinit | exact Htterm |
        exact HoldAxis]. }
-  apply (axis_separated_boxes_avoid s' t' HnewAxis); [|exact Hp].
-  assert (HendOld : forall ps pt,
-    endpoint_of_seg s ps -> endpoint_of_seg t pt ->
-    operate_point l sub r h ps <> operate_point l sub r h pt).
-  { intros ps pt Hps Hpt.
-    eapply (operated_nonadjacent_endpoints_distinct
-              l sub r h i j s t ps pt);
-      [exact Hne | exact Hconn | exact Hmono | exact Hsparse |
-       exact (proj1 Hh) | exact Hs | exact Ht | exact Hfar |
-       exact Hps | exact Hpt]. }
-  intros ps' pt' Hps' Hpt'.
-  destruct Hps' as [Hps' | Hps']; destruct Hpt' as [Hpt' | Hpt'];
-    subst ps' pt'.
-  - rewrite Hsinit, Htinit. apply HendOld; now left.
-  - rewrite Hsinit, Htterm. apply HendOld; [now left | now right].
-  - rewrite Hsterm, Htinit. apply HendOld; [now right | now left].
-  - rewrite Hsterm, Htterm. apply HendOld; now right.
+  exact (axis_separated_boxes_avoid s' t' HnewAxis p Hp).
 Qed.
 
 (* 延長線点と同じ x の旧セグメント点が与える分類順序から，
@@ -1888,122 +1831,66 @@ Lemma shifted_crossing_avoids_endpoint_rect :
     ~ in_rect_or_endpoints_at [s'] (shift h g q).
 Proof.
   intros h s s' q g gi gt Hh Hinit Hterm Hold Hcross Hnew.
-  destruct Hnew as [Hpinit | [Hpterm | Hpinside]].
-  - change (shift h g q = init s') in Hpinit.
-    assert (Hx : fst (init s) = fst q).
-    { pose proof (f_equal fst Hpinit) as H.
-      rewrite Hinit, !shift_fst in H. lra. }
-    assert (Hneq : q <> init s).
-    { intro Heq. apply Hold. left. now symmetry. }
-    destruct (total_order_T (snd q) (snd (init s)))
-      as [[Hy | Hy] | Hy].
-    + pose proof (proj1 (Hcross (init s) (onInit s) Hx) Hy) as [Hgi _].
-      pose proof (shift_preserves_strict_vertical_order
-                    h q (init s) g gi Hh Hy Hgi) as Hlt.
-      rewrite <- Hinit, <- Hpinit in Hlt. lra.
-    + apply Hneq. destruct q as [xq yq].
-      destruct (init s) as [xi yi].
-      simpl in Hx, Hy |- *. f_equal; lra.
-    + pose proof (proj2 (Hcross (init s) (onInit s) Hx) Hy) as [Hig _].
-      pose proof (shift_preserves_strict_vertical_order
-                    h (init s) q gi g Hh Hy Hig) as Hlt.
-      rewrite <- Hinit, <- Hpinit in Hlt. lra.
-  - change (shift h g q = term s') in Hpterm.
-    assert (Hx : fst (term s) = fst q).
-    { pose proof (f_equal fst Hpterm) as H.
-      rewrite Hterm, !shift_fst in H. lra. }
-    assert (Hneq : q <> term s).
-    { intro Heq. apply Hold. right; left. now symmetry. }
-    destruct (total_order_T (snd q) (snd (term s)))
-      as [[Hy | Hy] | Hy].
-    + pose proof (proj1 (Hcross (term s) (onTerm s) Hx) Hy) as [_ Hgt].
-      pose proof (shift_preserves_strict_vertical_order
-                    h q (term s) g gt Hh Hy Hgt) as Hlt.
-      rewrite <- Hterm, <- Hpterm in Hlt. lra.
-    + apply Hneq. destruct q as [xq yq].
-      destruct (term s) as [xt yt].
-      simpl in Hx, Hy |- *. f_equal; lra.
-    + pose proof (proj2 (Hcross (term s) (onTerm s) Hx) Hy) as [_ Htg].
-      pose proof (shift_preserves_strict_vertical_order
-                    h (term s) q gt g Hh Hy Htg) as Hlt.
-      rewrite <- Hterm, <- Hpterm in Hlt. lra.
-  - change
-      ((Rmin (fst (init s')) (fst (term s')) < fst (shift h g q) <
-        Rmax (fst (init s')) (fst (term s')))
-       /\
-       (Rmin (snd (init s')) (snd (term s')) < snd (shift h g q) <
-        Rmax (snd (init s')) (snd (term s')))) in Hpinside.
-    rewrite Hinit, Hterm, !shift_fst in Hpinside.
-    destruct Hpinside as [Hx Hy].
-    assert (Hqx :
-      rx0 (rect_of [s]) < fst q < rx1 (rect_of [s])).
-    { unfold rect_of; simpl. exact Hx. }
-    destruct (segment_has_point_at_x s (fst q) ltac:(lra))
-      as [e [He Hxe]].
-    assert (Heinside : in_rect (rect_of [s]) e).
-    { destruct (segment_in_rect_or_endpoints s e He)
-        as [Heinit | [Heterm | Heinside]].
-      - subst e.
-        rewrite <- Hxe in Hqx.
-        change
-          (Rmin (fst (init s)) (fst (term s)) < fst (init s) <
-           Rmax (fst (init s)) (fst (term s))) in Hqx.
-        destruct (Rle_dec (fst (init s)) (fst (term s))) as [Hle | Hle].
-        + rewrite Rmin_left, Rmax_right in Hqx by exact Hle. lra.
-        + rewrite Rmin_right, Rmax_left in Hqx by lra. lra.
-      - subst e.
-        rewrite <- Hxe in Hqx.
-        change
-          (Rmin (fst (init s)) (fst (term s)) < fst (term s) <
-           Rmax (fst (init s)) (fst (term s))) in Hqx.
-        destruct (Rle_dec (fst (init s)) (fst (term s))) as [Hle | Hle].
-        + rewrite Rmin_left, Rmax_right in Hqx by exact Hle. lra.
-        + rewrite Rmin_right, Rmax_left in Hqx by lra. lra.
-      - exact Heinside. }
-    assert (Hvertical :
-      snd q <= ry0 (rect_of [s])
-      \/ ry1 (rect_of [s]) <= snd q).
-    { destruct (Rle_dec (snd q) (ry0 (rect_of [s]))) as [Hlo | Hlo].
-      - now left.
-      - right. apply Rnot_lt_le. intro Hhi.
-        apply Hold. right; right. unfold in_rect. split; lra. }
-    destruct Hvertical as [Hbelow | Habove].
-    + assert (Hqe : snd q < snd e).
-      { unfold in_rect in Heinside. lra. }
-      pose proof (proj1 (Hcross e He Hxe) Hqe) as [Hgi Hgt].
-      assert (Hqi : snd q <= snd (init s)).
-      { change (snd q <= Rmin (snd (init s)) (snd (term s))) in Hbelow.
-        pose proof (Rmin_l (snd (init s)) (snd (term s))). lra. }
-      assert (Hqt : snd q <= snd (term s)).
-      { change (snd q <= Rmin (snd (init s)) (snd (term s))) in Hbelow.
-        pose proof (Rmin_r (snd (init s)) (snd (term s))). lra. }
-      pose proof (shift_preserves_vertical_order
-                    h q (init s) g gi Hh Hqi Hgi) as Hnewi.
-      pose proof (shift_preserves_vertical_order
-                    h q (term s) g gt Hh Hqt Hgt) as Hnewt.
-      assert (Hnewmin :
-        snd (shift h g q) <=
-        Rmin (snd (shift h gi (init s))) (snd (shift h gt (term s)))).
-      { now apply Rmin_glb. }
-      lra.
-    + assert (Heq : snd e < snd q).
-      { unfold in_rect in Heinside. lra. }
-      pose proof (proj2 (Hcross e He Hxe) Heq) as [Hig Htg].
-      assert (Hiq : snd (init s) <= snd q).
-      { change (Rmax (snd (init s)) (snd (term s)) <= snd q) in Habove.
-        pose proof (Rmax_l (snd (init s)) (snd (term s))). lra. }
-      assert (Htq : snd (term s) <= snd q).
-      { change (Rmax (snd (init s)) (snd (term s)) <= snd q) in Habove.
-        pose proof (Rmax_r (snd (init s)) (snd (term s))). lra. }
-      pose proof (shift_preserves_vertical_order
-                    h (init s) q gi g Hh Hiq Hig) as Hnewi.
-      pose proof (shift_preserves_vertical_order
-                    h (term s) q gt g Hh Htq Htg) as Hnewt.
-      assert (Hnewmax :
-        Rmax (snd (shift h gi (init s))) (snd (shift h gt (term s))) <=
-        snd (shift h g q)).
-      { now apply Rmax_lub. }
-      lra.
+  unfold in_rect_or_endpoints_at, in_closed_rect in Hold, Hnew.
+  change
+    (~ ((Rmin (fst (init s)) (fst (term s)) <= fst q <=
+          Rmax (fst (init s)) (fst (term s))) /\
+         (Rmin (snd (init s)) (snd (term s)) <= snd q <=
+          Rmax (snd (init s)) (snd (term s))))) in Hold.
+  change
+    ((Rmin (fst (init s')) (fst (term s')) <= fst (shift h g q) <=
+       Rmax (fst (init s')) (fst (term s'))) /\
+     (Rmin (snd (init s')) (snd (term s')) <= snd (shift h g q) <=
+       Rmax (snd (init s')) (snd (term s')))) in Hnew.
+  rewrite Hinit, Hterm, !shift_fst in Hnew.
+  destruct Hnew as [Hqx Hqy].
+  destruct (segment_has_point_at_x s (fst q) Hqx) as [e [He Hxe]].
+  pose proof (segment_in_rect_or_endpoints s e He) as Hebounds.
+  unfold in_segment_rect_or_endpoints, in_closed_rect in Hebounds.
+  change
+    ((Rmin (fst (init s)) (fst (term s)) <= fst e <=
+       Rmax (fst (init s)) (fst (term s))) /\
+     (Rmin (snd (init s)) (snd (term s)) <= snd e <=
+       Rmax (snd (init s)) (snd (term s)))) in Hebounds.
+  assert (Hvertical :
+      snd q < Rmin (snd (init s)) (snd (term s))
+      \/ Rmax (snd (init s)) (snd (term s)) < snd q).
+  { destruct (Rlt_dec (snd q) (Rmin (snd (init s)) (snd (term s))))
+      as [Hbelow | Hbelow]; [now left | right].
+    apply Rnot_le_lt. intro Habove.
+    apply Hold. split; [exact Hqx |].
+    split; [apply Rnot_lt_le in Hbelow; exact Hbelow | exact Habove]. }
+  destruct Hvertical as [Hbelow | Habove].
+  - assert (Hqe : snd q < snd e) by lra.
+    pose proof (proj1 (Hcross e He Hxe) Hqe) as [Hgi Hgt].
+    assert (Hqi : snd q < snd (init s)).
+    { pose proof (Rmin_l (snd (init s)) (snd (term s))). lra. }
+    assert (Hqt : snd q < snd (term s)).
+    { pose proof (Rmin_r (snd (init s)) (snd (term s))). lra. }
+    pose proof (shift_preserves_strict_vertical_order
+                  h q (init s) g gi Hh Hqi Hgi) as Hnewi.
+    pose proof (shift_preserves_strict_vertical_order
+                  h q (term s) g gt Hh Hqt Hgt) as Hnewt.
+    assert (Hnewmin :
+      snd (shift h g q) <
+      Rmin (snd (shift h gi (init s))) (snd (shift h gt (term s)))).
+    { now apply Rmin_glb_lt. }
+    exact (Rlt_not_le _ _ Hnewmin (proj1 Hqy)).
+  - assert (Heq : snd e < snd q) by lra.
+    pose proof (proj2 (Hcross e He Hxe) Heq) as [Hig Htg].
+    assert (Hiq : snd (init s) < snd q).
+    { pose proof (Rmax_l (snd (init s)) (snd (term s))). lra. }
+    assert (Htq : snd (term s) < snd q).
+    { pose proof (Rmax_r (snd (init s)) (snd (term s))). lra. }
+    pose proof (shift_preserves_strict_vertical_order
+                  h (init s) q gi g Hh Hiq Hig) as Hnewi.
+    pose proof (shift_preserves_strict_vertical_order
+                  h (term s) q gt g Hh Htq Htg) as Hnewt.
+    assert (Hnewmax :
+      Rmax (snd (shift h gi (init s))) (snd (shift h gt (term s))) <
+      snd (shift h g q)).
+    { now apply Rmax_lub_lt. }
+    exact (Rlt_not_le _ _ Hnewmax (proj2 Hqy)).
 Qed.
 
 (* 再接続後の先頭・末尾延長線は、各セグメントの端点長方形を避ける。 *)
@@ -2019,6 +1906,8 @@ Lemma reconnect_preserves_extensions_avoid_rectangles :
     extensions_avoid_segment_rectangles (reconnect_split l sub r h).
 Proof.
   intros ds l sub r h Hne Hconn Hmono Hh Hrec Hsparse Hembed.
+  assert (Hwhole : connected (l ++ sub ++ r)).
+  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
   unfold extensions_avoid_segment_rectangles.
   intros l' s' r' Hsplit p Hextension Hp.
   assert (Hs' :
@@ -2039,7 +1928,7 @@ Proof.
   destruct (Hsparse oldl s oldr HoldSplit) as [HoldExtension _].
   pose proof (reconnect_split_nth_spec
                 l sub r h (length l') s s'
-                Hne Hconn Hmono Hsparse Hrec Hs Hs')
+                Hne Hconn Hmono Hsparse Hwhole Hrec Hs Hs')
     as [_ [Hinit Hterm]].
   destruct Hextension as [Hhead | Hlast].
   - destruct (reconnect_head_strict_extension_preimage
@@ -2061,7 +1950,8 @@ Proof.
       now rewrite <- HoldSplit.
     + intros e He Hxe.
       exact (classified_head_segment_crossing_order
-               l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse)
+               l sub r
+               (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole)
                s e q Hin He Hq Hxe).
     + exact Hp.
   - destruct (reconnect_last_strict_extension_preimage
@@ -2083,7 +1973,8 @@ Proof.
       now rewrite <- HoldSplit.
     + intros e He Hxe.
       exact (classified_last_segment_crossing_order
-               l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse)
+               l sub r
+               (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole)
                s e q Hin He Hq Hxe).
     + exact Hp.
 Qed.
@@ -2097,18 +1988,19 @@ Lemma classified_extension_shifts_disjoint :
     h_large h sub ->
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     (l <> [] -> reconnect_init_slope_after l sub r h (hd_segment l)) ->
     (r <> [] -> reconnect_term_slope_after l sub r h (last_segment r)) ->
     extensions_disjoint (reconnect_split l sub r h).
 Proof.
-  intros l sub r h Hne Hconn Hmono Hh _ Hsparse Hdisjoint
+  intros l sub r h Hne Hconn Hmono Hh _ Hsparse Hwhole Hdisjoint
     HheadSlope HlastSlope p Hhead Hlast.
   destruct (reconnect_head_extension_preimage
-              l sub r h p Hne Hconn Hmono Hsparse HheadSlope Hhead)
+              l sub r h p Hne Hconn Hmono Hsparse Hwhole HheadSlope Hhead)
     as [ph [Hph HshiftHead]].
   destruct (reconnect_last_extension_preimage
-              l sub r h p Hne Hconn Hmono Hsparse HlastSlope Hlast)
+              l sub r h p Hne Hconn Hmono Hsparse Hwhole HlastSlope Hlast)
     as [pl [Hpl HshiftLast]].
   assert (Hx : fst ph = fst pl).
   { assert (HheadX : fst p = fst ph).
@@ -2119,7 +2011,8 @@ Proof.
   assert (Hneq : ph <> pl).
   { intro Heq. subst pl. exact (Hdisjoint ph Hph Hpl). }
   pose proof (classified_head_last_extension_order
-                l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse)
+                l sub r
+                (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole)
                 ph pl Hph Hpl Hx) as [HorderHeadLast HorderLastHead].
   destruct (total_order_T (snd ph) (snd pl)) as [[Hlt | Heq] | Hgt].
   - pose proof (shift_preserves_strict_vertical_order
@@ -2152,6 +2045,8 @@ Lemma reconnect_preserves_extensions_disjoint :
     extensions_disjoint (reconnect_split l sub r h).
 Proof.
   intros ds l sub r h Hne Hconn Hmono Hh Hrec Hsparse Hext Hembed.
+  assert (Hwhole : connected (l ++ sub ++ r)).
+  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
   apply classified_extension_shifts_disjoint; try assumption.
   - intros Hl. eapply reconnect_head_init_slope_after with (ds := ds); eauto.
     exact (Rlt_le _ _ (proj1 Hh)).
@@ -2173,6 +2068,8 @@ Lemma reconnect_preserves_sparse :
     sparse_embedding (reconnect_split l sub r h).
 Proof.
   intros ds l sub r h Hne Hconn Hmono Hh Hrec Hsparse Hembed.
+  assert (Hwhole : connected (l ++ sub ++ r)).
+  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
   assert (Hrect :
       segment_rectangles_separated (reconnect_split l sub r h)).
   { now apply reconnect_preserves_segment_rectangles_separated. }
@@ -2185,16 +2082,16 @@ Proof.
 Qed.
 
 Definition both_left_of_sub (sub : list Segment) (p q : Point) : Prop :=
-  fst p <= rx0 (rect_of sub) /\ fst q <= rx0 (rect_of sub).
+  fst p < rx0 (rect_of sub) /\ fst q < rx0 (rect_of sub).
 
 Definition both_right_of_sub (sub : list Segment) (p q : Point) : Prop :=
-  rx1 (rect_of sub) <= fst p /\ rx1 (rect_of sub) <= fst q.
+  rx1 (rect_of sub) < fst p /\ rx1 (rect_of sub) < fst q.
 
 Definition both_above_of_sub (sub : list Segment) (p q : Point) : Prop :=
-  ry1 (bbox_of sub) <= snd p /\ ry1 (bbox_of sub) <= snd q.
+  ry1 (bbox_of sub) < snd p /\ ry1 (bbox_of sub) < snd q.
 
 Definition both_below_of_sub (sub : list Segment) (p q : Point) : Prop :=
-  snd p <= ry0 (bbox_of sub) /\ snd q <= ry0 (bbox_of sub).
+  snd p < ry0 (bbox_of sub) /\ snd q < ry0 (bbox_of sub).
 
 Definition endpoint_box_separated_from_sub
   (sub : list Segment) (p q : Point) : Prop :=
@@ -2228,33 +2125,44 @@ Proof.
   - rewrite Rmin_right by lra. rewrite Rmax_left by lra. exact Hgt.
 Qed.
 
-(* 左右の同じ側に固まらない二端点の x 区間は、sub の x 区間と
-   内部で共通する。 *)
+(* 二つの閉区間が互いを飛び越していなければ共通点を持つ。 *)
+Lemma closed_intervals_have_common_point :
+  forall a0 a1 b0 b1,
+    a0 <= a1 -> b0 <= b1 -> a0 <= b1 -> b0 <= a1 ->
+    exists x, a0 <= x <= a1 /\ b0 <= x <= b1.
+Proof.
+  intros a0 a1 b0 b1 Ha Hb Hab Hba.
+  exists (Rmax a0 b0). split.
+  - split; [apply Rmax_l | apply Rmax_lub; assumption].
+  - split; [apply Rmax_r | apply Rmax_lub; assumption].
+Qed.
+
+(* 左右の同じ側に厳密に固まらない二端点の閉 x 区間は共通する。 *)
 Lemma nonhorizontal_sides_have_common_x :
   forall sub s,
     sub <> [] -> connected sub -> x_monotone_segs sub ->
     ~ both_left_of_sub sub (init s) (term s) ->
     ~ both_right_of_sub sub (init s) (term s) ->
     exists x,
-      rx0 (rect_of sub) < x < rx1 (rect_of sub)
-      /\ rx0 (rect_of [s]) < x < rx1 (rect_of [s]).
+      rx0 (rect_of sub) <= x <= rx1 (rect_of sub)
+      /\ rx0 (rect_of [s]) <= x <= rx1 (rect_of [s]).
 Proof.
   intros sub s Hne Hconn Hmono Hleft Hright.
   pose proof (sub_rect_has_positive_width sub Hne Hconn Hmono) as Hsub.
   pose proof (segment_rect_has_positive_width s) as Hseg.
-  assert (HcrossL : rx0 (rect_of sub) < rx1 (rect_of [s])).
-  { apply Rnot_le_lt. intro Hle. apply Hleft.
+  assert (HcrossL : rx0 (rect_of sub) <= rx1 (rect_of [s])).
+  { apply Rnot_lt_le. intro Hlt. apply Hleft.
     unfold both_left_of_sub, rect_of in *; simpl in *.
     split.
-    - eapply Rle_trans; [apply Rmax_l | exact Hle].
-    - eapply Rle_trans; [apply Rmax_r | exact Hle]. }
-  assert (HcrossR : rx0 (rect_of [s]) < rx1 (rect_of sub)).
-  { apply Rnot_le_lt. intro Hle. apply Hright.
+    - eapply Rle_lt_trans; [apply Rmax_l | exact Hlt].
+    - eapply Rle_lt_trans; [apply Rmax_r | exact Hlt]. }
+  assert (HcrossR : rx0 (rect_of [s]) <= rx1 (rect_of sub)).
+  { apply Rnot_lt_le. intro Hlt. apply Hright.
     unfold both_right_of_sub, rect_of in *; simpl in *.
     split.
-    - eapply Rle_trans; [exact Hle | apply Rmin_l].
-    - eapply Rle_trans; [exact Hle | apply Rmin_r]. }
-  now apply open_intervals_have_common_point.
+    - eapply Rlt_le_trans; [exact Hlt | apply Rmin_l].
+    - eapply Rlt_le_trans; [exact Hlt | apply Rmin_r]. }
+  apply closed_intervals_have_common_point; lra.
 Qed.
 
 (* 全域 sparse 性は、非隣接セグメントの端点長方形から sub 上の
@@ -2290,40 +2198,43 @@ Lemma above_sub_point_bounds_segment_endpoints :
     In s (nonadjacent_sides l r) ->
     onSegment s p ->
     onSegmentlist sub q ->
-    rx0 (rect_of [s]) < fst q < rx1 (rect_of [s]) ->
+    rx0 (rect_of [s]) <= fst q <= rx1 (rect_of [s]) ->
     snd q < snd p ->
     ry0 (bbox_of sub) <= snd (init s)
     /\ ry0 (bbox_of sub) <= snd (term s).
 Proof.
   intros l sub r s p q Hsparse Hs Hp Hq Hqx Hy.
+  unfold rect_of in Hqx; simpl in Hqx.
   pose proof (bbox_of_bounds sub q Hq) as [Hqlo _].
   pose proof (segment_in_rect_or_endpoints s p Hp) as Hpbox.
   assert (Hpy : Rmin (snd (init s)) (snd (term s)) <= snd p
                 <= Rmax (snd (init s)) (snd (term s))).
-  { destruct Hpbox as [-> | [-> | Hpbox]].
-    - split; [apply Rmin_l | apply Rmax_l].
-    - split; [apply Rmin_r | apply Rmax_r].
-    - unfold in_rect in Hpbox. destruct Hpbox as [_ HpY].
-      change (Rmin (snd (init s)) (snd (term s)) < snd p <
-              Rmax (snd (init s)) (snd (term s))) in HpY.
-      lra. }
+  { unfold in_segment_rect_or_endpoints, in_closed_rect in Hpbox.
+    change
+      ((Rmin (fst (init s)) (fst (term s)) <= fst p <=
+          Rmax (fst (init s)) (fst (term s))) /\
+       (Rmin (snd (init s)) (snd (term s)) <= snd p <=
+          Rmax (snd (init s)) (snd (term s)))) in Hpbox.
+    exact (proj2 Hpbox). }
   assert (Havoid := sparse_nonadjacent_box_avoids_sub_points
                        l sub r s q Hsparse Hs Hq).
   split; apply Rnot_lt_le; intro Hend.
-  - apply Havoid. right; right. unfold in_rect. split; [exact Hqx |].
-    change (Rmin (snd (init s)) (snd (term s)) < snd q <
-            Rmax (snd (init s)) (snd (term s))).
+  - apply Havoid.
+    unfold in_segment_rect_or_endpoints, in_closed_rect, rect_of; simpl.
+    split; [lra |].
     destruct Hpy as [Hpy0 Hpy1].
     split.
-    + eapply Rle_lt_trans; [apply Rmin_l |]. lra.
-    + lra.
-  - apply Havoid. right; right. unfold in_rect. split; [exact Hqx |].
-    change (Rmin (snd (init s)) (snd (term s)) < snd q <
-            Rmax (snd (init s)) (snd (term s))).
+    + eapply Rle_trans; [apply Rmin_l |].
+      eapply Rle_trans; [apply Rlt_le; exact Hend | exact Hqlo].
+    + eapply Rle_trans; [apply Rlt_le; exact Hy | exact Hpy1].
+  - apply Havoid.
+    unfold in_segment_rect_or_endpoints, in_closed_rect, rect_of; simpl.
+    split; [lra |].
     destruct Hpy as [Hpy0 Hpy1].
     split.
-    + eapply Rle_lt_trans; [apply Rmin_r |]. lra.
-    + lra.
+    + eapply Rle_trans; [apply Rmin_r |].
+      eapply Rle_trans; [apply Rlt_le; exact Hend | exact Hqlo].
+    + eapply Rle_trans; [apply Rlt_le; exact Hy | exact Hpy1].
 Qed.
 
 (* 下側の場合の双対。両端とも bbox の上端以下にある。 *)
@@ -2333,40 +2244,43 @@ Lemma below_sub_point_bounds_segment_endpoints :
     In s (nonadjacent_sides l r) ->
     onSegment s p ->
     onSegmentlist sub q ->
-    rx0 (rect_of [s]) < fst q < rx1 (rect_of [s]) ->
+    rx0 (rect_of [s]) <= fst q <= rx1 (rect_of [s]) ->
     snd p < snd q ->
     snd (init s) <= ry1 (bbox_of sub)
     /\ snd (term s) <= ry1 (bbox_of sub).
 Proof.
   intros l sub r s p q Hsparse Hs Hp Hq Hqx Hy.
+  unfold rect_of in Hqx; simpl in Hqx.
   pose proof (bbox_of_bounds sub q Hq) as [_ Hqhi].
   pose proof (segment_in_rect_or_endpoints s p Hp) as Hpbox.
   assert (Hpy : Rmin (snd (init s)) (snd (term s)) <= snd p
                 <= Rmax (snd (init s)) (snd (term s))).
-  { destruct Hpbox as [-> | [-> | Hpbox]].
-    - split; [apply Rmin_l | apply Rmax_l].
-    - split; [apply Rmin_r | apply Rmax_r].
-    - unfold in_rect in Hpbox. destruct Hpbox as [_ HpY].
-      change (Rmin (snd (init s)) (snd (term s)) < snd p <
-              Rmax (snd (init s)) (snd (term s))) in HpY.
-      lra. }
+  { unfold in_segment_rect_or_endpoints, in_closed_rect in Hpbox.
+    change
+      ((Rmin (fst (init s)) (fst (term s)) <= fst p <=
+          Rmax (fst (init s)) (fst (term s))) /\
+       (Rmin (snd (init s)) (snd (term s)) <= snd p <=
+          Rmax (snd (init s)) (snd (term s)))) in Hpbox.
+    exact (proj2 Hpbox). }
   assert (Havoid := sparse_nonadjacent_box_avoids_sub_points
                        l sub r s q Hsparse Hs Hq).
   split; apply Rnot_lt_le; intro Hend.
-  - apply Havoid. right; right. unfold in_rect. split; [exact Hqx |].
-    change (Rmin (snd (init s)) (snd (term s)) < snd q <
-            Rmax (snd (init s)) (snd (term s))).
+  - apply Havoid.
+    unfold in_segment_rect_or_endpoints, in_closed_rect, rect_of; simpl.
+    split; [lra |].
     destruct Hpy as [Hpy0 Hpy1].
     split.
-    + lra.
-    + eapply Rlt_le_trans; [| apply Rmax_l]. lra.
-  - apply Havoid. right; right. unfold in_rect. split; [exact Hqx |].
-    change (Rmin (snd (init s)) (snd (term s)) < snd q <
-            Rmax (snd (init s)) (snd (term s))).
+    + eapply Rle_trans; [exact Hpy0 | apply Rlt_le; exact Hy].
+    + eapply Rle_trans; [exact Hqhi |].
+      eapply Rle_trans; [apply Rlt_le; exact Hend | apply Rmax_l].
+  - apply Havoid.
+    unfold in_segment_rect_or_endpoints, in_closed_rect, rect_of; simpl.
+    split; [lra |].
     destruct Hpy as [Hpy0 Hpy1].
     split.
-    + lra.
-    + eapply Rlt_le_trans; [| apply Rmax_r]. lra.
+    + eapply Rle_trans; [exact Hpy0 | apply Rlt_le; exact Hy].
+    + eapply Rle_trans; [exact Hqhi |].
+      eapply Rle_trans; [apply Rlt_le; exact Hend | apply Rmax_r].
 Qed.
 
 (* x 範囲内の端点には classified_*_bbox を使う。範囲外の端点を
@@ -2378,12 +2292,13 @@ Lemma operated_nonadjacent_endpoints_separated :
     x_monotone_segs sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     In s (nonadjacent_sides l r) ->
     endpoint_box_separated_from_sub sub
       (operate_point l sub r h (init s))
       (operate_point l sub r h (term s)).
 Proof.
-  intros l sub r h s Hne Hconn Hmono Hh Hsparse Hs.
+  intros l sub r h s Hne Hconn Hmono Hh Hsparse Hwhole Hs.
   destruct (classic (both_left_of_sub sub (init s) (term s)))
     as [Hleft | Hleft].
   - right; right; left. unfold both_left_of_sub in *.
@@ -2409,7 +2324,7 @@ Proof.
         now apply segment_in_rect_or_endpoints. }
       pose proof (classified_segment_at_sub_x
                     l sub r
-                    (classify_spec l sub r Hne Hconn Hmono Hsparse)
+                    (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole)
                     s p Hs Hp Hprange) as [Hup Hdown].
       assert (Hy : snd q < snd p \/ snd p < snd q).
       { destruct (total_order_T (snd q) (snd p))
@@ -2420,7 +2335,7 @@ Proof.
           simpl in Hsamex, Heq |- *. f_equal; lra.
         - now right. }
       assert (Hqsegx :
-          rx0 (rect_of [s]) < fst q < rx1 (rect_of [s])) by lra.
+          rx0 (rect_of [s]) <= fst q <= rx1 (rect_of [s])) by lra.
       destruct Hy as [Hy | Hy].
       * assert (Habove : above_sub_at_x sub p).
         { exists q. repeat split; assumption. }
@@ -2442,103 +2357,13 @@ Proof.
         unfold h_large, rect_height in Hh. lra.
 Qed.
 
-(* 元の sparse 性により、非隣接セグメントの端点は sub の両端点と
-   一致しない。 *)
-Lemma sparse_nonadjacent_endpoint_avoids_sub_endpoints :
-  forall l sub r s p,
-    sub <> [] ->
-    sparse_embedding (l ++ sub ++ r) ->
-    In s (nonadjacent_sides l r) ->
-    endpoint_of_seg s p ->
-    p <> init (hd_segment sub) /\ p <> term (last_segment sub).
-Proof.
-  intros l sub r s p Hne Hsparse Hs Hp.
-  destruct sub as [|first tail]; [contradiction|].
-  assert (HfirstEq :
-      l ++ first :: tail ++ r = l ++ [first] ++ (tail ++ r)) by
-    (repeat rewrite <- app_assoc; reflexivity).
-  pose proof (Hsparse l first (tail ++ r) HfirstEq) as HfirstSparse.
-  assert (HsFirst : In s (nonadjacent_sides l (tail ++ r))).
-  { now apply nonadjacent_sides_extend_right. }
-  assert (HpBox : in_segment_rect_or_endpoints s p).
-  { destruct Hp as [-> | ->]; [now left | now right; left]. }
-  assert (HavoidFirst : ~ in_rect_or_endpoints_at [first] p).
-  { exact ((proj2 HfirstSparse) s p HsFirst HpBox). }
-  split.
-  - unfold hd_segment. simpl. intro Heq. apply HavoidFirst.
-    left. exact Heq.
-  - assert (HlistNe : first :: tail <> []) by discriminate.
-    destruct (exists_last HlistNe) as [prefix [last Hdecomp]].
-    assert (HfullEq :
-        l ++ first :: tail ++ r =
-        (l ++ prefix) ++ [last] ++ r).
-    { transitivity (l ++ (prefix ++ [last]) ++ r).
-      - exact (f_equal (fun xs => l ++ xs ++ r) Hdecomp).
-      - repeat rewrite app_assoc. reflexivity. }
-    pose proof (Hsparse (l ++ prefix) last r HfullEq) as HlastSparse.
-    assert (HsLast : In s (nonadjacent_sides (l ++ prefix) r)).
-    { now apply nonadjacent_sides_extend_left. }
-    assert (HavoidLast : ~ in_rect_or_endpoints_at [last] p).
-    { exact ((proj2 HlastSparse) s p HsLast HpBox). }
-    rewrite Hdecomp, (last_app_nonnil prefix [last]) by discriminate.
-    unfold last_segment at 1. simpl. intro Heq. apply HavoidLast.
-    right; left. exact Heq.
-Qed.
-
-(* sub の端点は固定され、operate_point は単射なので、移動後にも
-   非隣接セグメントの端点とは衝突しない。 *)
-Lemma operated_nonadjacent_endpoint_avoids_sub_endpoints :
-  forall l sub r h s p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    0 < h ->
-    In s (nonadjacent_sides l r) ->
-    endpoint_of_seg s p ->
-    operate_point l sub r h p <> init (hd_segment sub)
-    /\ operate_point l sub r h p <> term (last_segment sub).
-Proof.
-  intros l sub r h s p Hne Hconn Hmono Hsparse Hh Hs Hp.
-  pose proof (sparse_nonadjacent_endpoint_avoids_sub_endpoints
-                l sub r s p Hne Hsparse Hs Hp) as [Hinit Hterm].
-  split; intro Heq.
-  - apply Hinit.
-    apply (operate_point_injective
-             l sub r h p (init (hd_segment sub))
-             Hne Hconn Hmono Hsparse Hh).
-    rewrite Heq. symmetry. apply operate_sub_endpoint; try assumption.
-    exists (hd_segment sub). split.
-    + destruct sub; [contradiction | now left].
-    + now left.
-  - apply Hterm.
-    apply (operate_point_injective
-             l sub r h p (term (last_segment sub))
-             Hne Hconn Hmono Hsparse Hh).
-    rewrite Heq. symmetry. apply operate_sub_endpoint; try assumption.
-    exists (last_segment sub). split.
-    + apply last_In. exact Hne.
-    + now right.
-Qed.
-
 Lemma in_rect_or_endpoints_at_closed_bounds :
   forall old p,
     in_rect_or_endpoints_at old p ->
     rx0 (rect_of old) <= fst p <= rx1 (rect_of old)
     /\ ry0 (rect_of old) <= snd p <= ry1 (rect_of old).
 Proof.
-  intros old p [Hp | [Hp | Hp]].
-  - subst p. unfold rect_of; simpl. split; split.
-    + apply Rmin_l.
-    + apply Rmax_l.
-    + apply Rmin_l.
-    + apply Rmax_l.
-  - subst p. unfold rect_of; simpl. split; split.
-    + apply Rmin_r.
-    + apply Rmax_r.
-    + apply Rmin_r.
-    + apply Rmax_r.
-  - unfold in_rect in Hp. lra.
+  intros old p Hp. exact Hp.
 Qed.
 
 Lemma in_sub_rect_or_endpoints_bbox_y :
@@ -2560,116 +2385,39 @@ Proof.
   lra.
 Qed.
 
-Lemma separated_endpoint_box_interior_neq_sub_point :
-  forall sub s p q,
-    endpoint_box_separated_from_sub sub (init s) (term s) ->
-    rx0 (rect_of sub) <= fst q <= rx1 (rect_of sub) ->
-    ry0 (bbox_of sub) <= snd q <= ry1 (bbox_of sub) ->
-    in_rect (rect_of [s]) p ->
-    p <> q.
-Proof.
-  intros sub s p q Hsep Hqx Hqy Hp Heq. subst p.
-  unfold in_rect in Hp. destruct Hp as [[Hpx0 Hpx1] [Hpy0 Hpy1]].
-  destruct Hsep as [Habove | [Hbelow | [Hleft | Hright]]].
-  - unfold both_above_of_sub in Habove. destruct Habove as [Hi Ht].
-    unfold rect_of in Hpy0, Hpy1; simpl in Hpy0, Hpy1.
-    assert (Hmin : ry1 (bbox_of sub) <=
-        Rmin (snd (init s)) (snd (term s))) by
-      (apply Rmin_glb; assumption).
-    apply (Rlt_irrefl (snd q)).
-    eapply Rle_lt_trans.
-    + eapply Rle_trans; [exact (proj2 Hqy) | exact Hmin].
-    + exact Hpy0.
-  - unfold both_below_of_sub in Hbelow. destruct Hbelow as [Hi Ht].
-    unfold rect_of in Hpy0, Hpy1; simpl in Hpy0, Hpy1.
-    assert (Hmax : Rmax (snd (init s)) (snd (term s)) <=
-        ry0 (bbox_of sub)) by
-      (apply Rmax_lub; assumption).
-    apply (Rlt_irrefl (snd q)).
-    eapply Rlt_le_trans.
-    + exact Hpy1.
-    + eapply Rle_trans; [exact Hmax | exact (proj1 Hqy)].
-  - unfold both_left_of_sub in Hleft. destruct Hleft as [Hi Ht].
-    unfold rect_of in Hpx0, Hpx1; simpl in Hpx0, Hpx1.
-    assert (Hmax : Rmax (fst (init s)) (fst (term s)) <=
-        rx0 (rect_of sub)) by
-      (apply Rmax_lub; assumption).
-    apply (Rlt_irrefl (fst q)).
-    eapply Rlt_le_trans.
-    + exact Hpx1.
-    + eapply Rle_trans; [exact Hmax | exact (proj1 Hqx)].
-  - unfold both_right_of_sub in Hright. destruct Hright as [Hi Ht].
-    unfold rect_of in Hpx0, Hpx1; simpl in Hpx0, Hpx1.
-    assert (Hmin : rx1 (rect_of sub) <=
-        Rmin (fst (init s)) (fst (term s))) by
-      (apply Rmin_glb; assumption).
-    apply (Rlt_irrefl (fst q)).
-    eapply Rle_lt_trans.
-    + eapply Rle_trans; [exact (proj2 Hqx) | exact Hmin].
-    + exact Hpx0.
-Qed.
-
-(* 二端点の長方形が sub の上下左右のいずれかに離れていれば、
-   その中に収まるセグメントも sub の長方形と両端点を避ける。 *)
+(* 二端点の閉長方形が sub の上下左右のいずれかに厳密に離れていれば、
+   その中に収まるセグメントも sub の閉長方形を避ける。 *)
 Lemma separated_endpoint_box_avoids_sub :
   forall sub s p,
     sub <> [] ->
     endpoint_box_separated_from_sub sub (init s) (term s) ->
-    p <> init (hd_segment sub) ->
-    p <> term (last_segment sub) ->
     in_segment_rect_or_endpoints s p ->
     ~ in_rect_or_endpoints_at sub p.
 Proof.
-  intros sub s p Hne Hsep Hinit Hterm Hp Hsub.
-  destruct Hsub as [Hsub | [Hsub | Hsub]].
-  - now apply Hinit.
-  - now apply Hterm.
-  - pose proof (in_segment_rect_or_endpoints_closed_bounds s p Hp)
-      as [[Hpx0 Hpx1] [Hpy0 Hpy1]].
-    unfold in_rect in Hsub.
-    destruct Hsub as [[Hsx0 Hsx1] [Hsy0' Hsy1']].
-    assert (HsubAt : in_rect_or_endpoints_at sub p) by now right; right.
-    pose proof (in_sub_rect_or_endpoints_bbox_y sub p Hne HsubAt)
-      as [Hsy0 Hsy1].
-    pose proof (bbox_of_bounds sub (init (hd_segment sub))
-                  (onSegmentlist_init_hd sub Hne)) as [HbboxInit0 HbboxInit1].
-    pose proof (bbox_of_bounds sub (term (last_segment sub))
-                  (onSegmentlist_term_last sub Hne)) as [HbboxTerm0 HbboxTerm1].
-    assert (HrectBottom :
-        ry0 (bbox_of sub) <= ry0 (rect_of sub)).
-    { unfold rect_of; simpl. apply Rmin_glb; lra. }
-    assert (HrectTop :
-        ry1 (rect_of sub) <= ry1 (bbox_of sub)).
-    { unfold rect_of; simpl. apply Rmax_lub; lra. }
-    destruct Hsep as [Habove | [Hbelow | [Hleft | Hright]]].
-    + unfold both_above_of_sub in Habove.
-      destruct Habove as [Hinit' Hterm'].
-      assert (Hmin : ry1 (bbox_of sub) <= ry0 (rect_of [s])).
-      { change (ry1 (bbox_of sub) <= Rmin (snd (init s)) (snd (term s))).
-        unfold Rmin.
-        destruct (Rle_dec (snd (init s)) (snd (term s))); lra. }
-      lra.
-    + unfold both_below_of_sub in Hbelow.
-      destruct Hbelow as [Hinit' Hterm'].
-      assert (Hmax : ry1 (rect_of [s]) <= ry0 (bbox_of sub)).
-      { change (Rmax (snd (init s)) (snd (term s)) <= ry0 (bbox_of sub)).
-        unfold Rmax.
-        destruct (Rle_dec (snd (init s)) (snd (term s))); lra. }
-      lra.
-    + unfold both_left_of_sub in Hleft.
-      destruct Hleft as [Hinit' Hterm'].
-      assert (Hmax : rx1 (rect_of [s]) <= rx0 (rect_of sub)).
-      { change (Rmax (fst (init s)) (fst (term s)) <= rx0 (rect_of sub)).
-        unfold Rmax.
-        destruct (Rle_dec (fst (init s)) (fst (term s))); lra. }
-      lra.
-    + unfold both_right_of_sub in Hright.
-      destruct Hright as [Hinit' Hterm'].
-      assert (Hmin : rx1 (rect_of sub) <= rx0 (rect_of [s])).
-      { change (rx1 (rect_of sub) <= Rmin (fst (init s)) (fst (term s))).
-        unfold Rmin.
-        destruct (Rle_dec (fst (init s)) (fst (term s))); lra. }
-      lra.
+  intros sub s p Hne Hsep Hp Hsub.
+  pose proof (in_segment_rect_or_endpoints_closed_bounds s p Hp)
+    as [[Hpx0 Hpx1] [Hpy0 Hpy1]].
+  pose proof (in_sub_rect_or_endpoints_bbox_y sub p Hne Hsub)
+    as [Hsy0 Hsy1].
+  pose proof (in_rect_or_endpoints_at_closed_bounds sub p Hsub)
+    as [[Hsx0 Hsx1] _].
+  destruct Hsep as [Habove | [Hbelow | [Hleft | Hright]]].
+  - unfold both_above_of_sub in Habove.
+    destruct Habove as [Hinit' Hterm'].
+    change (Rmin (snd (init s)) (snd (term s)) <= snd p) in Hpy0.
+    pose proof (Rmin_glb_lt _ _ _ Hinit' Hterm'). lra.
+  - unfold both_below_of_sub in Hbelow.
+    destruct Hbelow as [Hinit' Hterm'].
+    change (snd p <= Rmax (snd (init s)) (snd (term s))) in Hpy1.
+    pose proof (Rmax_lub_lt _ _ _ Hinit' Hterm'). lra.
+  - unfold both_left_of_sub in Hleft.
+    destruct Hleft as [Hinit' Hterm'].
+    change (fst p <= Rmax (fst (init s)) (fst (term s))) in Hpx1.
+    pose proof (Rmax_lub_lt _ _ _ Hinit' Hterm'). lra.
+  - unfold both_right_of_sub in Hright.
+    destruct Hright as [Hinit' Hterm'].
+    change (Rmin (fst (init s)) (fst (term s)) <= fst p) in Hpx0.
+    pose proof (Rmin_glb_lt _ _ _ Hinit' Hterm'). lra.
 Qed.
 
 (* 再接続した外側セグメントの端点長方形は、十分大きな移動後に
@@ -2681,13 +2429,14 @@ Lemma reconnect_one_avoids_sub_rect :
     x_monotone_segs sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     In s (nonadjacent_sides l r) ->
     forall p,
       in_segment_rect_or_endpoints (reconnect_one l sub r h s) p ->
       ~ in_rect_or_endpoints_at sub p.
 Proof.
-  intros l sub r h s Hne Hconn Hmono Hh Hsparse Hrec Hs p Hp.
+  intros l sub r h s Hne Hconn Hmono Hh Hsparse Hwhole Hrec Hs p Hp.
   assert (Hsfull : In s (l ++ sub ++ r)).
   { unfold nonadjacent_sides in Hs. rewrite in_app_iff in Hs.
     destruct Hs as [Hl | Hr].
@@ -2709,33 +2458,9 @@ Proof.
   { rewrite (reconnect_one_init l sub r h s HrecOne).
     rewrite (reconnect_one_term l sub r h s HrecOne).
     now apply operated_nonadjacent_endpoints_separated. }
-  assert (HavoidEnds :
-      p <> init (hd_segment sub) /\ p <> term (last_segment sub)).
-  { destruct Hp as [Hp | [Hp | Hp]].
-    - subst p. rewrite (reconnect_one_init l sub r h s HrecOne).
-      apply operated_nonadjacent_endpoint_avoids_sub_endpoints
-        with (s := s); try assumption.
-      + exact (proj1 Hh).
-      + now left.
-    - subst p. rewrite (reconnect_one_term l sub r h s HrecOne).
-      apply operated_nonadjacent_endpoint_avoids_sub_endpoints
-        with (s := s); try assumption.
-      + exact (proj1 Hh).
-      + now right.
-    - split.
-      + eapply separated_endpoint_box_interior_neq_sub_point;
-          [exact Hsep | | | exact Hp].
-        * unfold rect_of; simpl. split; [apply Rmin_l | apply Rmax_l].
-        * apply bbox_of_bounds. apply onSegmentlist_init_hd. exact Hne.
-      + eapply separated_endpoint_box_interior_neq_sub_point;
-          [exact Hsep | | | exact Hp].
-        * unfold rect_of; simpl. split; [apply Rmin_r | apply Rmax_r].
-        * apply bbox_of_bounds. apply onSegmentlist_term_last. exact Hne. }
   apply (separated_endpoint_box_avoids_sub
            sub (reconnect_one l sub r h s) p Hne).
   - exact Hsep.
-  - exact (proj1 HavoidEnds).
-  - exact (proj2 HavoidEnds).
   - exact Hp.
 Qed.
 
@@ -2747,6 +2472,7 @@ Lemma reconnect_sides_avoid_sub_rect :
     x_monotone_segs sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     In s (nonadjacent_sides
             (reconnect_segs l sub r h l)
@@ -2754,7 +2480,7 @@ Lemma reconnect_sides_avoid_sub_rect :
     in_segment_rect_or_endpoints s p ->
     ~ in_rect_or_endpoints_at sub p.
 Proof.
-  intros l sub r h s' p Hne Hconn Hmono Hh Hsparse Hrec Hs' Hp.
+  intros l sub r h s' p Hne Hconn Hmono Hh Hsparse Hwhole Hrec Hs' Hp.
   unfold reconnect_segs in Hs'.
   rewrite nonadjacent_sides_map in Hs'.
   apply in_map_iff in Hs'.
@@ -2795,6 +2521,7 @@ Lemma classified_shifted_extension_avoids_sub_rect :
     x_monotone_segs sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
     (onHead_extend_strict (l ++ sub ++ r) q
      \/ onLast_extend_strict (l ++ sub ++ r) q) ->
     (g = RegUp -> forall z,
@@ -2803,12 +2530,12 @@ Lemma classified_shifted_extension_avoids_sub_rect :
     (g = RegDown -> forall z,
       onSegmentlist sub z ->
       fst q = fst z -> snd z < snd q -> classify l sub r z = RegDown) ->
-    (rx0 (rect_of sub) < fst q < rx1 (rect_of sub) ->
+    (rx0 (rect_of sub) <= fst q <= rx1 (rect_of sub) ->
       g = RegUp \/ g = RegDown) ->
     p = shift h g q ->
     ~ in_rect_or_endpoints_at sub p.
 Proof.
-  intros l sub r h p q g Hne Hconn Hmono Hh Hsparse Hqextend
+  intros l sub r h p q g Hne Hconn Hmono Hh Hsparse Hwhole Hqextend
     Habove Hbelow Hinside Hshift HpSub.
   pose proof (in_rect_or_endpoints_at_closed_bounds sub p HpSub)
     as [Hpx _].
@@ -2820,16 +2547,12 @@ Proof.
     as [z [Hz Hxz]].
   pose proof (bbox_of_bounds sub z Hz) as Hzy.
   pose proof (classified_sub_fixed
-                l sub r (classify_spec l sub r Hne Hconn Hmono Hsparse)
+                l sub r
+                (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole)
                 z Hz) as Hzfix.
   destruct g.
   - simpl in Hshift. subst p.
-    destruct HpSub as [Hinit | [Hterm | Hin]].
-    + subst q. eapply sparse_strict_extension_avoids_sub_point; eauto.
-      apply onSegmentlist_init_hd. exact Hne.
-    + subst q. eapply sparse_strict_extension_avoids_sub_point; eauto.
-      apply onSegmentlist_term_last. exact Hne.
-    + destruct (Hinside ltac:(unfold in_rect in Hin; lra)); discriminate.
+    destruct (Hinside Hpx); discriminate.
   - assert (Hqz : snd q < snd z).
     { pose proof (f_equal snd Hshift) as Hyshift.
       simpl in Hyshift. unfold h_large, rect_height in Hh. lra. }
@@ -2867,14 +2590,15 @@ Proof.
     set (g := classify l sub r
                 (init (hd_segment (l ++ sub ++ r)))).
     eapply (classified_shifted_extension_avoids_sub_rect
-              l sub r h p q g Hne HconnSub Hmono Hh Hsparse).
+              l sub r h p q g Hne HconnSub Hmono Hh Hsparse Hconn).
     + now left.
     + intros Hg z [s [Hs Hz]] Hx Hy. exfalso.
       assert (Hin : In s (l ++ sub ++ r)).
       { rewrite !in_app_iff. right; left; exact Hs. }
       pose proof (proj1
         (classified_head_segment_crossing_order
-           l sub r (classify_spec l sub r Hne HconnSub Hmono Hsparse)
+           l sub r
+           (classify_spec l sub r Hne HconnSub Hmono Hsparse Hconn)
            s z q Hin Hz Hq ltac:(symmetry; exact Hx)) Hy)
         as [HinitOrder _].
       change
@@ -2884,7 +2608,7 @@ Proof.
       pose proof (region_at_or_above_RegUp_inv _ HinitOrder) as HinitUp.
       pose proof (classified_sub_fixed
                     l sub r
-                    (classify_spec l sub r Hne HconnSub Hmono Hsparse)
+                    (classify_spec l sub r Hne HconnSub Hmono Hsparse Hconn)
                     (init s)
                     ltac:(exists s; split; [exact Hs | apply onInit]))
         as HinitFix.
@@ -2894,7 +2618,8 @@ Proof.
       { rewrite !in_app_iff. right; left; exact Hs. }
       pose proof (proj2
         (classified_head_segment_crossing_order
-           l sub r (classify_spec l sub r Hne HconnSub Hmono Hsparse)
+           l sub r
+           (classify_spec l sub r Hne HconnSub Hmono Hsparse Hconn)
            s z q Hin Hz Hq ltac:(symmetry; exact Hx)) Hy)
         as [HinitOrder _].
       change
@@ -2904,14 +2629,15 @@ Proof.
       pose proof (RegDown_at_or_above_inv _ HinitOrder) as HinitDown.
       pose proof (classified_sub_fixed
                     l sub r
-                    (classify_spec l sub r Hne HconnSub Hmono Hsparse)
+                    (classify_spec l sub r Hne HconnSub Hmono Hsparse Hconn)
                     (init s)
                     ltac:(exists s; split; [exact Hs | apply onInit]))
         as HinitFix.
       congruence.
     + intros Hx.
       exact (classified_head_extension_at_sub_x
-               l sub r (classify_spec l sub r Hne HconnSub Hmono Hsparse)
+               l sub r
+               (classify_spec l sub r Hne HconnSub Hmono Hsparse Hconn)
                q Hq Hx).
     + exact Hshift.
   - destruct (reconnect_last_strict_extension_preimage
@@ -2921,14 +2647,15 @@ Proof.
     set (g := classify l sub r
                 (term (last_segment (l ++ sub ++ r)))).
     eapply (classified_shifted_extension_avoids_sub_rect
-              l sub r h p q g Hne HconnSub Hmono Hh Hsparse).
+              l sub r h p q g Hne HconnSub Hmono Hh Hsparse Hconn).
     + now right.
     + intros Hg z [s [Hs Hz]] Hx Hy. exfalso.
       assert (Hin : In s (l ++ sub ++ r)).
       { rewrite !in_app_iff. right; left; exact Hs. }
       pose proof (proj1
         (classified_last_segment_crossing_order
-           l sub r (classify_spec l sub r Hne HconnSub Hmono Hsparse)
+           l sub r
+           (classify_spec l sub r Hne HconnSub Hmono Hsparse Hconn)
            s z q Hin Hz Hq ltac:(symmetry; exact Hx)) Hy)
         as [HinitOrder _].
       change
@@ -2938,7 +2665,7 @@ Proof.
       pose proof (region_at_or_above_RegUp_inv _ HinitOrder) as HinitUp.
       pose proof (classified_sub_fixed
                     l sub r
-                    (classify_spec l sub r Hne HconnSub Hmono Hsparse)
+                    (classify_spec l sub r Hne HconnSub Hmono Hsparse Hconn)
                     (init s)
                     ltac:(exists s; split; [exact Hs | apply onInit]))
         as HinitFix.
@@ -2948,7 +2675,8 @@ Proof.
       { rewrite !in_app_iff. right; left; exact Hs. }
       pose proof (proj2
         (classified_last_segment_crossing_order
-           l sub r (classify_spec l sub r Hne HconnSub Hmono Hsparse)
+           l sub r
+           (classify_spec l sub r Hne HconnSub Hmono Hsparse Hconn)
            s z q Hin Hz Hq ltac:(symmetry; exact Hx)) Hy)
         as [HinitOrder _].
       change
@@ -2958,14 +2686,15 @@ Proof.
       pose proof (RegDown_at_or_above_inv _ HinitOrder) as HinitDown.
       pose proof (classified_sub_fixed
                     l sub r
-                    (classify_spec l sub r Hne HconnSub Hmono Hsparse)
+                    (classify_spec l sub r Hne HconnSub Hmono Hsparse Hconn)
                     (init s)
                     ltac:(exists s; split; [exact Hs | apply onInit]))
         as HinitFix.
       congruence.
     + intros Hx.
       exact (classified_last_extension_at_sub_x
-               l sub r (classify_spec l sub r Hne HconnSub Hmono Hsparse)
+               l sub r
+               (classify_spec l sub r Hne HconnSub Hmono Hsparse Hconn)
                q Hq Hx).
     + exact Hshift.
 Qed.
@@ -2988,7 +2717,7 @@ Proof.
   assert (HconnSub : connected sub).
   { eapply connected_middle. exact Hconn. }
   pose proof (operate_endpoints_reconnectable
-                l sub r h Hsubne HconnSub Hmono Hh Hsparse) as Hrec.
+                l sub r h Hsubne HconnSub Hmono Hh Hsparse Hconn) as Hrec.
   split.
   - intros p Hextend.
     apply (reconnect_extensions_avoid_sub_rect
@@ -2997,7 +2726,7 @@ Proof.
   - intros s p Hs Hp.
     exact (reconnect_sides_avoid_sub_rect
              l sub r h s p Hsubne HconnSub Hmono Hh
-             Hsparse Hrec Hs Hp).
+             Hsparse Hconn Hrec Hs Hp).
 Qed.
 
 Lemma reconnect_preserves_open :
@@ -3043,7 +2772,7 @@ Proof.
   assert (HconnSub : connected sub).
   { eapply connected_middle. exact Hconn. }
   pose proof (operate_endpoints_reconnectable
-                l sub r h Hsubne HconnSub Hmono Hh Hsparse) as Hrec.
+                l sub r h Hsubne HconnSub Hmono Hh Hsparse Hconn) as Hrec.
   unfold sparse, reconnect_split. split.
   - now apply reconnect_preserves_sparse with (ds := ds).
   - now apply reconnect_gives_sparse_around with (ds := ds).
@@ -3146,7 +2875,8 @@ Proof.
   assert (HconnSub1 : connected sub1).
   { eapply connected_middle. exact HconnAll1. }
   pose proof (operate_endpoints_reconnectable
-                l1 sub1 r1 h Hsub1ne HconnSub1 Hx1 Hh Hsparse1) as HrecAll1.
+                l1 sub1 r1 h Hsub1ne HconnSub1 Hx1 Hh Hsparse1 HconnAll1)
+    as HrecAll1.
   assert (HrecL1 : all_reconnectable l1 sub1 r1 h l1).
   { eapply all_reconnectable_mono; [exact HrecAll1 |].
     intros s Hs. rewrite !in_app_iff. auto. }
