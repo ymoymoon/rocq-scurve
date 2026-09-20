@@ -10,6 +10,7 @@ Require Import Stdlib.Logic.ClassicalDescription.
 Import ListNotations.
 From Stdlib Require Import Lra.
 From Stdlib Require Import Relations.Relation_Operators.
+From Stdlib Require Import Relations.Operators_Properties.
 
 Require Export Sparsity.
 
@@ -271,13 +272,28 @@ Definition classified_term_slope_reconnectable
 Record ClassificationContext
     (l sub r : list Segment) : Prop := {
   context_sub_nonempty : sub <> [];
-  context_sub_connected : connected sub;
   context_sub_x_monotone : x_monotone_segs sub;
   context_sparse : sparse_embedding (l ++ sub ++ r);
-  context_whole_connected : connected (l ++ sub ++ r);
   context_whole_embedded :
-    exists ds, embed_listDir ds (l ++ sub ++ r)
+    exists ds, embed_listDir ds (l ++ sub ++ r);
+  context_extensions_disjoint : extensions_disjoint (l ++ sub ++ r)
 }.
+
+Lemma context_whole_connected : forall l sub r,
+  ClassificationContext l sub r -> connected (l ++ sub ++ r).
+Proof.
+  intros l sub r Hctx.
+  destruct (context_whole_embedded l sub r Hctx) as [ds Hembed].
+  now apply (embed_listDir_connected ds (l ++ sub ++ r)).
+Qed.
+
+Lemma context_sub_connected : forall l sub r,
+  ClassificationContext l sub r -> connected sub.
+Proof.
+  intros l sub r Hctx.
+  apply connected_middle with (l := l) (r := r).
+  now apply context_whole_connected.
+Qed.
 
 (* 仕様の結論で分類する点は sub 上の点または端点だけである。
    [p], [q], [e] は上下関係を示す幾何学的な証人であり分類しない。 *)
@@ -521,6 +537,50 @@ Inductive endpoint_order_step
 Definition endpoint_order (l sub r : list Segment) : Point -> Point -> Prop :=
   clos_refl_trans Point (endpoint_order_step l sub r).
 
+(* 幾何学的な帰納では、結合木を持つ [clos_refl_trans] よりも、先頭から
+   一辺ずつ読めるこの有限パス表示を用いる。 *)
+Definition endpoint_order_path
+    (l sub r : list Segment) : Point -> Point -> Prop :=
+  clos_refl_trans_1n Point (endpoint_order_step l sub r).
+
+Lemma endpoint_order_path_iff : forall l sub r p q,
+  endpoint_order l sub r p q <-> endpoint_order_path l sub r p q.
+Proof.
+  intros l sub r p q.
+  apply clos_rt_rt1n_iff.
+Qed.
+
+(* パスの始点が性質 [P] を持ち終点が持たないなら、[P] を初めて
+   失う一辺がある。障壁を越える最初の局所比較を取り出すために使う。 *)
+Lemma endpoint_order_path_first_exit :
+  forall l sub r (P : Point -> Prop) p q,
+    endpoint_order_path l sub r p q ->
+    P p ->
+    ~ P q ->
+    exists before after,
+      endpoint_order_path l sub r p before
+      /\ endpoint_order_step l sub r before after
+      /\ P before
+      /\ ~ P after
+      /\ endpoint_order_path l sub r after q.
+Proof.
+  intros l sub r P p q Hpath.
+  induction Hpath as [p | p next q Hstep Htail IH].
+  - intros Hp Hnp. contradiction.
+  - intros Hp Hnq.
+    destruct (classic (P next)) as [Hnext | Hnext].
+    + destruct (IH Hnext Hnq)
+        as [before [after [Hprefix [Hexit [Hbefore [Hafter Hsuffix]]]]]].
+      exists before, after. split.
+      * eapply (@Stdlib.Relations.Relation_Operators.rt1n_trans
+                  Point (endpoint_order_step l sub r)
+                  p next before); eauto.
+      * repeat split; assumption.
+    + exists p, next. split.
+      * apply Stdlib.Relations.Relation_Operators.rt1n_refl.
+      * repeat split; assumption.
+Qed.
+
 (* sub より上を通るセグメントの両端と、sub より上を通る strict
    延長線の基点が Up の種になる。 *)
 Definition endpoint_up_seed
@@ -647,9 +707,21 @@ Proof.
     simpl in Hr |- *. now right.
 Qed.
 
-(* Up の種から Down の種または sub へは進めず、sub から
-   Down の種へも進めない。これが端点順序に残る中心的な幾何補題である。 *)
-Axiom endpoint_order_separates_sources :
+(* 有限パスが sub を障壁として上下の source を結ばない、という部分だけが
+   残る幾何学的核心である。各辺の支持セグメントを追う証明をここへ集約する。 *)
+Axiom endpoint_order_path_separates_sources :
+  forall l sub r,
+    ClassificationContext l sub r ->
+    forall upper lower,
+      ((endpoint_up_seed l sub r upper
+        /\ (endpoint_down_seed l sub r lower
+            \/ onSegmentlist sub lower))
+       \/ (onSegmentlist sub upper
+           /\ endpoint_down_seed l sub r lower)) ->
+      ~ endpoint_order_path l sub r upper lower.
+
+(* 推移閉包の表現の違いは上の幾何補題から切り離す。 *)
+Lemma endpoint_order_separates_sources :
   forall l sub r,
     ClassificationContext l sub r ->
     forall upper lower,
@@ -659,6 +731,50 @@ Axiom endpoint_order_separates_sources :
        \/ (onSegmentlist sub upper
            /\ endpoint_down_seed l sub r lower)) ->
       ~ endpoint_order l sub r upper lower.
+Proof.
+  intros l sub r Hctx upper lower Hsources Horder.
+  apply (endpoint_order_path_separates_sources
+           l sub r Hctx upper lower Hsources).
+  now apply (proj1 (endpoint_order_path_iff l sub r upper lower)).
+Qed.
+
+(* 三種類の到達不能性を独立した名前で公開し、以後の証明が大きな論理和に
+   依存しないようにする。 *)
+Lemma up_seed_not_reaches_down_seed : forall l sub r,
+  ClassificationContext l sub r ->
+  forall upper lower,
+    endpoint_up_seed l sub r upper ->
+    endpoint_down_seed l sub r lower ->
+    ~ endpoint_order l sub r upper lower.
+Proof.
+  intros l sub r Hctx upper lower Hup Hdown.
+  now apply (endpoint_order_separates_sources l sub r Hctx upper lower),
+    or_introl; split; [exact Hup | left].
+Qed.
+
+Lemma up_seed_not_reaches_sub : forall l sub r,
+  ClassificationContext l sub r ->
+  forall upper lower,
+    endpoint_up_seed l sub r upper ->
+    onSegmentlist sub lower ->
+    ~ endpoint_order l sub r upper lower.
+Proof.
+  intros l sub r Hctx upper lower Hup Hsub.
+  now apply (endpoint_order_separates_sources l sub r Hctx upper lower),
+    or_introl; split; [exact Hup | right].
+Qed.
+
+Lemma sub_not_reaches_down_seed : forall l sub r,
+  ClassificationContext l sub r ->
+  forall upper lower,
+    onSegmentlist sub upper ->
+    endpoint_down_seed l sub r lower ->
+    ~ endpoint_order l sub r upper lower.
+Proof.
+  intros l sub r Hctx upper lower Hsub Hdown.
+  now apply (endpoint_order_separates_sources l sub r Hctx upper lower),
+    or_intror.
+Qed.
 
 (* 上の分離補題により、一点が Up/Down の双方から強制されることはない。 *)
 Lemma endpoint_forcing_disjoint :
@@ -669,8 +785,8 @@ Lemma endpoint_forcing_disjoint :
          /\ endpoint_forced_down l sub r p).
 Proof.
   intros l sub r Hctx p [[up [Hup Hupp]] [down [Hdown Hpdown]]].
-  apply (endpoint_order_separates_sources
-           l sub r Hctx up down (or_introl (conj Hup (or_introl Hdown)))).
+  apply (up_seed_not_reaches_down_seed
+           l sub r Hctx up down Hup Hdown).
   eapply rt_trans; eauto.
 Qed.
 
@@ -685,13 +801,11 @@ Lemma sub_points_not_forced :
 Proof.
   intros l sub r Hctx p Hsub. split.
   - intros [up [Hup Horder]].
-    exact (endpoint_order_separates_sources
-             l sub r Hctx up p
-             (or_introl (conj Hup (or_intror Hsub))) Horder).
+    exact (up_seed_not_reaches_sub
+             l sub r Hctx up p Hup Hsub Horder).
   - intros [down [Hdown Horder]].
-    exact (endpoint_order_separates_sources
-             l sub r Hctx p down
-             (or_intror (conj Hsub Hdown)) Horder).
+    exact (sub_not_reaches_down_seed
+             l sub r Hctx p down Hsub Hdown Horder).
 Qed.
 
 (* 元のセグメント自身が、元の両端点・向き・両傾きによる再接続を与える。 *)
@@ -1159,7 +1273,10 @@ Lemma strict_extension_above_or_below_sub : forall l sub r p,
   above_sub_at_x sub p \/ below_sub_at_x sub p.
 Proof.
   intros l sub r [xp yp] Hctx Hextend Hx.
-  destruct Hctx as [Hne Hconn Hmono Hsparse Hwhole Hembed].
+  pose proof (context_sub_nonempty l sub r Hctx) as Hne.
+  pose proof (context_sub_connected l sub r Hctx) as Hconn.
+  pose proof (context_sub_x_monotone l sub r Hctx) as Hmono.
+  pose proof (context_sparse l sub r Hctx) as Hsparse.
   destruct (x_monotone_sub_has_point sub xp Hne Hconn Hmono Hx)
     as [[xz yz] [Hz Hxz]]. simpl in Hxz. subst xz.
   assert (Hneq : yp <> yz).
@@ -1173,16 +1290,15 @@ Qed.
 Lemma classify_spec :
   forall l sub r,
     sub <> [] ->
-    connected sub ->
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
     (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    extensions_disjoint (l ++ sub ++ r) ->
     @ClassificationSpec l sub r (classify l sub r).
 Proof.
-  intros l sub r Hne Hconn Hmono Hsparse Hwhole Hembed.
+  intros l sub r Hne Hmono Hsparse Hembed Hdisjoint.
   pose (Hctx := Build_ClassificationContext
-                  l sub r Hne Hconn Hmono Hsparse Hwhole Hembed).
+                  l sub r Hne Hmono Hsparse Hembed Hdisjoint).
   assert (HwholeNe : l ++ sub ++ r <> []) by now apply whole_nonempty.
   constructor.
   - intros p Hp. unfold classify, constraint_classifier.
@@ -1342,34 +1458,22 @@ Qed.
 
 Lemma classify_sub_endpoint :
   forall l sub r p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
     endpoint_of sub p ->
     classify l sub r p = RegFix.
 Proof.
-  intros l sub r p Hne Hconn Hmono Hsparse Hwhole Hembed Hend.
-  exact (classified_sub_fixed
-           l sub r
-           (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole Hembed)
-           p (endpoint_of_onSegmentlist sub p Hend)).
+  intros l sub r p Hend.
+  unfold classify, constraint_classifier.
+  destruct (excluded_middle_informative (onSegmentlist sub p));
+    [reflexivity |].
+  exfalso. apply n. now apply endpoint_of_onSegmentlist.
 Qed.
 
 Lemma operate_sub_endpoint :
   forall l sub r h p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
     endpoint_of sub p ->
     operate_point l sub r h p = p.
 Proof.
-  intros l sub r h p Hne Hconn Hmono Hsparse Hwhole Hembed Hend.
+  intros l sub r h p Hend.
   apply operate_point_RegFix.
   now apply classify_sub_endpoint.
 Qed.
