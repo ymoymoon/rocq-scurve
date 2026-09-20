@@ -7,16 +7,14 @@ Require Import Segment.
 Require Import SegmentsTranslation.
 Require Import ListExt.
 Require Import Stdlib.Logic.ClassicalDescription.
-Require Import Stdlib.Logic.ClassicalEpsilon.
 Import ListNotations.
 From Stdlib Require Import Lra.
-From Stdlib Require Import Lia.
-
-
+From Stdlib Require Import Relations.Relation_Operators.
 
 Require Export Sparsity.
+
 (* ================================================================= *)
-(*  1.  端点の分類と上下移動                                         *)
+(*  1.  端点だけに意味を持つ分類                                     *)
 (* ================================================================= *)
 
 Inductive Region : Type := RegFix | RegUp | RegDown.
@@ -29,6 +27,17 @@ Inductive region_above : Region -> Region -> Prop :=
 Definition region_at_or_above (g1 g2 : Region) : Prop :=
   g1 = g2 \/ region_above g1 g2.
 
+Lemma region_at_or_above_antisym : forall g1 g2,
+  region_at_or_above g1 g2 ->
+  region_at_or_above g2 g1 ->
+  g1 = g2.
+Proof.
+  intros g1 g2 H12 H21.
+  destruct g1, g2; try reflexivity;
+    destruct H12 as [H | H]; try discriminate; inversion H;
+    destruct H21 as [H' | H']; try discriminate; inversion H'.
+Qed.
+
 Lemma region_at_or_above_RegUp_inv : forall g,
   region_at_or_above g RegUp -> g = RegUp.
 Proof. intros g [H | H]; [exact H | inversion H]. Qed.
@@ -36,14 +45,6 @@ Proof. intros g [H | H]; [exact H | inversion H]. Qed.
 Lemma RegDown_at_or_above_inv : forall g,
   region_at_or_above RegDown g -> g = RegDown.
 Proof. intros g [H | H]; [now symmetry | inversion H]. Qed.
-
-Lemma region_above_not_reverse :
-  forall g1 g2,
-    region_above g1 g2 -> ~ region_at_or_above g2 g1.
-Proof.
-  intros g1 g2 H. destruct H; intros [Heq | Hrev];
-    try discriminate; inversion Hrev.
-Qed.
 
 Definition endpoint_of_seg (s : Segment) (p : Point) : Prop :=
   p = init s \/ p = term s.
@@ -54,677 +55,7 @@ Definition endpoint_of (ls : list Segment) (p : Point) : Prop :=
 Lemma endpoint_of_onSegmentlist : forall ls p,
   endpoint_of ls p -> onSegmentlist ls p.
 Proof.
-  intros ls p [s [Hs Hend]]. exists s. split; [exact Hs |].
-  destruct Hend as [Hp | Hp].
-  - subst p. apply onInit.
-  - subst p. apply onTerm.
-Qed.
-
-(* ----------------------------------------------------------------- *)
-(*  分類境界と端点補正                                               *)
-(* ----------------------------------------------------------------- *)
-
-Inductive CutSide : Type := CutLeft | CutRight.
-Inductive EndKind : Type := HeadEnd | LastEnd.
-Inductive PatchForce : Type := ForceUp | ForceDown.
-Inductive PatchSource : Type := InnerHorizontal | EndTrace.
-
-Record PatchPlan : Type := mkPatchPlan {
-  plan_source : PatchSource;
-  plan_force : PatchForce;
-  plan_inclusive : bool
-}.
-
-Record RegionPatch : Type := mkRegionPatch {
-  patch_side : CutSide;
-  patch_start_x : R;
-  patch_reference : Point -> Prop;
-  patch_force : PatchForce;
-  patch_inclusive : bool
-}.
-
-(* 分類と、次の end が交差を調べるための現在の境界高さを一緒に持つ。 *)
-Record ClassifyState : Type := mkClassifyState {
-  state_region : Point -> Region;
-  state_height : R -> R
-}.
-
-Definition choose_sub_y (sub : list Segment) (x : R) : R :=
-  epsilon (inhabits 0%R) (fun y => onSegmentlist sub (x, y)).
-
-Lemma choose_sub_y_spec :
-  forall sub x,
-    (exists y, onSegmentlist sub (x, y)) ->
-    onSegmentlist sub (x, choose_sub_y sub x).
-Proof.
-  intros sub x Hex.
-  unfold choose_sub_y. now apply epsilon_spec.
-Qed.
-
-Definition simple_height (sub : list Segment) (x : R) : R :=
-  if Rlt_dec x (rx0 (rect_of sub)) then
-    snd (init (hd_segment sub))
-  else if Rlt_dec (rx1 (rect_of sub)) x then
-    snd (term (last_segment sub))
-  else
-    choose_sub_y sub x.
-
-Definition classify_at_height (height : R -> R) (p : Point) : Region :=
-  if Rlt_dec (snd p) (height (fst p)) then RegDown
-  else if Rlt_dec (height (fst p)) (snd p) then RegUp
-  else RegFix.
-
-Definition simple_classify_state (sub : list Segment) : ClassifyState :=
-  mkClassifyState (classify_at_height (simple_height sub))
-                  (simple_height sub).
-
-Definition unique_trace_y_at
-    (trace : Point -> Prop) (x y : R) : Prop :=
-  trace (x, y) /\ forall y', trace (x, y') -> y' = y.
-
-Definition choose_trace_y (trace : Point -> Prop) (x : R) : R :=
-  epsilon (inhabits 0%R) (fun y => unique_trace_y_at trace x y).
-
-Lemma choose_trace_y_spec :
-  forall trace x,
-    (exists y, unique_trace_y_at trace x y) ->
-    unique_trace_y_at trace x (choose_trace_y trace x).
-Proof.
-  intros trace x Hex.
-  unfold choose_trace_y. now apply epsilon_spec.
-Qed.
-
-Definition trace_height
-    (trace : Point -> Prop) (x : R) : option R :=
-  match excluded_middle_informative
-          (exists y, unique_trace_y_at trace x y) with
-  | left _ => Some (choose_trace_y trace x)
-  | right _ => None
-  end.
-
-Lemma trace_height_some_spec :
-  forall trace x y,
-    trace_height trace x = Some y ->
-    unique_trace_y_at trace x y.
-Proof.
-  intros trace x y Hheight. unfold trace_height in Hheight.
-  destruct (excluded_middle_informative
-              (exists y0, unique_trace_y_at trace x y0))
-    as [Hex | Hnone]; [|discriminate].
-  injection Hheight as <-. now apply choose_trace_y_spec.
-Qed.
-
-Lemma trace_height_none_spec :
-  forall trace x,
-    trace_height trace x = None ->
-    ~ exists y, unique_trace_y_at trace x y.
-Proof.
-  intros trace x Hheight. unfold trace_height in Hheight.
-  destruct (excluded_middle_informative
-              (exists y, unique_trace_y_at trace x y))
-    as [Hex | Hnone]; [discriminate | exact Hnone].
-Qed.
-
-Definition horizontal_trace (y : R) : Point -> Prop :=
-  fun p => snd p = y.
-
-Lemma horizontal_trace_height :
-  forall x y, trace_height (horizontal_trace y) x = Some y.
-Proof.
-  intros x y. unfold trace_height.
-  destruct (excluded_middle_informative
-              (exists y0, unique_trace_y_at (horizontal_trace y) x y0))
-    as [Hex | Hnone].
-  - f_equal.
-    pose proof (choose_trace_y_spec (horizontal_trace y) x Hex)
-      as [Hchosen _].
-    exact Hchosen.
-  - exfalso. apply Hnone. exists y. split; [reflexivity |].
-    intros y' Hy'. exact Hy'.
-Qed.
-
-Definition end_segment
-    (l r : list Segment) (k : EndKind) : option Segment :=
-  match k with
-  | HeadEnd =>
-      match l with
-      | [] => None
-      | seg :: _ => Some seg
-      end
-  | LastEnd =>
-      match r with
-      | [] => None
-      | _ => Some (last_segment r)
-      end
-  end.
-
-Definition end_trace
-    (l r : list Segment) (k : EndKind) : Point -> Prop :=
-  match end_segment l r k with
-  | None => fun _ => False
-  | Some seg =>
-      match k with
-      | HeadEnd => onHeadSegment seg
-      | LastEnd => onLastSegment seg
-      end
-  end.
-
-Definition inner_endpoint (k : EndKind) (s : Segment) : Point :=
-  match k with
-  | HeadEnd => term s
-  | LastEnd => init s
-  end.
-
-Definition reverse_primitive (d : PrimitiveSegment) : PrimitiveSegment :=
-  let '(v, h, c) := d in (i_v v, i_h h, c).
-
-Definition rotate180_primitive (d : PrimitiveSegment) : PrimitiveSegment :=
-  let '(v, h, c) := d in (i_v v, i_h h, c).
-
-Definition normalize_patch_primitive
-    (k : EndKind) (side : CutSide) (d : PrimitiveSegment)
-    : PrimitiveSegment :=
-  let d1 := match k with HeadEnd => reverse_primitive d | LastEnd => d end in
-  match side with
-  | CutLeft => d1
-  | CutRight => rotate180_primitive d1
-  end.
-
-(* 基準形は「末尾が sub 左側の水平境界と交差する」場合。
-   他の三配置はパラメータ反転と180度回転でこの表へ移す。 *)
-Definition canonical_last_left_plan (d : PrimitiveSegment) : PatchPlan :=
-  match d with
-  | (n, e, cx) => mkPatchPlan InnerHorizontal ForceUp false
-  | (n, e, cc) => mkPatchPlan InnerHorizontal ForceUp true
-  | (s, e, cx) => mkPatchPlan InnerHorizontal ForceDown true
-  | (s, e, cc) => mkPatchPlan InnerHorizontal ForceDown false
-  | (s, w, _)  => mkPatchPlan EndTrace ForceUp true
-  | (n, w, _)  => mkPatchPlan EndTrace ForceDown true
-  end.
-
-Definition opposite_force (f : PatchForce) : PatchForce :=
-  match f with ForceUp => ForceDown | ForceDown => ForceUp end.
-
-Definition patch_plan
-    (k : EndKind) (side : CutSide) (s : Segment) : PatchPlan :=
-  let base := canonical_last_left_plan
-                (normalize_patch_primitive k side (primitive_segment s)) in
-  match side with
-  | CutLeft => base
-  | CutRight =>
-      mkPatchPlan (plan_source base) (opposite_force (plan_force base))
-                  (plan_inclusive base)
-  end.
-
-Definition make_end_patch
-    (l r : list Segment) (k : EndKind) (side : CutSide)
-    : option RegionPatch :=
-  match end_segment l r k with
-  | None => None
-  | Some seg =>
-      let inner := inner_endpoint k seg in
-      let plan := patch_plan k side seg in
-      let reference :=
-        match plan_source plan with
-        | InnerHorizontal => horizontal_trace (snd inner)
-        | EndTrace => end_trace l r k
-        end in
-      Some (mkRegionPatch side (fst inner) reference
-               (plan_force plan) (plan_inclusive plan))
-  end.
-
-Lemma make_end_patch_side_and_start :
-  forall l r k side patch,
-    make_end_patch l r k side = Some patch ->
-    exists seg,
-      end_segment l r k = Some seg
-      /\ patch_side patch = side
-      /\ patch_start_x patch = fst (inner_endpoint k seg).
-Proof.
-  intros l r k side patch Hpatch. unfold make_end_patch in Hpatch.
-  destruct (end_segment l r k) as [seg |] eqn:Hseg; [|discriminate].
-  injection Hpatch as <-.
-  exists seg. split; [reflexivity | now split].
-Qed.
-
-Definition patch_active_at (patch : RegionPatch) (x : R) : Prop :=
-  match patch_side patch with
-  | CutLeft => x < patch_start_x patch
-  | CutRight => patch_start_x patch < x
-  end.
-
-Definition patch_active_dec (patch : RegionPatch) (x : R) :
-  {patch_active_at patch x} + {~ patch_active_at patch x} :=
-  match patch_side patch as side
-        return {match side with
-                | CutLeft => x < patch_start_x patch
-                | CutRight => patch_start_x patch < x
-                end} +
-               {~ match side with
-                  | CutLeft => x < patch_start_x patch
-                  | CutRight => patch_start_x patch < x
-                  end} with
-  | CutLeft => Rlt_dec x (patch_start_x patch)
-  | CutRight => Rlt_dec (patch_start_x patch) x
-  end.
-
-Definition patch_forces_at
-    (patch : RegionPatch) (reference_y : R) (p : Point) : Prop :=
-  match patch_force patch, patch_inclusive patch with
-  | ForceUp, false => reference_y < snd p
-  | ForceUp, true => reference_y <= snd p
-  | ForceDown, false => snd p < reference_y
-  | ForceDown, true => snd p <= reference_y
-  end.
-
-Definition patch_forces_dec
-    (patch : RegionPatch) (reference_y : R) (p : Point) :
-  {patch_forces_at patch reference_y p} +
-  {~ patch_forces_at patch reference_y p}.
-Proof.
-  destruct patch as [side start trace force inclusive].
-  destruct force, inclusive; simpl; [apply Rle_dec | apply Rlt_dec |
-    apply Rle_dec | apply Rlt_dec].
-Defined.
-
-Definition forced_region (f : PatchForce) : Region :=
-  match f with ForceUp => RegUp | ForceDown => RegDown end.
-
-Definition apply_region_patch
-    (old : Point -> Region) (patch : RegionPatch) (p : Point) : Region :=
-  match patch_active_dec patch (fst p) with
-  | left _ =>
-      match trace_height (patch_reference patch) (fst p) with
-      | None => old p
-      | Some y =>
-          match patch_forces_dec patch y p with
-          | left _ => forced_region (patch_force patch)
-          | right _ => old p
-          end
-      end
-  | right _ => old p
-  end.
-
-Definition apply_height_patch
-    (old : R -> R) (patch : RegionPatch) (x : R) : R :=
-  match patch_active_dec patch x with
-  | left _ =>
-      match trace_height (patch_reference patch) x with
-      | Some y => y
-      | None => old x
-      end
-  | right _ => old x
-  end.
-
-Definition apply_patch
-    (st : ClassifyState) (patch : RegionPatch) : ClassifyState :=
-  mkClassifyState
-    (apply_region_patch (state_region st) patch)
-    (apply_height_patch (state_height st) patch).
-
-Lemma apply_region_patch_inactive :
-  forall old patch p,
-    ~ patch_active_at patch (fst p) ->
-    apply_region_patch old patch p = old p.
-Proof.
-  intros old patch p Hinactive. unfold apply_region_patch.
-  destruct (patch_active_dec patch (fst p)) as [Hactive |];
-    [contradiction | reflexivity].
-Qed.
-
-Lemma apply_height_patch_inactive :
-  forall old patch x,
-    ~ patch_active_at patch x ->
-    apply_height_patch old patch x = old x.
-Proof.
-  intros old patch x Hinactive. unfold apply_height_patch.
-  destruct (patch_active_dec patch x) as [Hactive |];
-    [contradiction | reflexivity].
-Qed.
-
-Lemma apply_region_patch_without_reference :
-  forall old patch p,
-    trace_height (patch_reference patch) (fst p) = None ->
-    apply_region_patch old patch p = old p.
-Proof.
-  intros old patch p Hnone. unfold apply_region_patch.
-  destruct (patch_active_dec patch (fst p)); [now rewrite Hnone | reflexivity].
-Qed.
-
-(* 点が補正範囲外か、基準線との比較が補正方向を満たさないこと。 *)
-Definition patch_does_not_force_at
-    (patch : RegionPatch) (p : Point) : Prop :=
-  ~ patch_active_at patch (fst p)
-  \/ forall y,
-       trace_height (patch_reference patch) (fst p) = Some y ->
-       ~ patch_forces_at patch y p.
-
-Lemma apply_region_patch_not_forced :
-  forall old patch p,
-    patch_does_not_force_at patch p ->
-    apply_region_patch old patch p = old p.
-Proof.
-  intros old patch p [Hinactive | Hunforced].
-  - now apply apply_region_patch_inactive.
-  - unfold apply_region_patch.
-    destruct (patch_active_dec patch (fst p)); [|reflexivity].
-    destruct (trace_height (patch_reference patch) (fst p)) as [y |] eqn:Hy;
-      [|reflexivity].
-    destruct (patch_forces_dec patch y p) as [Hforce |];
-      [exfalso; exact (Hunforced y eq_refl Hforce) | reflexivity].
-Qed.
-
-(* 補正は Up/Down しか新しく作らないため、補正後の Fix は補正前から Fix。 *)
-Lemma apply_region_patch_fix_inv :
-  forall old patch p,
-    apply_region_patch old patch p = RegFix ->
-    old p = RegFix.
-Proof.
-  intros old patch p Hfix.
-  unfold apply_region_patch in Hfix.
-  destruct (patch_active_dec patch (fst p)); [|exact Hfix].
-  destruct (trace_height (patch_reference patch) (fst p)); [|exact Hfix].
-  destruct (patch_forces_dec patch r p); [|exact Hfix].
-  destruct (patch_force patch); discriminate.
-Qed.
-
-Definition below_state_boundary (st : ClassifyState) (p : Point) : Prop :=
-  snd p < state_height st (fst p).
-
-Definition above_state_boundary (st : ClassifyState) (p : Point) : Prop :=
-  state_height st (fst p) < snd p.
-
-(* 垂直な重なりや水平な一致を除き、x の両側で上下が入れ替わる交点。 *)
-Definition proper_state_crossing
-    (st : ClassifyState) (trace : Point -> Prop) (p : Point) : Prop :=
-  trace p
-  /\ snd p = state_height st (fst p)
-  /\ unique_trace_y_at trace (fst p) (snd p)
-  /\ exists q r,
-       trace q /\ trace r
-       /\ fst q < fst p < fst r
-       /\ ((below_state_boundary st q /\ above_state_boundary st r)
-           \/ (above_state_boundary st q /\ below_state_boundary st r)).
-
-Definition crossing_on_side
-    (sub : list Segment) (side : CutSide) (p : Point) : Prop :=
-  match side with
-  | CutLeft => fst p < rx0 (rect_of sub)
-  | CutRight => rx1 (rect_of sub) < fst p
-  end.
-
-Definition end_crossing
-    (st : ClassifyState) (l sub r : list Segment)
-    (k : EndKind) (side : CutSide) (p : Point) : Prop :=
-  proper_state_crossing st (end_trace l r k) p
-  /\ crossing_on_side sub side p.
-
-Definition closest_end_crossing
-    (st : ClassifyState) (l sub r : list Segment)
-    (k : EndKind) (side : CutSide) (p : Point) : Prop :=
-  end_crossing st l sub r k side p
-  /\ forall q,
-       end_crossing st l sub r k side q ->
-       match side with
-       | CutLeft => fst q <= fst p
-       | CutRight => fst p <= fst q
-       end.
-
-Definition choose_closest_crossing
-    (st : ClassifyState) (l sub r : list Segment)
-    (k : EndKind) (side : CutSide) : Point :=
-  epsilon (inhabits (0%R, 0%R))
-    (closest_end_crossing st l sub r k side).
-
-Lemma choose_closest_crossing_spec :
-  forall st l sub r k side,
-    (exists p, closest_end_crossing st l sub r k side p) ->
-    closest_end_crossing st l sub r k side
-      (choose_closest_crossing st l sub r k side).
-Proof.
-  intros st l sub r k side Hex.
-  unfold choose_closest_crossing. now apply epsilon_spec.
-Qed.
-
-Definition nearest_end_crossing
-    (st : ClassifyState) (l sub r : list Segment)
-    (k : EndKind) (side : CutSide) : option Point :=
-  match excluded_middle_informative
-          (exists p, closest_end_crossing st l sub r k side p) with
-  | left _ => Some (choose_closest_crossing st l sub r k side)
-  | right _ => None
-  end.
-
-Lemma nearest_end_crossing_some_spec :
-  forall st l sub r k side p,
-    nearest_end_crossing st l sub r k side = Some p ->
-    closest_end_crossing st l sub r k side p.
-Proof.
-  intros st l sub r k side p Hnearest.
-  unfold nearest_end_crossing in Hnearest.
-  destruct (excluded_middle_informative
-              (exists p0, closest_end_crossing st l sub r k side p0))
-    as [Hex | Hnone]; [|discriminate].
-  injection Hnearest as <-. now apply choose_closest_crossing_spec.
-Qed.
-
-Lemma nearest_end_crossing_none_spec :
-  forall st l sub r k side,
-    nearest_end_crossing st l sub r k side = None ->
-    ~ exists p, closest_end_crossing st l sub r k side p.
-Proof.
-  intros st l sub r k side Hnearest.
-  unfold nearest_end_crossing in Hnearest.
-  destruct (excluded_middle_informative
-              (exists p, closest_end_crossing st l sub r k side p))
-    as [Hex | Hnone]; [discriminate | exact Hnone].
-Qed.
-
-Lemma no_end_crossing_gives_none :
-  forall st l sub r k side,
-    (~ exists p, end_crossing st l sub r k side p) ->
-    nearest_end_crossing st l sub r k side = None.
-Proof.
-  intros st l sub r k side Hnone. unfold nearest_end_crossing.
-  destruct (excluded_middle_informative
-              (exists p, closest_end_crossing st l sub r k side p))
-    as [Hex |]; [|reflexivity].
-  exfalso. apply Hnone. destruct Hex as [p [Hcross _]].
-  now exists p.
-Qed.
-
-Definition apply_end_at
-    (st : ClassifyState) (l r : list Segment)
-    (k : EndKind) (side : CutSide) : ClassifyState :=
-  match make_end_patch l r k side with
-  | Some patch => apply_patch st patch
-  | None => st
-  end.
-
-Definition process_end
-    (st : ClassifyState) (l sub r : list Segment)
-    (k : EndKind) (side : CutSide) : ClassifyState :=
-  match nearest_end_crossing st l sub r k side with
-  | Some _ => apply_end_at st l r k side
-  | None => st
-  end.
-
-Definition crossing_closer
-    (side : CutSide) (p q : Point) : Prop :=
-  match side with
-  | CutLeft => fst q < fst p
-  | CutRight => fst p < fst q
-  end.
-
-Definition crossing_closer_dec (side : CutSide) (p q : Point) :
-  {crossing_closer side p q} + {~ crossing_closer side p q}.
-Proof. destruct side; simpl; apply Rlt_dec. Defined.
-
-(* 二つ目の [process_end] は、一つ目の補正後の境界に対して交点を取り直す。
-   一度処理した end は再検査せず、各側で補正は高々二回とする。 *)
-Definition process_both_ends_on_side
-    (st : ClassifyState) (l sub r : list Segment) (side : CutSide)
-    : ClassifyState :=
-  match nearest_end_crossing st l sub r HeadEnd side,
-        nearest_end_crossing st l sub r LastEnd side with
-  | None, None => st
-  | Some _, None => apply_end_at st l r HeadEnd side
-  | None, Some _ => apply_end_at st l r LastEnd side
-  | Some ph, Some pl =>
-      if crossing_closer_dec side ph pl then
-        let st1 := apply_end_at st l r HeadEnd side in
-        process_end st1 l sub r LastEnd side
-      else
-        let st1 := apply_end_at st l r LastEnd side in
-        process_end st1 l sub r HeadEnd side
-  end.
-
-Definition end_patches_do_not_force_at
-    (l r : list Segment) (p : Point) : Prop :=
-  forall k side patch,
-    make_end_patch l r k side = Some patch ->
-    patch_does_not_force_at patch p.
-
-Lemma apply_end_at_not_forced :
-  forall st l r k side p,
-    end_patches_do_not_force_at l r p ->
-    state_region (apply_end_at st l r k side) p = state_region st p.
-Proof.
-  intros st l r k side p Hsafe. unfold apply_end_at.
-  destruct (make_end_patch l r k side) as [patch |] eqn:Hpatch;
-    [|reflexivity].
-  simpl. apply apply_region_patch_not_forced.
-  exact (Hsafe k side patch Hpatch).
-Qed.
-
-Lemma apply_end_at_fix_inv :
-  forall st l r k side p,
-    state_region (apply_end_at st l r k side) p = RegFix ->
-    state_region st p = RegFix.
-Proof.
-  intros st l r k side p Hfix. unfold apply_end_at in Hfix.
-  destruct (make_end_patch l r k side) as [patch |]; [|exact Hfix].
-  simpl in Hfix. now apply apply_region_patch_fix_inv in Hfix.
-Qed.
-
-Lemma process_end_not_forced :
-  forall st l sub r k side p,
-    end_patches_do_not_force_at l r p ->
-    state_region (process_end st l sub r k side) p = state_region st p.
-Proof.
-  intros st l sub r k side p Hsafe. unfold process_end.
-  destruct (nearest_end_crossing st l sub r k side);
-    [now apply apply_end_at_not_forced | reflexivity].
-Qed.
-
-Lemma process_end_without_crossing :
-  forall st l sub r k side,
-    (~ exists p, end_crossing st l sub r k side p) ->
-    process_end st l sub r k side = st.
-Proof.
-  intros st l sub r k side Hnone. unfold process_end.
-  now rewrite (no_end_crossing_gives_none st l sub r k side Hnone).
-Qed.
-
-Lemma process_end_fix_inv :
-  forall st l sub r k side p,
-    state_region (process_end st l sub r k side) p = RegFix ->
-    state_region st p = RegFix.
-Proof.
-  intros st l sub r k side p Hfix. unfold process_end in Hfix.
-  destruct (nearest_end_crossing st l sub r k side);
-    [now apply apply_end_at_fix_inv in Hfix | exact Hfix].
-Qed.
-
-Lemma process_both_ends_not_forced :
-  forall st l sub r side p,
-    end_patches_do_not_force_at l r p ->
-    state_region (process_both_ends_on_side st l sub r side) p =
-    state_region st p.
-Proof.
-  intros st l sub r side p Hsafe.
-  unfold process_both_ends_on_side.
-  destruct (nearest_end_crossing st l sub r HeadEnd side) as [ph |];
-  destruct (nearest_end_crossing st l sub r LastEnd side) as [pl |].
-  - destruct (crossing_closer_dec side ph pl).
-    + rewrite (process_end_not_forced
-                 (apply_end_at st l r HeadEnd side)
-                 l sub r LastEnd side p Hsafe).
-      now apply apply_end_at_not_forced.
-    + rewrite (process_end_not_forced
-                 (apply_end_at st l r LastEnd side)
-                 l sub r HeadEnd side p Hsafe).
-      now apply apply_end_at_not_forced.
-  - now apply apply_end_at_not_forced.
-  - now apply apply_end_at_not_forced.
-  - reflexivity.
-Qed.
-
-Lemma process_both_ends_fix_inv :
-  forall st l sub r side p,
-    state_region (process_both_ends_on_side st l sub r side) p = RegFix ->
-    state_region st p = RegFix.
-Proof.
-  intros st l sub r side p Hfix.
-  unfold process_both_ends_on_side in Hfix.
-  destruct (nearest_end_crossing st l sub r HeadEnd side) as [ph |];
-  destruct (nearest_end_crossing st l sub r LastEnd side) as [pl |].
-  - destruct (crossing_closer_dec side ph pl).
-    + apply process_end_fix_inv in Hfix.
-      now apply apply_end_at_fix_inv in Hfix.
-    + apply process_end_fix_inv in Hfix.
-      now apply apply_end_at_fix_inv in Hfix.
-  - now apply apply_end_at_fix_inv in Hfix.
-  - now apply apply_end_at_fix_inv in Hfix.
-  - exact Hfix.
-Qed.
-
-Definition build_classify_state
-    (l sub r : list Segment) : ClassifyState :=
-  let st0 := simple_classify_state sub in
-  let st1 := process_both_ends_on_side st0 l sub r CutLeft in
-  process_both_ends_on_side st1 l sub r CutRight.
-
-(* 分類は基本境界から始め、各側で現在の境界に最も近い end を先に補正する。 *)
-Definition classify
-    (l sub r : list Segment) (p : Point) : Region :=
-  state_region (build_classify_state l sub r) p.
-
-Lemma classify_eq_simple_when_end_patches_do_not_force :
-  forall l sub r p,
-    end_patches_do_not_force_at l r p ->
-    classify l sub r p = state_region (simple_classify_state sub) p.
-Proof.
-  intros l sub r p Hsafe. unfold classify, build_classify_state.
-  rewrite (process_both_ends_not_forced
-             (process_both_ends_on_side
-                (simple_classify_state sub) l sub r CutLeft)
-             l sub r CutRight p Hsafe).
-  now apply process_both_ends_not_forced.
-Qed.
-
-Lemma nil_end_patches_do_not_force :
-  forall p, end_patches_do_not_force_at [] [] p.
-Proof.
-  intros p k side patch Hpatch. destruct k; discriminate.
-Qed.
-
-Lemma classify_without_sides_eq_simple :
-  forall sub p,
-    classify [] sub [] p = state_region (simple_classify_state sub) p.
-Proof.
-  intros sub p. apply classify_eq_simple_when_end_patches_do_not_force.
-  apply nil_end_patches_do_not_force.
-Qed.
-
-Lemma classify_fix_implies_simple_fix :
-  forall l sub r p,
-    classify l sub r p = RegFix ->
-    state_region (simple_classify_state sub) p = RegFix.
-Proof.
-  intros l sub r p Hfix. unfold classify, build_classify_state in Hfix.
-  apply process_both_ends_fix_inv in Hfix.
-  now apply process_both_ends_fix_inv in Hfix.
+  intros ls p [s [Hs [-> | ->]]]; exists s; split; auto using onInit, onTerm.
 Qed.
 
 Definition in_sub_x_range (sub : list Segment) (p : Point) : Prop :=
@@ -747,151 +78,7 @@ Definition segment_x_ranges_overlap (s t : Segment) : Prop :=
   rx0 (rect_of [s]) <= rx1 (rect_of [t])
   /\ rx0 (rect_of [t]) <= rx1 (rect_of [s]).
 
-Record ClassificationSpec (l sub r : list Segment) : Prop := {
-
-  (* sub は固定 *)
-  classified_sub_fixed :
-    forall p, onSegmentlist sub p -> classify l sub r p = RegFix;
-
-  (* セグメントの始点が終点より低く，始点の領域が Up なら終点も Up など *)
-  classified_segment_endpoints_monotone :
-    forall s,
-      In s (l ++ sub ++ r) ->
-      (snd (init s) < snd (term s) ->
-        region_at_or_above (classify l sub r (term s)) (classify l sub r (init s)))
-      /\
-      (snd (term s) < snd (init s) ->
-        region_at_or_above (classify l sub r (init s)) (classify l sub r (term s)));
-
-  (* x 範囲が重なる非隣接セグメントについては，下側の長方形が Up なら上側の長方形も Up など *)
-  classified_nonadjacent_endpoint_order :
-    forall i j s t ps pt,
-      nth_error (l ++ sub ++ r) i = Some s ->
-      nth_error (l ++ sub ++ r) j = Some t ->
-      (S i < j \/ S j < i)%nat ->
-      segment_x_ranges_overlap s t ->
-      endpoint_of_seg s ps ->
-      endpoint_of_seg t pt ->
-      snd ps <= snd pt ->
-      region_at_or_above
-        (classify l sub r pt) (classify l sub r ps);
-
-  (* sub と同じ x 座標を持つセグメントは Up もしくは Down *)
-  classified_segment_at_sub_x :
-    forall s p,
-      In s (nonadjacent_sides l r) ->
-      onSegment s p ->
-      in_sub_x_range sub p ->
-      (above_sub_at_x sub p ->
-         classify l sub r (init s) = RegUp
-         /\ classify l sub r (term s) = RegUp)
-      /\
-      (below_sub_at_x sub p ->
-         classify l sub r (init s) = RegDown
-         /\ classify l sub r (term s) = RegDown);
-
-  (* strict 延長線が sub 長方形の閉 x 範囲へ入る場合，
-     その延長線を動かす基点は Fix ではない。 *)
-  classified_head_extension_at_sub_x :
-    forall p,
-      onHead_extend_strict (l ++ sub ++ r) p ->
-      rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub) ->
-      classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegUp
-      \/ classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegDown;
-
-  classified_last_extension_at_sub_x :
-    forall p,
-      onLast_extend_strict (l ++ sub ++ r) p ->
-      rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub) ->
-      classify l sub r (term (last_segment (l ++ sub ++ r))) = RegUp
-      \/ classify l sub r (term (last_segment (l ++ sub ++ r))) = RegDown;
-
-  (* 延長線が同じ x 座標の点を持つ時，下側が Up なら上側も Up など *)
-  classified_head_last_extension_order :
-    forall ph pl,
-      onHead_extend (l ++ sub ++ r) ph ->
-      onLast_extend (l ++ sub ++ r) pl ->
-      fst ph = fst pl ->
-      (snd ph < snd pl ->
-         region_at_or_above
-           (classify l sub r (term (last_segment (l ++ sub ++ r))))
-           (classify l sub r (init (hd_segment (l ++ sub ++ r)))))
-      /\
-      (snd pl < snd ph ->
-         region_at_or_above
-           (classify l sub r (init (hd_segment (l ++ sub ++ r))))
-           (classify l sub r (term (last_segment (l ++ sub ++ r)))));
-
-  (* セグメントと延長線が同じ x 座標の点を持つ時，下側が Up なら上側も Up など *)
-  classified_head_segment_crossing_order :
-    forall s e q,
-      In s (l ++ sub ++ r) ->
-      onSegment s e ->
-      onHead_extend_strict (l ++ sub ++ r) q ->
-      fst e = fst q ->
-      (snd q < snd e ->
-         region_at_or_above
-           (classify l sub r (init s))
-           (classify l sub r (init (hd_segment (l ++ sub ++ r))))
-         /\ region_at_or_above
-           (classify l sub r (term s))
-           (classify l sub r (init (hd_segment (l ++ sub ++ r)))))
-      /\
-      (snd e < snd q ->
-         region_at_or_above
-           (classify l sub r (init (hd_segment (l ++ sub ++ r))))
-           (classify l sub r (init s))
-         /\ region_at_or_above
-           (classify l sub r (init (hd_segment (l ++ sub ++ r))))
-           (classify l sub r (term s)));
-
-  classified_last_segment_crossing_order :
-    forall s e q,
-      In s (l ++ sub ++ r) ->
-      onSegment s e ->
-      onLast_extend_strict (l ++ sub ++ r) q ->
-      fst e = fst q ->
-      (snd q < snd e ->
-         region_at_or_above
-           (classify l sub r (init s))
-           (classify l sub r (term (last_segment (l ++ sub ++ r))))
-         /\ region_at_or_above
-           (classify l sub r (term s))
-           (classify l sub r (term (last_segment (l ++ sub ++ r)))))
-      /\
-      (snd e < snd q ->
-         region_at_or_above
-           (classify l sub r (term (last_segment (l ++ sub ++ r))))
-           (classify l sub r (init s))
-         /\ region_at_or_above
-           (classify l sub r (term (last_segment (l ++ sub ++ r))))
-           (classify l sub r (term s)));
-
-  (* 先頭の両端が別領域なら、始点傾きを保てる向き・凸性に限る。 *)
-  classified_head_slope_case :
-    l <> [] ->
-    classify l sub r (init (hd_segment l)) =
-      classify l sub r (term (hd_segment l))
-    \/ (classify l sub r (init (hd_segment l)) = RegUp
-        /\ (embed (s, w, cx) (hd_segment l)
-            \/ embed (s, e, cx) (hd_segment l)))
-    \/ (classify l sub r (init (hd_segment l)) = RegDown
-        /\ (embed (n, w, cc) (hd_segment l)
-            \/ embed (n, e, cc) (hd_segment l)));
-
-  (* 末尾では双対的に、終点傾きを保てる場合だけ別領域を許す。 *)
-  classified_last_slope_case :
-    r <> [] ->
-    classify l sub r (init (last_segment r)) =
-      classify l sub r (term (last_segment r))
-    \/ (classify l sub r (term (last_segment r)) = RegUp
-        /\ (embed (n, w, cx) (last_segment r)
-            \/ embed (n, e, cx) (last_segment r)))
-    \/ (classify l sub r (term (last_segment r)) = RegDown
-        /\ (embed (s, w, cc) (last_segment r)
-            \/ embed (s, e, cc) (last_segment r)))
-}.
-
+(* 以下の三補題は分類には依存しないが、延長線と sub の比較で使う。 *)
 Lemma connected_x_monotone_endpoints :
   forall sub,
     sub <> [] ->
@@ -918,7 +105,6 @@ Proof.
     rewrite Hab in Ha. lra.
 Qed.
 
-(* x 単調な連結列では、全体長方形の左右端は列の始終点である。 *)
 Lemma x_monotone_rect_x_bounds :
   forall sub,
     sub <> [] ->
@@ -935,58 +121,56 @@ Proof.
   split; reflexivity.
 Qed.
 
-(* セグメントの端点 x 区間内の各 x 座標は、セグメント上で実現される。 *)
 Lemma segment_has_point_at_x :
-  forall s x,
-    rx0 (rect_of [s]) <= x <= rx1 (rect_of [s]) ->
-    exists p, onSegment s p /\ fst p = x.
+  forall seg x,
+    rx0 (rect_of [seg]) <= x <= rx1 (rect_of [seg]) ->
+    exists p, onSegment seg p /\ fst p = x.
 Proof.
-  intros s x Hx.
-  destruct (total_order_T (fst (init s)) (fst (term s)))
+  intros seg x Hx.
+  destruct (total_order_T (fst (init seg)) (fst (term seg)))
     as [[Hix | Heq] | Htx].
-  - change (Rmin (fst (init s)) (fst (term s)) <= x <=
-            Rmax (fst (init s)) (fst (term s))) in Hx.
+  - change (Rmin (fst (init seg)) (fst (term seg)) <= x <=
+            Rmax (fst (init seg)) (fst (term seg))) in Hx.
     rewrite Rmin_left in Hx by lra.
     rewrite Rmax_right in Hx by lra.
-    destruct (Rle_dec (snd (init s)) (snd (term s))) as [Hy | Hy].
-    + destruct (exist_between_x_pos s
-                  (fst (init s)) (fst (term s))
-                  (snd (init s)) (snd (term s)) x
+    destruct (Rle_dec (snd (init seg)) (snd (term seg))) as [Hy | Hy].
+    + destruct (exist_between_x_pos seg
+                  (fst (init seg)) (fst (term seg))
+                  (snd (init seg)) (snd (term seg)) x
                   ltac:(rewrite <- surjective_pairing; apply onInit)
                   ltac:(rewrite <- surjective_pairing; apply onTerm)
                   Hy (proj1 Hx) (proj2 Hx)) as [y [Hon _]].
       exists (x, y). split; [exact Hon | reflexivity].
-    + destruct (exist_between_x_neg s
-                  (fst (init s)) (fst (term s))
-                  (snd (init s)) (snd (term s)) x
+    + destruct (exist_between_x_neg seg
+                  (fst (init seg)) (fst (term seg))
+                  (snd (init seg)) (snd (term seg)) x
                   ltac:(rewrite <- surjective_pairing; apply onInit)
                   ltac:(rewrite <- surjective_pairing; apply onTerm)
                   ltac:(lra) (proj1 Hx) (proj2 Hx)) as [y [Hon _]].
       exists (x, y). split; [exact Hon | reflexivity].
-  - exfalso. apply (neq_init_term_x s).
+  - exfalso. apply (neq_init_term_x seg).
     unfold init_x, term_x. exact Heq.
-  - change (Rmin (fst (init s)) (fst (term s)) <= x <=
-            Rmax (fst (init s)) (fst (term s))) in Hx.
+  - change (Rmin (fst (init seg)) (fst (term seg)) <= x <=
+            Rmax (fst (init seg)) (fst (term seg))) in Hx.
     rewrite Rmin_right in Hx by lra.
     rewrite Rmax_left in Hx by lra.
-    destruct (Rle_dec (snd (term s)) (snd (init s))) as [Hy | Hy].
-    + destruct (exist_between_x_pos s
-                  (fst (term s)) (fst (init s))
-                  (snd (term s)) (snd (init s)) x
+    destruct (Rle_dec (snd (term seg)) (snd (init seg))) as [Hy | Hy].
+    + destruct (exist_between_x_pos seg
+                  (fst (term seg)) (fst (init seg))
+                  (snd (term seg)) (snd (init seg)) x
                   ltac:(rewrite <- surjective_pairing; apply onTerm)
                   ltac:(rewrite <- surjective_pairing; apply onInit)
                   Hy (proj1 Hx) (proj2 Hx)) as [y [Hon _]].
       exists (x, y). split; [exact Hon | reflexivity].
-    + destruct (exist_between_x_neg s
-                  (fst (term s)) (fst (init s))
-                  (snd (term s)) (snd (init s)) x
+    + destruct (exist_between_x_neg seg
+                  (fst (term seg)) (fst (init seg))
+                  (snd (term seg)) (snd (init seg)) x
                   ltac:(rewrite <- surjective_pairing; apply onTerm)
                   ltac:(rewrite <- surjective_pairing; apply onInit)
                   ltac:(lra) (proj1 Hx) (proj2 Hx)) as [y [Hon _]].
       exists (x, y). split; [exact Hon | reflexivity].
 Qed.
 
-(* 連結な x 単調 sub は、始終点間の各 x 座標を通る。 *)
 Lemma x_monotone_sub_has_point :
   forall sub x,
     sub <> [] ->
@@ -1006,7 +190,7 @@ Proof.
     { intros i s1 s2 H1 H2.
       apply (Hconn (S i) s1 s2); simpl; assumption. }
     assert (HmonoTail : x_monotone_segs (b :: tail)).
-    { intros s Hs. apply Hmono. now right. }
+    { intros seg Hseg. apply Hmono. now right. }
     pose proof (x_monotone_rect_x_bounds
                   (a :: b :: tail) ltac:(discriminate) Hconn Hmono)
       as [Hleft Hright].
@@ -1023,8 +207,7 @@ Proof.
         unfold x_monotone_seg, init_x, term_x in Ha.
         change (Rmin (fst (init a)) (fst (term a)) <= x <=
                 Rmax (fst (init a)) (fst (term a))).
-        rewrite Rmin_left by lra. rewrite Rmax_right by lra.
-        lra. }
+        rewrite Rmin_left by lra. rewrite Rmax_right by lra. lra. }
       destruct (segment_has_point_at_x a x Hsingle) as [q [Hon Hqx]].
       exists q. split.
       * exists a. split; [now left | exact Hon].
@@ -1037,1016 +220,17 @@ Proof.
                       HconnTail HmonoTail) as [HtailLeft HtailRight].
         change (rx0 (rect_of (b :: tail)) = fst (init b)) in HtailLeft.
         rewrite HtailLeft, HtailRight.
-        rewrite Hlast in Hx.
-        rewrite Hab in Hax. lra. }
+        rewrite Hlast in Hx. rewrite Hab in Hax. lra. }
       destruct (IH b x HconnTail HmonoTail Htailx)
-        as [q [[s [Hs Hon]] Hqx]].
+        as [q [[seg [Hseg Hon]] Hqx]].
       exists q. split.
-      * exists s. split; [now right | exact Hon].
+      * exists seg. split; [now right | exact Hon].
       * exact Hqx.
 Qed.
 
-(* x が始点から終点へ増えるセグメント上では、各点の x もその間にある。 *)
-Lemma x_monotone_segment_point_bounds :
-  forall s p,
-    x_monotone_seg s ->
-    onSegment s p ->
-    init_x s <= fst p <= term_x s.
-Proof.
-  intros seg p Hmono [t [[Ht0 Ht1] Hpoint]]. subst p.
-  unfold x_monotone_seg, init_x, term_x in Hmono.
-  destruct (x_strictly_monotone_seg seg) as [Hinc | Hdec].
-  - split.
-    + destruct (Req_dec t 0) as [-> | Ht]; [right; reflexivity |].
-      left. apply Hinc. lra.
-    + destruct (Req_dec t 1) as [-> | Ht]; [right; reflexivity |].
-      left. apply Hinc. lra.
-  - exfalso.
-    pose proof (Hdec 0 1 ltac:(lra)) as Hbackwards.
-    change (fst (point seg 0) < fst (point seg 1)) in Hmono.
-    change (fst (point seg 1) < fst (point seg 0)) in Hbackwards.
-    lra.
-Qed.
+Definition EndpointClassifier : Type := Point -> Region.
 
-(* 一つの x 単調セグメントは同じ x 座標を二度取らない。 *)
-Lemma x_monotone_segment_same_x_unique :
-  forall s p q,
-    x_monotone_seg s ->
-    onSegment s p ->
-    onSegment s q ->
-    fst p = fst q ->
-    p = q.
-Proof.
-  intros seg p q Hmono
-    [tp [[Htp0 Htp1] Hpointp]]
-    [tq [[Htq0 Htq1] Hpointq]] Hx.
-  subst p q.
-  destruct (x_strictly_monotone_seg seg) as [Hinc | Hdec];
-  destruct (total_order_T tp tq) as [[Hlt | Heq] | Hgt].
-  - pose proof (Hinc tp tq ltac:(lra)) as Hstrict. lra.
-  - now subst tq.
-  - pose proof (Hinc tq tp ltac:(lra)) as Hstrict. lra.
-  - pose proof (Hdec tp tq ltac:(lra)) as Hstrict. lra.
-  - now subst tq.
-  - pose proof (Hdec tq tp ltac:(lra)) as Hstrict. lra.
-Qed.
-
-(* 連結な x 単調列上の全点は、列全体の始終点 x の間にある。 *)
-Lemma connected_x_monotone_point_bounds :
-  forall ls p,
-    ls <> [] ->
-    connected ls ->
-    x_monotone_segs ls ->
-    onSegmentlist ls p ->
-    init_x (hd_segment ls) <= fst p <= term_x (last_segment ls).
-Proof.
-  induction ls as [|a tail IH]; intros p Hne Hconn Hmono
-    [seg [Hin Hon]]; [contradiction |].
-  destruct tail as [|b rest].
-  - simpl in Hin. destruct Hin as [<- | Hin]; [|contradiction].
-    simpl. apply x_monotone_segment_point_bounds; [|exact Hon].
-    apply Hmono. now left.
-  - assert (Hab : term a = init b).
-    { apply (Hconn 0%nat a b); reflexivity. }
-    assert (HconnTail : connected (b :: rest)).
-    { intros i s1 s2 H1 H2.
-      apply (Hconn (S i) s1 s2); simpl; assumption. }
-    assert (HmonoTail : x_monotone_segs (b :: rest)).
-    { intros s Hs. apply Hmono. now right. }
-    assert (Hlast :
-      last_segment (a :: b :: rest) = last_segment (b :: rest)).
-    { change (last_segment ([a] ++ b :: rest) = last_segment (b :: rest)).
-      apply last_app_nonnil. discriminate. }
-    destruct Hin as [Hseg | Hseg].
-    + subst seg.
-      pose proof (x_monotone_segment_point_bounds a p
-                    (Hmono a ltac:(now left)) Hon) as [Hleft Hpa].
-      pose proof (connected_x_monotone_endpoints
-                    (b :: rest) ltac:(discriminate)
-                    HconnTail HmonoTail) as Htail.
-      simpl. rewrite Hlast. split; [exact Hleft |].
-      change (fst p <= fst (term a)) in Hpa.
-      change (fst (init b) < fst (term (last_segment (b :: rest))))
-        in Htail.
-      change (fst p <= fst (term (last_segment (b :: rest)))).
-      rewrite Hab in Hpa. lra.
-    + pose proof (IH p ltac:(discriminate) HconnTail HmonoTail
-                    (ex_intro _ seg (conj Hseg Hon))) as [Hbp Hright].
-      pose proof (Hmono a ltac:(now left)) as Ha.
-      simpl. rewrite Hlast. split; [|exact Hright].
-      change (fst (init a) < fst (term a)) in Ha.
-      change (fst (init b) <= fst p) in Hbp.
-      change (fst (init a) <= fst p).
-      rewrite Hab in Ha. lra.
-Qed.
-
-Lemma x_monotone_sub_point_rect_bounds :
-  forall sub p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    onSegmentlist sub p ->
-    rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub).
-Proof.
-  intros sub p Hne Hconn Hmono Hp.
-  pose proof (connected_x_monotone_point_bounds
-                sub p Hne Hconn Hmono Hp) as Hbounds.
-  pose proof (x_monotone_rect_x_bounds sub Hne Hconn Hmono)
-    as [Hleft Hright].
-  rewrite Hleft, Hright. exact Hbounds.
-Qed.
-
-(* 補正開始点が sub より外側なら、その側の補正は sub 上で発火しない。 *)
-Lemma outside_patch_start_does_not_force_on_sub :
-  forall sub p patch,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    onSegmentlist sub p ->
-    ((patch_side patch = CutLeft
-      /\ patch_start_x patch <= rx0 (rect_of sub))
-     \/ (patch_side patch = CutRight
-         /\ rx1 (rect_of sub) <= patch_start_x patch)) ->
-    patch_does_not_force_at patch p.
-Proof.
-  intros sub p [side start trace force inclusive]
-    Hne Hconn Hmono Hp Houtside.
-  left. unfold patch_active_at; simpl.
-  pose proof (x_monotone_sub_point_rect_bounds
-                sub p Hne Hconn Hmono Hp) as [Hleft Hright].
-  destruct side; simpl in Houtside |- *.
-  - destruct Houtside as [[_ Hstart] | [Hbad _]]; [|discriminate].
-    intro Hactive. apply (Rlt_irrefl (fst p)).
-    eapply Rlt_le_trans; [exact Hactive |].
-    eapply Rle_trans; [exact Hstart | exact Hleft].
-  - destruct Houtside as [[Hbad _] | [_ Hstart]]; [discriminate |].
-    intro Hactive. apply (Rlt_irrefl start).
-    eapply Rlt_le_trans; [exact Hactive |].
-    eapply Rle_trans; [exact Hright | exact Hstart].
-Qed.
-
-Lemma singleton_head_left_patch_does_not_force_on_sub :
-  forall s sub r p patch,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    connected ([s] ++ sub ++ r) ->
-    onSegmentlist sub p ->
-    make_end_patch [s] r HeadEnd CutLeft = Some patch ->
-    patch_does_not_force_at patch p.
-Proof.
-  intros s sub r p patch Hne Hconn Hmono Hwhole Hp Hpatch.
-  destruct (make_end_patch_side_and_start
-              [s] r HeadEnd CutLeft patch Hpatch)
-    as [seg [Hseg [Hside Hstart]]].
-  simpl in Hseg. injection Hseg as <-. simpl in Hstart.
-  pose proof (connected_app_junction [s] (sub ++ r)
-                Hwhole ltac:(discriminate)
-                ltac:(destruct sub; [contradiction | discriminate])) as Hjoin.
-  simpl in Hjoin.
-  destruct sub as [|a tail]; [contradiction |].
-  change (term s = init a) in Hjoin.
-  pose proof (x_monotone_rect_x_bounds
-                (a :: tail) ltac:(discriminate) Hconn Hmono) as [Hleft _].
-  apply (outside_patch_start_does_not_force_on_sub
-           (a :: tail) p patch); try assumption.
-  left. split; [exact Hside |].
-  rewrite Hstart, Hjoin, Hleft. reflexivity.
-Qed.
-
-Lemma singleton_last_right_patch_does_not_force_on_sub :
-  forall l sub s p patch,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    connected (l ++ sub ++ [s]) ->
-    onSegmentlist sub p ->
-    make_end_patch l [s] LastEnd CutRight = Some patch ->
-    patch_does_not_force_at patch p.
-Proof.
-  intros l sub s p patch Hne Hconn Hmono Hwhole Hp Hpatch.
-  destruct (make_end_patch_side_and_start
-              l [s] LastEnd CutRight patch Hpatch)
-    as [seg [Hseg [Hside Hstart]]].
-  simpl in Hseg. injection Hseg as <-. simpl in Hstart.
-  change (patch_start_x patch = fst (init s)) in Hstart.
-  assert (Hwhole' : connected ((l ++ sub) ++ [s])).
-  { replace ((l ++ sub) ++ [s]) with (l ++ (sub ++ [s])) by
-      apply app_assoc.
-    exact Hwhole. }
-  pose proof (connected_app_junction (l ++ sub) [s]
-                Hwhole'
-                ltac:(intro Hnil; apply app_eq_nil in Hnil as [_ Hsub]; contradiction)
-                ltac:(discriminate)) as Hjoin.
-  simpl in Hjoin.
-  rewrite last_app_nonnil in Hjoin by exact Hne.
-  change (term (last_segment sub) = init s) in Hjoin.
-  pose proof (x_monotone_rect_x_bounds sub Hne Hconn Hmono) as [_ Hright].
-  apply (outside_patch_start_does_not_force_on_sub sub p patch);
-    try assumption.
-  right. split; [exact Hside |].
-  rewrite Hstart, <- Hjoin, Hright. reflexivity.
-Qed.
-
-(* 左側の先頭補正で先頭が二本以上ある場合は、疎性と先頭延長線の
-   交差順序を結ぶ幾何が必要になる。 *)
-Lemma multi_head_left_patch_does_not_force_on_sub :
-  forall a b tail sub r p patch,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding ((a :: b :: tail) ++ sub ++ r) ->
-    connected ((a :: b :: tail) ++ sub ++ r) ->
-    onSegmentlist sub p ->
-    make_end_patch (a :: b :: tail) r HeadEnd CutLeft = Some patch ->
-    patch_does_not_force_at patch p.
-Admitted.
-
-(* 先頭の右側補正では、延長線と更新済み右境界の相対位置が本質的。 *)
-Lemma nonempty_head_right_patch_does_not_force_on_sub :
-  forall a tail sub r p patch,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding ((a :: tail) ++ sub ++ r) ->
-    connected ((a :: tail) ++ sub ++ r) ->
-    onSegmentlist sub p ->
-    make_end_patch (a :: tail) r HeadEnd CutRight = Some patch ->
-    patch_does_not_force_at patch p.
-Admitted.
-
-(* 末尾の左側補正は上の双対で、更新済み左境界との比較を要する。 *)
-Lemma nonempty_last_left_patch_does_not_force_on_sub :
-  forall l sub a tail p patch,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ (a :: tail)) ->
-    connected (l ++ sub ++ (a :: tail)) ->
-    onSegmentlist sub p ->
-    make_end_patch l (a :: tail) LastEnd CutLeft = Some patch ->
-    patch_does_not_force_at patch p.
-Admitted.
-
-(* 右側の末尾補正で末尾が二本以上ある場合の双対的な幾何。 *)
-Lemma multi_last_right_patch_does_not_force_on_sub :
-  forall l sub a b tail p patch,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ (a :: b :: tail)) ->
-    connected (l ++ sub ++ (a :: b :: tail)) ->
-    onSegmentlist sub p ->
-    make_end_patch l (a :: b :: tail) LastEnd CutRight = Some patch ->
-    patch_does_not_force_at patch p.
-Admitted.
-
-(* end、左右、空/singleton/一般列を分けると、未証明なのは上の四つの
-   延長線・更新境界の幾何だけになる。 *)
-Lemma end_patch_does_not_force_on_sub :
-  forall l sub r p k side patch,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    onSegmentlist sub p ->
-    make_end_patch l r k side = Some patch ->
-    patch_does_not_force_at patch p.
-Proof.
-  intros l sub r p k side patch Hne Hconn Hmono Hsparse Hwhole Hp Hpatch.
-  destruct k, side.
-  - destruct l as [|a tail].
-    + unfold make_end_patch, end_segment in Hpatch. discriminate.
-    + destruct tail as [|b tail].
-      * eapply singleton_head_left_patch_does_not_force_on_sub; eauto.
-      * eapply multi_head_left_patch_does_not_force_on_sub; eauto.
-  - destruct l as [|a tail].
-    + unfold make_end_patch, end_segment in Hpatch. discriminate.
-    + eapply nonempty_head_right_patch_does_not_force_on_sub; eauto.
-  - destruct r as [|a tail].
-    + unfold make_end_patch, end_segment in Hpatch. discriminate.
-    + eapply nonempty_last_left_patch_does_not_force_on_sub; eauto.
-  - destruct r as [|a tail].
-    + unfold make_end_patch, end_segment in Hpatch. discriminate.
-    + destruct tail as [|b tail].
-      * eapply singleton_last_right_patch_does_not_force_on_sub; eauto.
-      * eapply multi_last_right_patch_does_not_force_on_sub; eauto.
-Qed.
-
-Lemma end_patches_do_not_force_on_sub :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    forall p,
-      onSegmentlist sub p ->
-      end_patches_do_not_force_at l r p.
-Proof.
-  intros l sub r Hne Hconn Hmono Hsparse Hwhole p Hp
-    k side patch Hpatch.
-  eapply end_patch_does_not_force_on_sub; eauto.
-Qed.
-
-(* 連結な x 単調列は各 x 座標に高々一つの点を持つ。 *)
-Lemma x_monotone_sub_point_unique :
-  forall sub p q,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    onSegmentlist sub p ->
-    onSegmentlist sub q ->
-    fst p = fst q ->
-    p = q.
-Proof.
-  induction sub as [|a tail IH]; intros p q Hne Hconn Hmono
-    [sp [Hsp Hp]] [sq [Hsq Hq]] Hx; [contradiction |].
-  destruct tail as [|b rest].
-  - simpl in Hsp, Hsq.
-    destruct Hsp as [<- | Hsp], Hsq as [<- | Hsq];
-      try contradiction.
-    eapply x_monotone_segment_same_x_unique; eauto.
-    apply Hmono. now left.
-  - assert (Hab : term a = init b).
-    { apply (Hconn 0%nat a b); reflexivity. }
-    assert (HconnTail : connected (b :: rest)).
-    { intros i s1 s2 H1 H2.
-      apply (Hconn (S i) s1 s2); simpl; assumption. }
-    assert (HmonoTail : x_monotone_segs (b :: rest)).
-    { intros s Hs. apply Hmono. now right. }
-    destruct Hsp as [Hsp | Hsp], Hsq as [Hsq | Hsq].
-    + subst sp sq. eapply x_monotone_segment_same_x_unique; eauto.
-      apply Hmono. now left.
-    + subst sp.
-      pose proof (x_monotone_segment_point_bounds a p
-                    (Hmono a ltac:(now left)) Hp) as [_ Hpa].
-      pose proof (connected_x_monotone_point_bounds
-                    (b :: rest) q ltac:(discriminate)
-                    HconnTail HmonoTail
-                    (ex_intro _ sq (conj Hsq Hq))) as [Hbq _].
-      change (fst p <= fst (term a)) in Hpa.
-      change (fst (init b) <= fst q) in Hbq.
-      assert (Hpx : fst p = fst (term a)) by
-        (rewrite <- Hab in Hbq; lra).
-      assert (Hqx : fst q = fst (init b)) by
-        (rewrite <- Hab; lra).
-      assert (Hpterm : p = term a).
-      { exact (x_monotone_segment_same_x_unique a p (term a)
-                 (Hmono a ltac:(now left)) Hp (onTerm a) Hpx). }
-      assert (Hqinit : q = init b).
-      { eapply (IH q (init b) ltac:(discriminate)
-                  HconnTail HmonoTail).
-        - exists sq. now split.
-        - exists b. split; [now left | apply onInit].
-        - exact Hqx. }
-      now rewrite Hpterm, Hqinit, Hab.
-    + subst sq.
-      pose proof (connected_x_monotone_point_bounds
-                    (b :: rest) p ltac:(discriminate)
-                    HconnTail HmonoTail
-                    (ex_intro _ sp (conj Hsp Hp))) as [Hbp _].
-      pose proof (x_monotone_segment_point_bounds a q
-                    (Hmono a ltac:(now left)) Hq) as [_ Hqa].
-      change (fst (init b) <= fst p) in Hbp.
-      change (fst q <= fst (term a)) in Hqa.
-      assert (Hqx : fst q = fst (term a)) by
-        (rewrite <- Hab in Hbp; lra).
-      assert (Hpx : fst p = fst (init b)) by
-        (rewrite <- Hab; lra).
-      assert (Hqterm : q = term a).
-      { exact (x_monotone_segment_same_x_unique a q (term a)
-                 (Hmono a ltac:(now left)) Hq (onTerm a) Hqx). }
-      assert (Hpinit : p = init b).
-      { eapply (IH p (init b) ltac:(discriminate)
-                  HconnTail HmonoTail).
-        - exists sp. now split.
-        - exists b. split; [now left | apply onInit].
-        - exact Hpx. }
-      now rewrite Hpinit, Hqterm, Hab.
-    + eapply (IH p q ltac:(discriminate) HconnTail HmonoTail).
-      * exists sp. now split.
-      * exists sq. now split.
-      * exact Hx.
-Qed.
-
-Lemma choose_sub_y_eq :
-  forall sub p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    onSegmentlist sub p ->
-    choose_sub_y sub (fst p) = snd p.
-Proof.
-  intros sub p Hne Hconn Hmono Hp.
-  destruct p as [x y]. simpl in *.
-  assert (Hex : exists y0, onSegmentlist sub (x, y0)).
-  { exists y. exact Hp. }
-  pose proof (choose_sub_y_spec sub x Hex) as Hchosen.
-  pose proof (x_monotone_sub_point_unique sub
-                (x, choose_sub_y sub x) (x, y)
-                Hne Hconn Hmono Hchosen Hp eq_refl) as Heq.
-  now injection Heq.
-Qed.
-
-Lemma simple_height_on_sub :
-  forall sub p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    onSegmentlist sub p ->
-    simple_height sub (fst p) = snd p.
-Proof.
-  intros sub p Hne Hconn Hmono Hp.
-  pose proof (connected_x_monotone_point_bounds
-                sub p Hne Hconn Hmono Hp) as Hbounds.
-  pose proof (x_monotone_rect_x_bounds sub Hne Hconn Hmono)
-    as [Hleft Hright].
-  unfold simple_height.
-  destruct (Rlt_dec (fst p) (rx0 (rect_of sub))) as [Hlt | Hnlt].
-  - rewrite Hleft in Hlt. unfold init_x in Hbounds. lra.
-  - destruct (Rlt_dec (rx1 (rect_of sub)) (fst p)) as [Hlt | Hnlt'].
-    + rewrite Hright in Hlt. unfold term_x in Hbounds. lra.
-    + now apply choose_sub_y_eq.
-Qed.
-
-Lemma simple_classify_sub_fixed :
-  forall sub p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    onSegmentlist sub p ->
-    state_region (simple_classify_state sub) p = RegFix.
-Proof.
-  intros sub p Hne Hconn Hmono Hp.
-  unfold simple_classify_state, classify_at_height; simpl.
-  rewrite (simple_height_on_sub sub p Hne Hconn Hmono Hp).
-  destruct (Rlt_dec (snd p) (snd p)); [lra |].
-  destruct (Rlt_dec (snd p) (snd p)); [lra | reflexivity].
-Qed.
-
-(* sub 上で各 end 補正が発火しなければ、最終分類でも sub は固定される。 *)
-Lemma classify_sub_fixed_from_end_patch_safety :
-  forall l sub r p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    onSegmentlist sub p ->
-    end_patches_do_not_force_at l r p ->
-    classify l sub r p = RegFix.
-Proof.
-  intros l sub r p Hne Hconn Hmono Hp Hsafe.
-  rewrite (classify_eq_simple_when_end_patches_do_not_force
-             l sub r p Hsafe).
-  now apply simple_classify_sub_fixed.
-Qed.
-
-Lemma classify_without_sides_sub_fixed :
-  forall sub p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    onSegmentlist sub p ->
-    classify [] sub [] p = RegFix.
-Proof.
-  intros sub p Hne Hconn Hmono Hp.
-  rewrite classify_without_sides_eq_simple.
-  now apply simple_classify_sub_fixed.
-Qed.
-
-Lemma classify_at_height_same_x_monotone :
-  forall height p q,
-    fst p = fst q ->
-    snd p < snd q ->
-    region_at_or_above
-      (classify_at_height height q)
-      (classify_at_height height p).
-Proof.
-  intros height [xp yp] [xq yq] Hx Hy. simpl in Hx, Hy. subst xq.
-  unfold classify_at_height. simpl.
-  destruct (Rlt_dec yp (height xp)) as [Hpdown | Hpdown].
-  - destruct (Rlt_dec yq (height xp)) as [Hqdown | Hqdown].
-    + now left.
-    + destruct (Rlt_dec (height xp) yq) as [Hqup | Hqup].
-      * right. apply RegUp_above_Down.
-      * right. apply RegFix_above_Down.
-  - destruct (Rlt_dec (height xp) yp) as [Hpup | Hpup].
-    + destruct (Rlt_dec yq (height xp)) as [Hqdown | Hqdown]; [lra |].
-      destruct (Rlt_dec (height xp) yq) as [Hqup | Hqup]; [now left | lra].
-    + destruct (Rlt_dec yq (height xp)) as [Hqdown | Hqdown]; [lra |].
-      destruct (Rlt_dec (height xp) yq) as [Hqup | Hqup].
-      * right. apply RegUp_above_Fix.
-      * lra.
-Qed.
-
-Lemma simple_classify_same_x_monotone :
-  forall sub p q,
-    fst p = fst q ->
-    snd p < snd q ->
-    region_at_or_above
-      (state_region (simple_classify_state sub) q)
-      (state_region (simple_classify_state sub) p).
-Proof.
-  intros sub p q Hx Hy.
-  exact (classify_at_height_same_x_monotone
-           (simple_height sub) p q Hx Hy).
-Qed.
-
-Definition vertically_monotone_region (f : Point -> Region) : Prop :=
-  forall p q,
-    fst p = fst q ->
-    snd p < snd q ->
-    region_at_or_above (f q) (f p).
-
-Lemma apply_region_patch_preserves_vertical_monotonicity :
-  forall old patch,
-    vertically_monotone_region old ->
-    vertically_monotone_region (apply_region_patch old patch).
-Proof.
-  intros old [side start trace force inclusive] Hold
-    [xp yp] [xq yq] Hx Hy.
-  simpl in Hx, Hy. subst xq.
-  unfold apply_region_patch. simpl.
-  destruct (patch_active_dec
-              {| patch_side := side;
-                 patch_start_x := start;
-                 patch_reference := trace;
-                 patch_force := force;
-                 patch_inclusive := inclusive |} xp) as [Hactive | Hinactive].
-  2: apply Hold; simpl; lra.
-  destruct (trace_height trace xp) as [reference_y |] eqn:Hheight.
-  2: apply Hold; simpl; lra.
-  destruct force, inclusive;
-    cbn [patch_forces_dec patch_forces_at forced_region].
-  - destruct (Rle_dec reference_y yp) as [Hp | Hp];
-    destruct (Rle_dec reference_y yq) as [Hq | Hq]; simpl.
-    + now left.
-    + lra.
-    + destruct (old (xp, yp));
-        [right; apply RegUp_above_Fix | now left | right; apply RegUp_above_Down].
-    + apply Hold; simpl; lra.
-  - destruct (Rlt_dec reference_y yp) as [Hp | Hp];
-    destruct (Rlt_dec reference_y yq) as [Hq | Hq]; simpl.
-    + now left.
-    + lra.
-    + destruct (old (xp, yp));
-        [right; apply RegUp_above_Fix | now left | right; apply RegUp_above_Down].
-    + apply Hold; simpl; lra.
-  - destruct (Rle_dec yp reference_y) as [Hp | Hp];
-    destruct (Rle_dec yq reference_y) as [Hq | Hq]; simpl.
-    + now left.
-    + destruct (old (xp, yq));
-        [right; apply RegFix_above_Down | right; apply RegUp_above_Down | now left].
-    + lra.
-    + apply Hold; simpl; lra.
-  - destruct (Rlt_dec yp reference_y) as [Hp | Hp];
-    destruct (Rlt_dec yq reference_y) as [Hq | Hq]; simpl.
-    + now left.
-    + destruct (old (xp, yq));
-        [right; apply RegFix_above_Down | right; apply RegUp_above_Down | now left].
-    + lra.
-    + apply Hold; simpl; lra.
-Qed.
-
-Lemma apply_patch_preserves_vertical_monotonicity :
-  forall st patch,
-    vertically_monotone_region (state_region st) ->
-    vertically_monotone_region (state_region (apply_patch st patch)).
-Proof.
-  intros [region height] patch Hmono. simpl in *.
-  now apply apply_region_patch_preserves_vertical_monotonicity.
-Qed.
-
-Lemma simple_state_vertically_monotone :
-  forall sub,
-    vertically_monotone_region (state_region (simple_classify_state sub)).
-Proof.
-  intros sub p q Hx Hy.
-  now apply simple_classify_same_x_monotone.
-Qed.
-
-Lemma apply_end_at_preserves_vertical_monotonicity :
-  forall st l r k side,
-    vertically_monotone_region (state_region st) ->
-    vertically_monotone_region
-      (state_region (apply_end_at st l r k side)).
-Proof.
-  intros st l r k side Hmono. unfold apply_end_at.
-  destruct (make_end_patch l r k side) as [patch |];
-    [now apply apply_patch_preserves_vertical_monotonicity | exact Hmono].
-Qed.
-
-Lemma process_end_preserves_vertical_monotonicity :
-  forall st l sub r k side,
-    vertically_monotone_region (state_region st) ->
-    vertically_monotone_region
-      (state_region (process_end st l sub r k side)).
-Proof.
-  intros st l sub r k side Hmono. unfold process_end.
-  destruct (nearest_end_crossing st l sub r k side);
-    [now apply apply_end_at_preserves_vertical_monotonicity | exact Hmono].
-Qed.
-
-Lemma process_both_ends_preserves_vertical_monotonicity :
-  forall st l sub r side,
-    vertically_monotone_region (state_region st) ->
-    vertically_monotone_region
-      (state_region (process_both_ends_on_side st l sub r side)).
-Proof.
-  intros st l sub r side Hmono.
-  unfold process_both_ends_on_side.
-  destruct (nearest_end_crossing st l sub r HeadEnd side) as [ph |];
-  destruct (nearest_end_crossing st l sub r LastEnd side) as [pl |].
-  - destruct (crossing_closer_dec side ph pl).
-    + apply process_end_preserves_vertical_monotonicity.
-      now apply apply_end_at_preserves_vertical_monotonicity.
-    + apply process_end_preserves_vertical_monotonicity.
-      now apply apply_end_at_preserves_vertical_monotonicity.
-  - now apply apply_end_at_preserves_vertical_monotonicity.
-  - now apply apply_end_at_preserves_vertical_monotonicity.
-  - exact Hmono.
-Qed.
-
-Lemma build_classify_state_vertically_monotone :
-  forall l sub r,
-    vertically_monotone_region
-      (state_region (build_classify_state l sub r)).
-Proof.
-  intros l sub r. unfold build_classify_state.
-  apply process_both_ends_preserves_vertical_monotonicity.
-  apply process_both_ends_preserves_vertical_monotonicity.
-  apply simple_state_vertically_monotone.
-Qed.
-
-Lemma classify_same_x_monotone :
-  forall l sub r p q,
-    fst p = fst q ->
-    snd p < snd q ->
-    region_at_or_above
-      (classify l sub r q) (classify l sub r p).
-Proof.
-  intros l sub r p q Hx Hy.
-  exact (build_classify_state_vertically_monotone l sub r p q Hx Hy).
-Qed.
-
-(* 補正後の Fix は元の単純分類でも Fix なので、同じ x の Fix 点より
-   真に上（下）の非 Fix 点は最終分類でも Up（Down）になる。 *)
-Lemma classify_above_fixed_is_up :
-  forall l sub r p q,
-    fst p = fst q ->
-    snd q < snd p ->
-    classify l sub r q = RegFix ->
-    state_region (simple_classify_state sub) p <> RegFix ->
-    classify l sub r p = RegUp.
-Proof.
-  intros l sub r p q Hx Hy Hq Hsimple.
-  pose proof (classify_same_x_monotone l sub r q p
-                ltac:(now symmetry) Hy) as Horder.
-  rewrite Hq in Horder.
-  destruct (classify l sub r p) eqn:Hp.
-  - exfalso. apply Hsimple.
-    now apply (classify_fix_implies_simple_fix l sub r p).
-  - reflexivity.
-  - destruct Horder as [Heq | Habove]; [discriminate | inversion Habove].
-Qed.
-
-Lemma classify_below_fixed_is_down :
-  forall l sub r p q,
-    fst p = fst q ->
-    snd p < snd q ->
-    classify l sub r q = RegFix ->
-    state_region (simple_classify_state sub) p <> RegFix ->
-    classify l sub r p = RegDown.
-Proof.
-  intros l sub r p q Hx Hy Hq Hsimple.
-  pose proof (classify_same_x_monotone l sub r p q Hx Hy) as Horder.
-  rewrite Hq in Horder.
-  destruct (classify l sub r p) eqn:Hp.
-  - exfalso. apply Hsimple.
-    now apply (classify_fix_implies_simple_fix l sub r p).
-  - destruct Horder as [Heq | Habove]; [discriminate | inversion Habove].
-  - reflexivity.
-Qed.
-
-(* sub 固定性は、四つの end/side 場合に分けた補正非発火補題から従う。 *)
-Lemma classified_sub_fixed_from_construction :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    forall p, onSegmentlist sub p -> classify l sub r p = RegFix.
-Proof.
-  intros l sub r Hne Hconn Hmono Hsparse Hwhole p Hp.
-  eapply classify_sub_fixed_from_end_patch_safety; eauto.
-  now apply (end_patches_do_not_force_on_sub
-               l sub r Hne Hconn Hmono Hsparse Hwhole p Hp).
-Qed.
-
-(* sub と同じ x の点そのものの分類は、sub の固定性と鉛直単調性だけで
-   決まる。セグメント両端への伝播は別の幾何補題で扱う。 *)
-Lemma classify_above_sub_at_x :
-  forall l sub r p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    above_sub_at_x sub p ->
-    classify l sub r p = RegUp.
-Proof.
-  intros l sub r p Hne Hconn Hmono Hsparse Hwhole
-    [q [Hq [Hx Hy]]].
-  eapply classify_above_fixed_is_up with (q := q); eauto.
-  - now apply (classified_sub_fixed_from_construction
-                 l sub r Hne Hconn Hmono Hsparse Hwhole).
-  - assert (Hheight : simple_height sub (fst p) = snd q).
-    { rewrite Hx. now apply simple_height_on_sub. }
-    unfold simple_classify_state, classify_at_height; simpl.
-    rewrite Hheight.
-    destruct (Rlt_dec (snd p) (snd q)); [lra |].
-    destruct (Rlt_dec (snd q) (snd p)); [discriminate | lra].
-Qed.
-
-Lemma classify_below_sub_at_x :
-  forall l sub r p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    below_sub_at_x sub p ->
-    classify l sub r p = RegDown.
-Proof.
-  intros l sub r p Hne Hconn Hmono Hsparse Hwhole
-    [q [Hq [Hx Hy]]].
-  eapply classify_below_fixed_is_down with (q := q); eauto.
-  - now apply (classified_sub_fixed_from_construction
-                 l sub r Hne Hconn Hmono Hsparse Hwhole).
-  - assert (Hheight : simple_height sub (fst p) = snd q).
-    { rewrite Hx. now apply simple_height_on_sub. }
-    unfold simple_classify_state, classify_at_height; simpl.
-    rewrite Hheight.
-    destruct (Rlt_dec (snd p) (snd q)); [discriminate |].
-    destruct (Rlt_dec (snd q) (snd p)); [lra | lra].
-Qed.
-
-(* 各セグメントと現在の境界の交差順序。primitive の8場合に帰着するが、
-   更新済み境界を横切る場合の中間値議論を残す。 *)
-Lemma classified_segment_endpoints_monotone_from_construction :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    forall seg,
-      In seg (l ++ sub ++ r) ->
-      (snd (init seg) < snd (term seg) ->
-        region_at_or_above
-          (classify l sub r (term seg)) (classify l sub r (init seg)))
-      /\
-      (snd (term seg) < snd (init seg) ->
-        region_at_or_above
-          (classify l sub r (init seg)) (classify l sub r (term seg))).
-Admitted.
-
-(* 非隣接長方形の上下分離を分類順序へ移す部分。 *)
-Lemma classified_nonadjacent_endpoint_order_from_construction :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    forall i j s t ps pt,
-      nth_error (l ++ sub ++ r) i = Some s ->
-      nth_error (l ++ sub ++ r) j = Some t ->
-      (S i < j \/ S j < i)%nat ->
-      segment_x_ranges_overlap s t ->
-      endpoint_of_seg s ps ->
-      endpoint_of_seg t pt ->
-      snd ps <= snd pt ->
-      region_at_or_above (classify l sub r pt) (classify l sub r ps).
-Admitted.
-
-(* sub の同じ x に点を持つ非隣接セグメントについて、疎性から長方形の
-   上下どちら側に全端点があるかを確定する部分。 *)
-Lemma classified_segment_at_sub_x_from_construction :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    forall seg p,
-      In seg (nonadjacent_sides l r) ->
-      onSegment seg p ->
-      in_sub_x_range sub p ->
-      (above_sub_at_x sub p ->
-         classify l sub r (init seg) = RegUp
-         /\ classify l sub r (term seg) = RegUp)
-      /\
-      (below_sub_at_x sub p ->
-         classify l sub r (init seg) = RegDown
-         /\ classify l sub r (term seg) = RegDown).
-Admitted.
-
-(* strict 延長線が sub の x 範囲へ入る場合の先頭基点分類。 *)
-Lemma classified_head_extension_at_sub_x_from_construction :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    forall p,
-      onHead_extend_strict (l ++ sub ++ r) p ->
-      rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub) ->
-      classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegUp
-      \/ classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegDown.
-Admitted.
-
-(* 上の末尾側の双対。 *)
-Lemma classified_last_extension_at_sub_x_from_construction :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    forall p,
-      onLast_extend_strict (l ++ sub ++ r) p ->
-      rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub) ->
-      classify l sub r (term (last_segment (l ++ sub ++ r))) = RegUp
-      \/ classify l sub r (term (last_segment (l ++ sub ++ r))) = RegDown.
-Admitted.
-
-(* 同じ x にある先頭・末尾延長線の上下順序。 *)
-Lemma classified_head_last_extension_order_from_construction :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    forall ph pl,
-      onHead_extend (l ++ sub ++ r) ph ->
-      onLast_extend (l ++ sub ++ r) pl ->
-      fst ph = fst pl ->
-      (snd ph < snd pl ->
-         region_at_or_above
-           (classify l sub r (term (last_segment (l ++ sub ++ r))))
-           (classify l sub r (init (hd_segment (l ++ sub ++ r)))))
-      /\
-      (snd pl < snd ph ->
-         region_at_or_above
-           (classify l sub r (init (hd_segment (l ++ sub ++ r))))
-           (classify l sub r (term (last_segment (l ++ sub ++ r))))).
-Admitted.
-
-(* 先頭延長線と一セグメントの交差順序。 *)
-Lemma classified_head_segment_crossing_order_from_construction :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    forall seg e0 q,
-      In seg (l ++ sub ++ r) ->
-      onSegment seg e0 ->
-      onHead_extend_strict (l ++ sub ++ r) q ->
-      fst e0 = fst q ->
-      (snd q < snd e0 ->
-         region_at_or_above
-           (classify l sub r (init seg))
-           (classify l sub r (init (hd_segment (l ++ sub ++ r))))
-         /\ region_at_or_above
-           (classify l sub r (term seg))
-           (classify l sub r (init (hd_segment (l ++ sub ++ r)))))
-      /\
-      (snd e0 < snd q ->
-         region_at_or_above
-           (classify l sub r (init (hd_segment (l ++ sub ++ r))))
-           (classify l sub r (init seg))
-         /\ region_at_or_above
-           (classify l sub r (init (hd_segment (l ++ sub ++ r))))
-           (classify l sub r (term seg))).
-Admitted.
-
-(* 上の末尾側の双対。 *)
-Lemma classified_last_segment_crossing_order_from_construction :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    forall seg e0 q,
-      In seg (l ++ sub ++ r) ->
-      onSegment seg e0 ->
-      onLast_extend_strict (l ++ sub ++ r) q ->
-      fst e0 = fst q ->
-      (snd q < snd e0 ->
-         region_at_or_above
-           (classify l sub r (init seg))
-           (classify l sub r (term (last_segment (l ++ sub ++ r))))
-         /\ region_at_or_above
-           (classify l sub r (term seg))
-           (classify l sub r (term (last_segment (l ++ sub ++ r)))))
-      /\
-      (snd e0 < snd q ->
-         region_at_or_above
-           (classify l sub r (term (last_segment (l ++ sub ++ r))))
-           (classify l sub r (init seg))
-         /\ region_at_or_above
-           (classify l sub r (term (last_segment (l ++ sub ++ r))))
-           (classify l sub r (term seg))).
-Admitted.
-
-(* 先頭補正表の8 primitive 場合から、異領域となる場合を傾き保存可能な
-   四形に限定する部分。 *)
-Lemma classified_head_slope_case_from_construction :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    l <> [] ->
-    classify l sub r (init (hd_segment l)) =
-      classify l sub r (term (hd_segment l))
-    \/ (classify l sub r (init (hd_segment l)) = RegUp
-        /\ (embed (s, w, cx) (hd_segment l)
-            \/ embed (s, e, cx) (hd_segment l)))
-    \/ (classify l sub r (init (hd_segment l)) = RegDown
-        /\ (embed (n, w, cc) (hd_segment l)
-            \/ embed (n, e, cc) (hd_segment l))).
-Admitted.
-
-(* 末尾補正表の双対。 *)
-Lemma classified_last_slope_case_from_construction :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    r <> [] ->
-    classify l sub r (init (last_segment r)) =
-      classify l sub r (term (last_segment r))
-    \/ (classify l sub r (term (last_segment r)) = RegUp
-        /\ (embed (n, w, cx) (last_segment r)
-            \/ embed (n, e, cx) (last_segment r)))
-    \/ (classify l sub r (term (last_segment r)) = RegDown
-        /\ (embed (s, w, cc) (last_segment r)
-            \/ embed (s, e, cc) (last_segment r))).
-Admitted.
-
-(* 一括公理ではなく、上で分離した幾何補題から仕様を組み立てる。 *)
-Lemma classify_spec :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    ClassificationSpec l sub r.
-Proof.
-  intros l sub r Hne Hconn Hmono Hsparse Hwhole. constructor.
-  - now apply classified_sub_fixed_from_construction.
-  - now apply classified_segment_endpoints_monotone_from_construction.
-  - now apply classified_nonadjacent_endpoint_order_from_construction.
-  - now apply classified_segment_at_sub_x_from_construction.
-  - now apply classified_head_extension_at_sub_x_from_construction.
-  - now apply classified_last_extension_at_sub_x_from_construction.
-  - now apply classified_head_last_extension_order_from_construction.
-  - now apply classified_head_segment_crossing_order_from_construction.
-  - now apply classified_last_segment_crossing_order_from_construction.
-  - now apply classified_head_slope_case_from_construction.
-  - now apply classified_last_slope_case_from_construction.
-Qed.
-
-(* 同じ x 上の具体的な分類単調性から、異なる領域の上下順序を逆に読む。 *)
-Lemma classified_vertical_order :
-  forall l sub r p q,
-    fst p = fst q ->
-    region_above (classify l sub r p) (classify l sub r q) ->
-    snd q < snd p.
-Proof.
-  intros l sub r p q Hx Habove.
-  destruct (total_order_T (snd q) (snd p)) as [[Hlt | Heq] | Hgt].
-  - exact Hlt.
-  - exfalso. apply (region_above_not_reverse _ _ Habove).
-    left. f_equal. destruct p as [xp yp], q as [xq yq].
-    simpl in Hx, Heq |- *. f_equal; lra.
-  - exfalso. apply (region_above_not_reverse _ _ Habove).
-    eapply classify_same_x_monotone; eauto.
-Qed.
-
+(* 分類された端点を高さ h だけ上下へ動かす。分類仕様でも同じ移動を使う。 *)
 Definition shift (h : R) (g : Region) (p : Point) : Point :=
   match g with
   | RegFix  => p
@@ -2068,6 +252,1062 @@ Proof.
     simpl; f_equal; ring.
 Qed.
 
+(* 先頭・末尾で本当に必要なのは、領域の形ではなく移動後にも指定した
+   側の傾きを保って再接続できることである。 *)
+Definition classified_init_slope_reconnectable
+    (classifier : EndpointClassifier) (h : R) (seg : Segment) : Prop :=
+  reconnect_init_slope
+    (shift h (classifier (init seg)) (init seg))
+    (shift h (classifier (term seg)) (term seg))
+    (orn_seg seg) (slope_init seg).
+
+Definition classified_term_slope_reconnectable
+    (classifier : EndpointClassifier) (h : R) (seg : Segment) : Prop :=
+  reconnect_term_slope
+    (shift h (classifier (init seg)) (init seg))
+    (shift h (classifier (term seg)) (term seg))
+    (orn_seg seg) (slope_term seg).
+
+Record ClassificationContext
+    (l sub r : list Segment) : Prop := {
+  context_sub_nonempty : sub <> [];
+  context_sub_connected : connected sub;
+  context_sub_x_monotone : x_monotone_segs sub;
+  context_sparse : sparse_embedding (l ++ sub ++ r);
+  context_whole_connected : connected (l ++ sub ++ r);
+  context_whole_embedded :
+    exists ds, embed_listDir ds (l ++ sub ++ r)
+}.
+
+(* 仕様の結論で分類する点は sub 上の点または端点だけである。
+   [p], [q], [e] は上下関係を示す幾何学的な証人であり分類しない。 *)
+Record ClassificationSpec
+    (l sub r : list Segment) {classifier : EndpointClassifier} : Prop := {
+  (* sub は全点を固定する。特に左右との接続端点も動かない。 *)
+  classified_sub_fixed :
+    forall p, onSegmentlist sub p -> classifier p = RegFix;
+
+  (* 一セグメントの上下の端点順序を移動後も保存する。 *)
+  classified_segment_endpoints_monotone :
+    forall seg,
+      In seg (l ++ sub ++ r) ->
+      (snd (init seg) < snd (term seg) ->
+        region_at_or_above (classifier (term seg)) (classifier (init seg)))
+      /\
+      (snd (term seg) < snd (init seg) ->
+        region_at_or_above (classifier (init seg)) (classifier (term seg)));
+
+  (* x 範囲が重なる非隣接セグメントの端点順序を保存する。 *)
+  classified_nonadjacent_endpoint_order :
+    forall i j s t ps pt,
+      nth_error (l ++ sub ++ r) i = Some s ->
+      nth_error (l ++ sub ++ r) j = Some t ->
+      (S i < j \/ S j < i)%nat ->
+      segment_x_ranges_overlap s t ->
+      endpoint_of_seg s ps ->
+      endpoint_of_seg t pt ->
+      snd ps <= snd pt ->
+      region_at_or_above (classifier pt) (classifier ps);
+
+  (* sub の x 範囲でその上側・下側を通る非隣接セグメントは、
+     両端を同じ外側へ動かす。 *)
+  classified_segment_at_sub_x :
+    forall seg p,
+      In seg (nonadjacent_sides l r) ->
+      onSegment seg p ->
+      in_sub_x_range sub p ->
+      (above_sub_at_x sub p ->
+         classifier (init seg) = RegUp
+         /\ classifier (term seg) = RegUp)
+      /\
+      (below_sub_at_x sub p ->
+         classifier (init seg) = RegDown
+         /\ classifier (term seg) = RegDown);
+
+  (* strict 先頭延長線が sub の x 範囲へ入るなら、その基点を動かす。 *)
+  classified_head_extension_at_sub_x :
+    forall p,
+      onHead_extend_strict (l ++ sub ++ r) p ->
+      rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub) ->
+      classifier (init (hd_segment (l ++ sub ++ r))) = RegUp
+      \/ classifier (init (hd_segment (l ++ sub ++ r))) = RegDown;
+
+  (* strict 末尾延長線についても、その基点を固定しない。 *)
+  classified_last_extension_at_sub_x :
+    forall p,
+      onLast_extend_strict (l ++ sub ++ r) p ->
+      rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub) ->
+      classifier (term (last_segment (l ++ sub ++ r))) = RegUp
+      \/ classifier (term (last_segment (l ++ sub ++ r))) = RegDown;
+
+  (* 同じ x にある先頭・末尾延長線の上下順序を基点分類へ移す。 *)
+  classified_head_last_extension_order :
+    forall ph pl,
+      onHead_extend (l ++ sub ++ r) ph ->
+      onLast_extend (l ++ sub ++ r) pl ->
+      fst ph = fst pl ->
+      (snd ph < snd pl ->
+         region_at_or_above
+           (classifier (term (last_segment (l ++ sub ++ r))))
+           (classifier (init (hd_segment (l ++ sub ++ r)))))
+      /\
+      (snd pl < snd ph ->
+         region_at_or_above
+           (classifier (init (hd_segment (l ++ sub ++ r))))
+           (classifier (term (last_segment (l ++ sub ++ r)))));
+
+  (* 先頭延長線と一セグメントの上下順序を三つの端点分類へ移す。 *)
+  classified_head_segment_crossing_order :
+    forall seg e q,
+      In seg (l ++ sub ++ r) ->
+      onSegment seg e ->
+      onHead_extend_strict (l ++ sub ++ r) q ->
+      fst e = fst q ->
+      (snd q < snd e ->
+         region_at_or_above
+           (classifier (init seg))
+           (classifier (init (hd_segment (l ++ sub ++ r))))
+         /\ region_at_or_above
+           (classifier (term seg))
+           (classifier (init (hd_segment (l ++ sub ++ r)))))
+      /\
+      (snd e < snd q ->
+         region_at_or_above
+           (classifier (init (hd_segment (l ++ sub ++ r))))
+           (classifier (init seg))
+         /\ region_at_or_above
+           (classifier (init (hd_segment (l ++ sub ++ r))))
+           (classifier (term seg)));
+
+  (* 末尾延長線についても同じ端点順序を要求する。 *)
+  classified_last_segment_crossing_order :
+    forall seg e q,
+      In seg (l ++ sub ++ r) ->
+      onSegment seg e ->
+      onLast_extend_strict (l ++ sub ++ r) q ->
+      fst e = fst q ->
+      (snd q < snd e ->
+         region_at_or_above
+           (classifier (init seg))
+           (classifier (term (last_segment (l ++ sub ++ r))))
+         /\ region_at_or_above
+           (classifier (term seg))
+           (classifier (term (last_segment (l ++ sub ++ r)))))
+      /\
+      (snd e < snd q ->
+         region_at_or_above
+           (classifier (term (last_segment (l ++ sub ++ r))))
+           (classifier (init seg))
+         /\ region_at_or_above
+           (classifier (term (last_segment (l ++ sub ++ r))))
+           (classifier (term seg)));
+
+  (* 分類どおりに任意の非負高さだけ動かしても、先頭の始点傾きを保てる。 *)
+  classified_head_init_slope_reconnectable :
+    forall h,
+      0 <= h ->
+      l <> [] ->
+      classified_init_slope_reconnectable
+        classifier h (hd_segment l);
+
+  (* 末尾については終点傾きを保って再接続できる。 *)
+  classified_last_term_slope_reconnectable :
+    forall h,
+      0 <= h ->
+      r <> [] ->
+      classified_term_slope_reconnectable
+        classifier h (last_segment r)
+}.
+
+(* ----------------------------------------------------------------- *)
+(*  端点制約                                                         *)
+(* ----------------------------------------------------------------- *)
+
+(* [endpoint_order_step p q] は、q の領域を p の領域以上にする
+   直接の幾何学的制約を表す。 *)
+Inductive endpoint_order_step
+    (l sub r : list Segment) : Point -> Point -> Prop :=
+  | order_on_segment : forall seg p q,
+      In seg (l ++ sub ++ r) ->
+      endpoint_of_seg seg p ->
+      endpoint_of_seg seg q ->
+      snd p <= snd q ->
+      endpoint_order_step l sub r p q
+  (* この二形の先頭では、始点傾きを任意の高さで保つため両端を
+     同じ領域にする。通常の端点順序とは逆向きの制約だけを加える。 *)
+  | order_head_north_cx_reverse : forall hor,
+      l <> [] ->
+      embed (n, hor, cx) (hd_segment l) ->
+      endpoint_order_step l sub r
+        (term (hd_segment l)) (init (hd_segment l))
+  | order_head_south_cc_reverse : forall hor,
+      l <> [] ->
+      embed (s, hor, cc) (hd_segment l) ->
+      endpoint_order_step l sub r
+        (init (hd_segment l)) (term (hd_segment l))
+  (* 末尾側では、終点傾きを保つために必要な二形で逆向き制約を加える。 *)
+  | order_last_north_cc_reverse : forall hor,
+      r <> [] ->
+      embed (n, hor, cc) (last_segment r) ->
+      endpoint_order_step l sub r
+        (term (last_segment r)) (init (last_segment r))
+  | order_last_south_cx_reverse : forall hor,
+      r <> [] ->
+      embed (s, hor, cx) (last_segment r) ->
+      endpoint_order_step l sub r
+        (init (last_segment r)) (term (last_segment r))
+  | order_nonadjacent : forall i j s t ps pt,
+      nth_error (l ++ sub ++ r) i = Some s ->
+      nth_error (l ++ sub ++ r) j = Some t ->
+      (S i < j \/ S j < i)%nat ->
+      segment_x_ranges_overlap s t ->
+      endpoint_of_seg s ps ->
+      endpoint_of_seg t pt ->
+      snd ps <= snd pt ->
+      endpoint_order_step l sub r ps pt
+  | order_head_last : forall ph pl,
+      onHead_extend (l ++ sub ++ r) ph ->
+      onLast_extend (l ++ sub ++ r) pl ->
+      fst ph = fst pl ->
+      snd ph <= snd pl ->
+      endpoint_order_step l sub r
+        (init (hd_segment (l ++ sub ++ r)))
+        (term (last_segment (l ++ sub ++ r)))
+  | order_last_head : forall ph pl,
+      onHead_extend (l ++ sub ++ r) ph ->
+      onLast_extend (l ++ sub ++ r) pl ->
+      fst ph = fst pl ->
+      snd pl <= snd ph ->
+      endpoint_order_step l sub r
+        (term (last_segment (l ++ sub ++ r)))
+        (init (hd_segment (l ++ sub ++ r)))
+  | order_head_below_segment : forall seg e q p,
+      In seg (l ++ sub ++ r) ->
+      onSegment seg e ->
+      onHead_extend_strict (l ++ sub ++ r) q ->
+      fst e = fst q ->
+      snd q <= snd e ->
+      endpoint_of_seg seg p ->
+      endpoint_order_step l sub r
+        (init (hd_segment (l ++ sub ++ r))) p
+  | order_segment_below_head : forall seg e q p,
+      In seg (l ++ sub ++ r) ->
+      onSegment seg e ->
+      onHead_extend_strict (l ++ sub ++ r) q ->
+      fst e = fst q ->
+      snd e <= snd q ->
+      endpoint_of_seg seg p ->
+      endpoint_order_step l sub r p
+        (init (hd_segment (l ++ sub ++ r)))
+  | order_last_below_segment : forall seg e q p,
+      In seg (l ++ sub ++ r) ->
+      onSegment seg e ->
+      onLast_extend_strict (l ++ sub ++ r) q ->
+      fst e = fst q ->
+      snd q <= snd e ->
+      endpoint_of_seg seg p ->
+      endpoint_order_step l sub r
+        (term (last_segment (l ++ sub ++ r))) p
+  | order_segment_below_last : forall seg e q p,
+      In seg (l ++ sub ++ r) ->
+      onSegment seg e ->
+      onLast_extend_strict (l ++ sub ++ r) q ->
+      fst e = fst q ->
+      snd e <= snd q ->
+      endpoint_of_seg seg p ->
+      endpoint_order_step l sub r p
+        (term (last_segment (l ++ sub ++ r))).
+
+Definition endpoint_order (l sub r : list Segment) : Point -> Point -> Prop :=
+  clos_refl_trans Point (endpoint_order_step l sub r).
+
+(* sub より上を通るセグメントの両端と、sub より上を通る strict
+   延長線の基点が Up の種になる。 *)
+Definition endpoint_up_seed
+    (l sub r : list Segment) (p : Point) : Prop :=
+  endpoint_of (l ++ sub ++ r) p
+  /\
+  ((exists seg q,
+      In seg (nonadjacent_sides l r)
+      /\ endpoint_of_seg seg p
+      /\ onSegment seg q
+      /\ in_sub_x_range sub q
+      /\ above_sub_at_x sub q)
+   \/ (p = init (hd_segment (l ++ sub ++ r))
+       /\ exists q z,
+            onHead_extend_strict (l ++ sub ++ r) q
+            /\ onSegmentlist sub z
+            /\ fst q = fst z
+            /\ snd z < snd q)
+   \/ (p = term (last_segment (l ++ sub ++ r))
+       /\ exists q z,
+            onLast_extend_strict (l ++ sub ++ r) q
+            /\ onSegmentlist sub z
+            /\ fst q = fst z
+            /\ snd z < snd q)).
+
+Definition endpoint_down_seed
+    (l sub r : list Segment) (p : Point) : Prop :=
+  endpoint_of (l ++ sub ++ r) p
+  /\
+  ((exists seg q,
+      In seg (nonadjacent_sides l r)
+      /\ endpoint_of_seg seg p
+      /\ onSegment seg q
+      /\ in_sub_x_range sub q
+      /\ below_sub_at_x sub q)
+   \/ (p = init (hd_segment (l ++ sub ++ r))
+       /\ exists q z,
+            onHead_extend_strict (l ++ sub ++ r) q
+            /\ onSegmentlist sub z
+            /\ fst q = fst z
+            /\ snd q < snd z)
+   \/ (p = term (last_segment (l ++ sub ++ r))
+       /\ exists q z,
+            onLast_extend_strict (l ++ sub ++ r) q
+            /\ onSegmentlist sub z
+            /\ fst q = fst z
+            /\ snd q < snd z)).
+
+(* Up は順序の上向き、Down は順序の下向きへ閉じる。 *)
+Definition endpoint_forced_up
+    (l sub r : list Segment) (p : Point) : Prop :=
+  exists seed,
+    endpoint_up_seed l sub r seed
+    /\ endpoint_order l sub r seed p.
+
+Definition endpoint_forced_down
+    (l sub r : list Segment) (p : Point) : Prop :=
+  exists seed,
+    endpoint_down_seed l sub r seed
+    /\ endpoint_order l sub r p seed.
+
+Definition constraint_classifier
+    (l sub r : list Segment) (p : Point) : Region :=
+  if excluded_middle_informative (onSegmentlist sub p) then RegFix
+  else if excluded_middle_informative (endpoint_of (l ++ sub ++ r) p) then
+    if excluded_middle_informative (endpoint_forced_up l sub r p) then RegUp
+    else if excluded_middle_informative (endpoint_forced_down l sub r p)
+         then RegDown else RegFix
+  else RegFix.
+
+Definition classify := constraint_classifier.
+
+Lemma endpoint_forced_up_order : forall l sub r p q,
+  endpoint_order l sub r p q ->
+  endpoint_forced_up l sub r p ->
+  endpoint_forced_up l sub r q.
+Proof.
+  intros l sub r p q Hpq [seed [Hseed Hseedp]].
+  exists seed. split; [exact Hseed |].
+  eapply rt_trans; eauto.
+Qed.
+
+Lemma endpoint_forced_down_order : forall l sub r p q,
+  endpoint_order l sub r p q ->
+  endpoint_forced_down l sub r q ->
+  endpoint_forced_down l sub r p.
+Proof.
+  intros l sub r p q Hpq [seed [Hseed Hqseed]].
+  exists seed. split; [exact Hseed |].
+  eapply rt_trans; eauto.
+Qed.
+
+Lemma whole_nonempty : forall (l sub r : list Segment),
+  sub <> [] -> l ++ sub ++ r <> [].
+Proof.
+  intros l sub r Hsub Hnil.
+  apply app_eq_nil in Hnil as [_ Hnil].
+  apply app_eq_nil in Hnil as [Hbad _]. contradiction.
+Qed.
+
+Lemma head_endpoint_of : forall (ls : list Segment),
+  ls <> [] -> endpoint_of ls (init (hd_segment ls)).
+Proof.
+  intros [|a ls] Hne; [contradiction |].
+  exists a. split; [now left | now left].
+Qed.
+
+Lemma last_endpoint_of : forall (ls : list Segment),
+  ls <> [] -> endpoint_of ls (term (last_segment ls)).
+Proof.
+  intros ls Hne. exists (last_segment ls). split.
+  - now apply last_In.
+  - now right.
+Qed.
+
+Lemma nonadjacent_sides_in_whole : forall l sub r seg,
+  In seg (nonadjacent_sides l r) -> In seg (l ++ sub ++ r).
+Proof.
+  intros l sub r seg Hseg. unfold nonadjacent_sides in Hseg.
+  rewrite in_app_iff in Hseg. rewrite !in_app_iff.
+  destruct Hseg as [Hl | Hr].
+  - left. now apply in_removelast_in.
+  - right. right. destruct r as [|a r]; [contradiction |].
+    simpl in Hr |- *. now right.
+Qed.
+
+(* Up の種から Down の種または sub へは進めず、sub から
+   Down の種へも進めない。これが端点順序に残る中心的な幾何補題である。 *)
+Axiom endpoint_order_separates_sources :
+  forall l sub r,
+    ClassificationContext l sub r ->
+    forall upper lower,
+      ((endpoint_up_seed l sub r upper
+        /\ (endpoint_down_seed l sub r lower
+            \/ onSegmentlist sub lower))
+       \/ (onSegmentlist sub upper
+           /\ endpoint_down_seed l sub r lower)) ->
+      ~ endpoint_order l sub r upper lower.
+
+(* 上の分離補題により、一点が Up/Down の双方から強制されることはない。 *)
+Lemma endpoint_forcing_disjoint :
+  forall l sub r,
+    ClassificationContext l sub r ->
+    forall p,
+      ~ (endpoint_forced_up l sub r p
+         /\ endpoint_forced_down l sub r p).
+Proof.
+  intros l sub r Hctx p [[up [Hup Hupp]] [down [Hdown Hpdown]]].
+  apply (endpoint_order_separates_sources
+           l sub r Hctx up down (or_introl (conj Hup (or_introl Hdown)))).
+  eapply rt_trans; eauto.
+Qed.
+
+(* sub 上の点は、Up/Down のどちらの到達閉包にも入らない。 *)
+Lemma sub_points_not_forced :
+  forall l sub r,
+    ClassificationContext l sub r ->
+    forall p,
+      onSegmentlist sub p ->
+      ~ endpoint_forced_up l sub r p
+      /\ ~ endpoint_forced_down l sub r p.
+Proof.
+  intros l sub r Hctx p Hsub. split.
+  - intros [up [Hup Horder]].
+    exact (endpoint_order_separates_sources
+             l sub r Hctx up p
+             (or_introl (conj Hup (or_intror Hsub))) Horder).
+  - intros [down [Hdown Horder]].
+    exact (endpoint_order_separates_sources
+             l sub r Hctx p down
+             (or_intror (conj Hsub Hdown)) Horder).
+Qed.
+
+(* 元のセグメント自身が、元の両端点・向き・両傾きによる再接続を与える。 *)
+Lemma segment_reconnect_slope : forall seg,
+  reconnect_slope
+    (init seg) (term seg) (orn_seg seg) (slope_init seg) (slope_term seg).
+Proof.
+  intro seg.
+  apply (proj2 (reconnect_slope_spec _ _ _ _ _)).
+  exists seg. repeat split; reflexivity.
+Qed.
+
+(* 上下に並ぶ二領域では、上側の移動を差し引けば下側は下降し、
+   下側の移動を差し引けば上側は上昇する。 *)
+Lemma relative_shift_order : forall h lower upper p,
+  0 <= h ->
+  region_at_or_above upper lower ->
+  snd (translate_pt (opposite_translation (region_translation h upper))
+         (shift h lower p)) <= snd p
+  /\ snd p <=
+     snd (translate_pt (opposite_translation (region_translation h lower))
+            (shift h upper p)).
+Proof.
+  intros h lower upper [x y] Hh Horder.
+  destruct lower, upper; unfold shift, region_translation, translate_pt,
+    opposite_translation in *; simpl in *;
+    destruct Horder as [Horder | Horder];
+    try discriminate; try inversion Horder; split; lra.
+Qed.
+
+(* 両端が同じ領域なら、元のセグメントをそのまま平行移動できる。 *)
+Lemma classified_init_slope_same_region :
+  forall classifier h seg,
+    classifier (init seg) = classifier (term seg) ->
+    classified_init_slope_reconnectable classifier h seg.
+Proof.
+  intros classifier h seg Hsame.
+  unfold classified_init_slope_reconnectable.
+  rewrite <- Hsame, !shift_as_translation.
+  apply reconnect_init_slope_translate.
+  exists (slope_term seg). apply segment_reconnect_slope.
+Qed.
+
+(* 終点の移動を共通平行移動として取り除き、始点だけを下げる公理へ帰着する。 *)
+Lemma classified_init_slope_relative_lower :
+  forall classifier h seg,
+    0 <= h ->
+    region_at_or_above
+      (classifier (term seg)) (classifier (init seg)) ->
+    (forall p,
+      fst p = fst (init seg) ->
+      snd p <= snd (init seg) ->
+      reconnect_init_slope
+        p (term seg) (orn_seg seg) (slope_init seg)) ->
+    classified_init_slope_reconnectable classifier h seg.
+Proof.
+  intros classifier h seg Hh Horder Hlower.
+  set (gi := classifier (init seg)).
+  set (gt := classifier (term seg)).
+  set (v := region_translation h gt).
+  set (p0 := translate_pt (opposite_translation v) (shift h gi (init seg))).
+  assert (Hx : fst p0 = fst (init seg)).
+  { unfold p0, v, gi, gt, opposite_translation, translate_pt,
+      region_translation, shift.
+    destruct (classifier (init seg));
+      destruct (classifier (term seg)); destruct (init seg); simpl; ring. }
+  assert (Hy : snd p0 <= snd (init seg)).
+  { unfold p0, v, gi, gt.
+    exact (proj1 (relative_shift_order h gi gt (init seg) Hh Horder)). }
+  pose proof (reconnect_init_slope_translate
+                v p0 (term seg) (orn_seg seg) (slope_init seg)
+                (Hlower p0 Hx Hy)) as Htranslated.
+  assert (Hp : translate_pt v p0 = shift h gi (init seg)).
+  { unfold p0. apply translate_pt_opposite_left. }
+  assert (Hq : translate_pt v (term seg) = shift h gt (term seg)).
+  { unfold v. symmetry. apply shift_as_translation. }
+  unfold classified_init_slope_reconnectable.
+  fold gi gt. now rewrite <- Hp, <- Hq.
+Qed.
+
+(* 上向きの場合も、終点の移動を差し引いて始点だけの変形にする。 *)
+Lemma classified_init_slope_relative_upper :
+  forall classifier h seg,
+    0 <= h ->
+    region_at_or_above
+      (classifier (init seg)) (classifier (term seg)) ->
+    (forall p,
+      fst p = fst (init seg) ->
+      snd (init seg) <= snd p ->
+      reconnect_init_slope
+        p (term seg) (orn_seg seg) (slope_init seg)) ->
+    classified_init_slope_reconnectable classifier h seg.
+Proof.
+  intros classifier h seg Hh Horder Hraise.
+  set (gi := classifier (init seg)).
+  set (gt := classifier (term seg)).
+  set (v := region_translation h gt).
+  set (p0 := translate_pt (opposite_translation v) (shift h gi (init seg))).
+  assert (Hx : fst p0 = fst (init seg)).
+  { unfold p0, v, gi, gt, opposite_translation, translate_pt,
+      region_translation, shift.
+    destruct (classifier (init seg));
+      destruct (classifier (term seg)); destruct (init seg); simpl; ring. }
+  assert (Hy : snd (init seg) <= snd p0).
+  { unfold p0, v, gi, gt.
+    exact (proj2 (relative_shift_order h gt gi (init seg) Hh Horder)). }
+  pose proof (reconnect_init_slope_translate
+                v p0 (term seg) (orn_seg seg) (slope_init seg)
+                (Hraise p0 Hx Hy)) as Htranslated.
+  assert (Hp : translate_pt v p0 = shift h gi (init seg)).
+  { unfold p0. apply translate_pt_opposite_left. }
+  assert (Hq : translate_pt v (term seg) = shift h gt (term seg)).
+  { unfold v. symmetry. apply shift_as_translation. }
+  unfold classified_init_slope_reconnectable.
+  fold gi gt. now rewrite <- Hp, <- Hq.
+Qed.
+
+Lemma classified_term_slope_same_region :
+  forall classifier h seg,
+    classifier (init seg) = classifier (term seg) ->
+    classified_term_slope_reconnectable classifier h seg.
+Proof.
+  intros classifier h seg Hsame.
+  unfold classified_term_slope_reconnectable.
+  rewrite <- Hsame, !shift_as_translation.
+  apply reconnect_term_slope_translate.
+  exists (slope_init seg). apply segment_reconnect_slope.
+Qed.
+
+Lemma classified_term_slope_relative_upper :
+  forall classifier h seg,
+    0 <= h ->
+    region_at_or_above
+      (classifier (term seg)) (classifier (init seg)) ->
+    (forall p,
+      fst p = fst (term seg) ->
+      snd (term seg) <= snd p ->
+      reconnect_term_slope
+        (init seg) p (orn_seg seg) (slope_term seg)) ->
+    classified_term_slope_reconnectable classifier h seg.
+Proof.
+  intros classifier h seg Hh Horder Hraise.
+  set (gi := classifier (init seg)).
+  set (gt := classifier (term seg)).
+  set (v := region_translation h gi).
+  set (q0 := translate_pt (opposite_translation v) (shift h gt (term seg))).
+  assert (Hx : fst q0 = fst (term seg)).
+  { unfold q0, v, gi, gt, opposite_translation, translate_pt,
+      region_translation, shift.
+    destruct (classifier (init seg));
+      destruct (classifier (term seg)); destruct (term seg); simpl; ring. }
+  assert (Hy : snd (term seg) <= snd q0).
+  { unfold q0, v, gi, gt.
+    exact (proj2 (relative_shift_order h gi gt (term seg) Hh Horder)). }
+  pose proof (reconnect_term_slope_translate
+                v (init seg) q0 (orn_seg seg) (slope_term seg)
+                (Hraise q0 Hx Hy)) as Htranslated.
+  assert (Hp : translate_pt v (init seg) = shift h gi (init seg)).
+  { unfold v. symmetry. apply shift_as_translation. }
+  assert (Hq : translate_pt v q0 = shift h gt (term seg)).
+  { unfold q0. apply translate_pt_opposite_left. }
+  unfold classified_term_slope_reconnectable.
+  fold gi gt. now rewrite <- Hp, <- Hq.
+Qed.
+
+Lemma classified_term_slope_relative_lower :
+  forall classifier h seg,
+    0 <= h ->
+    region_at_or_above
+      (classifier (init seg)) (classifier (term seg)) ->
+    (forall p,
+      fst p = fst (term seg) ->
+      snd p <= snd (term seg) ->
+      reconnect_term_slope
+        (init seg) p (orn_seg seg) (slope_term seg)) ->
+    classified_term_slope_reconnectable classifier h seg.
+Proof.
+  intros classifier h seg Hh Horder Hlower.
+  set (gi := classifier (init seg)).
+  set (gt := classifier (term seg)).
+  set (v := region_translation h gi).
+  set (q0 := translate_pt (opposite_translation v) (shift h gt (term seg))).
+  assert (Hx : fst q0 = fst (term seg)).
+  { unfold q0, v, gi, gt, opposite_translation, translate_pt,
+      region_translation, shift.
+    destruct (classifier (init seg));
+      destruct (classifier (term seg)); destruct (term seg); simpl; ring. }
+  assert (Hy : snd q0 <= snd (term seg)).
+  { unfold q0, v, gi, gt.
+    exact (proj1 (relative_shift_order h gt gi (term seg) Hh Horder)). }
+  pose proof (reconnect_term_slope_translate
+                v (init seg) q0 (orn_seg seg) (slope_term seg)
+                (Hlower q0 Hx Hy)) as Htranslated.
+  assert (Hp : translate_pt v (init seg) = shift h gi (init seg)).
+  { unfold v. symmetry. apply shift_as_translation. }
+  assert (Hq : translate_pt v q0 = shift h gt (term seg)).
+  { unfold q0. apply translate_pt_opposite_left. }
+  unfold classified_term_slope_reconnectable.
+  fold gi gt. now rewrite <- Hp, <- Hq.
+Qed.
+
+Lemma endpoint_seed_forced_up : forall l sub r p,
+  endpoint_up_seed l sub r p -> endpoint_forced_up l sub r p.
+Proof.
+  intros l sub r p Hseed. exists p. split; [exact Hseed | apply rt_refl].
+Qed.
+
+Lemma endpoint_seed_forced_down : forall l sub r p,
+  endpoint_down_seed l sub r p -> endpoint_forced_down l sub r p.
+Proof.
+  intros l sub r p Hseed. exists p. split; [exact Hseed | apply rt_refl].
+Qed.
+
+Lemma classify_forced_up : forall l sub r p
+  (Hctx : ClassificationContext l sub r),
+  endpoint_of (l ++ sub ++ r) p ->
+  endpoint_forced_up l sub r p ->
+  classify l sub r p = RegUp.
+Proof.
+  intros l sub r p Hctx Hend Hup.
+  unfold classify, constraint_classifier.
+  destruct (excluded_middle_informative (onSegmentlist sub p)) as [Hsub | Hsub].
+  - exfalso. exact (proj1 (sub_points_not_forced l sub r Hctx p Hsub) Hup).
+  - destruct (excluded_middle_informative (endpoint_of (l ++ sub ++ r) p));
+      [|contradiction].
+    destruct (excluded_middle_informative (endpoint_forced_up l sub r p));
+      [reflexivity | contradiction].
+Qed.
+
+Lemma classify_forced_down : forall l sub r p
+  (Hctx : ClassificationContext l sub r),
+  endpoint_of (l ++ sub ++ r) p ->
+  endpoint_forced_down l sub r p ->
+  classify l sub r p = RegDown.
+Proof.
+  intros l sub r p Hctx Hend Hdown.
+  unfold classify, constraint_classifier.
+  destruct (excluded_middle_informative (onSegmentlist sub p)) as [Hsub | Hsub].
+  - exfalso. exact (proj2 (sub_points_not_forced l sub r Hctx p Hsub) Hdown).
+  - destruct (excluded_middle_informative (endpoint_of (l ++ sub ++ r) p));
+      [|contradiction].
+    destruct (excluded_middle_informative (endpoint_forced_up l sub r p))
+      as [Hup | Hup].
+    + exfalso. exact (endpoint_forcing_disjoint l sub r Hctx p (conj Hup Hdown)).
+    + destruct (excluded_middle_informative (endpoint_forced_down l sub r p));
+        [reflexivity | contradiction].
+Qed.
+
+Lemma classify_up_forced : forall l sub r p,
+  classify l sub r p = RegUp -> endpoint_forced_up l sub r p.
+Proof.
+  intros l sub r p Hclass.
+  unfold classify, constraint_classifier in Hclass.
+  repeat destruct excluded_middle_informative; try discriminate; assumption.
+Qed.
+
+Lemma classify_down_forced : forall l sub r p,
+  classify l sub r p = RegDown -> endpoint_forced_down l sub r p.
+Proof.
+  intros l sub r p Hclass.
+  unfold classify, constraint_classifier in Hclass.
+  repeat destruct excluded_middle_informative; try discriminate; assumption.
+Qed.
+
+Lemma endpoint_order_classified : forall l sub r p q,
+  ClassificationContext l sub r ->
+  endpoint_of (l ++ sub ++ r) p ->
+  endpoint_of (l ++ sub ++ r) q ->
+  endpoint_order l sub r p q ->
+  region_at_or_above (classify l sub r q) (classify l sub r p).
+Proof.
+  intros l sub r p q Hctx Hp Hq Horder.
+  destruct (classify l sub r p) eqn:Hcp;
+  destruct (classify l sub r q) eqn:Hcq.
+  - now left.
+  - now right; constructor.
+  - exfalso.
+    pose proof (classify_down_forced l sub r q Hcq) as Hdownq.
+    pose proof (endpoint_forced_down_order l sub r p q Horder Hdownq) as Hdownp.
+    pose proof (classify_forced_down l sub r p Hctx Hp Hdownp). congruence.
+  - exfalso.
+    pose proof (classify_up_forced l sub r p Hcp) as Hupp.
+    pose proof (endpoint_forced_up_order l sub r p q Horder Hupp) as Hupq.
+    pose proof (classify_forced_up l sub r q Hctx Hq Hupq). congruence.
+  - now left.
+  - exfalso.
+    pose proof (classify_up_forced l sub r p Hcp) as Hupp.
+    pose proof (endpoint_forced_up_order l sub r p q Horder Hupp) as Hupq.
+    pose proof (classify_forced_up l sub r q Hctx Hq Hupq). congruence.
+  - now right; constructor.
+  - now right; constructor.
+  - now left.
+Qed.
+
+(* 先頭を埋め込む PrimitiveSegment の四形ごとに、端点順序または
+   追加した逆向き制約を使って始点傾きの保存へ帰着する。 *)
+Lemma head_classification_preserves_init_slope :
+  forall l sub r,
+    ClassificationContext l sub r ->
+    forall h,
+      0 <= h ->
+      l <> [] ->
+      classified_init_slope_reconnectable
+        (classify l sub r) h (hd_segment l).
+Proof.
+  intros [|seg tail] sub r Hctx h Hh Hl; [contradiction |].
+  simpl in *.
+  destruct (context_whole_embedded (seg :: tail) sub r Hctx)
+    as [ds [sc [_ Hcurve]]].
+  destruct (embed_scurve_nth_embed
+              sc (seg :: tail ++ sub ++ r) Hcurve 0%nat seg eq_refl)
+    as [[[vert hor] curv] [_ Hembed]].
+  assert (HinitEnd : endpoint_of (seg :: tail ++ sub ++ r) (init seg)).
+  { exists seg. split; [now left | now left]. }
+  assert (HtermEnd : endpoint_of (seg :: tail ++ sub ++ r) (term seg)).
+  { exists seg. split; [now left | now right]. }
+  destruct vert, curv.
+  - (* north, convex: the added reverse constraint forces equal regions. *)
+    apply classified_init_slope_same_region.
+    apply region_at_or_above_antisym.
+    + eapply endpoint_order_classified; eauto.
+      apply rt_step. eapply order_head_north_cx_reverse; eauto.
+    + eapply endpoint_order_classified; eauto.
+      apply rt_step. eapply order_on_segment with (seg := seg).
+      * now left.
+      * now left.
+      * now right.
+      * pose proof (n_end_relation seg hor cx Hembed). lra.
+  - (* north, concave: the start moves weakly down relative to the end. *)
+    apply classified_init_slope_relative_lower; [exact Hh | |].
+    + eapply endpoint_order_classified; eauto.
+      apply rt_step. eapply order_on_segment with (seg := seg).
+      * now left.
+      * now left.
+      * now right.
+      * pose proof (n_end_relation seg hor cc Hembed). lra.
+    + destruct hor.
+      * intros p Hx Hy. eapply northeast_cc_lower_init_slope; eauto.
+      * intros p Hx Hy. eapply northwest_cc_lower_init_slope; eauto.
+  - (* south, convex: the start moves weakly up relative to the end. *)
+    apply classified_init_slope_relative_upper; [exact Hh | |].
+    + eapply endpoint_order_classified; eauto.
+      apply rt_step. eapply order_on_segment with (seg := seg).
+      * now left.
+      * now right.
+      * now left.
+      * pose proof (s_end_relation seg hor cx Hembed). lra.
+    + destruct hor.
+      * intros p Hx Hy. eapply southeast_cx_raise_init_slope; eauto.
+      * intros p Hx Hy. eapply southwest_cx_raise_init_slope; eauto.
+  - (* south, concave: the added reverse constraint forces equal regions. *)
+    apply classified_init_slope_same_region.
+    apply region_at_or_above_antisym.
+    + eapply endpoint_order_classified; eauto.
+      apply rt_step. eapply order_on_segment with (seg := seg).
+      * now left.
+      * now right.
+      * now left.
+      * pose proof (s_end_relation seg hor cc Hembed). lra.
+    + eapply endpoint_order_classified; eauto.
+      apply rt_step. eapply order_head_south_cc_reverse; eauto.
+Qed.
+
+(* 末尾では始点の移動を共通平行移動として除き、四形ごとに
+   終点だけの上下移動または同領域の平行移動へ帰着する。 *)
+Lemma last_classification_preserves_term_slope :
+  forall l sub r,
+    ClassificationContext l sub r ->
+    forall h,
+      0 <= h ->
+      r <> [] ->
+      classified_term_slope_reconnectable
+        (classify l sub r) h (last_segment r).
+Proof.
+  intros l sub [|first rest] Hctx h Hh Hr; [contradiction |].
+  set (seg := last_segment (first :: rest)).
+  assert (HinR : In seg (first :: rest)).
+  { unfold seg. apply last_In. discriminate. }
+  assert (HinWhole : In seg (l ++ sub ++ first :: rest)).
+  { rewrite !in_app_iff. tauto. }
+  destruct (context_whole_embedded l sub (first :: rest) Hctx)
+    as [ds [sc [_ Hcurve]]].
+  destruct (In_nth_error (l ++ sub ++ first :: rest) seg HinWhole)
+    as [i Hi].
+  destruct (embed_scurve_nth_embed
+              sc (l ++ sub ++ first :: rest) Hcurve i seg Hi)
+    as [[[vert hor] curv] [_ Hembed]].
+  assert (HinitEnd : endpoint_of (l ++ sub ++ first :: rest) (init seg)).
+  { exists seg. split; [exact HinWhole | now left]. }
+  assert (HtermEnd : endpoint_of (l ++ sub ++ first :: rest) (term seg)).
+  { exists seg. split; [exact HinWhole | now right]. }
+  destruct vert, curv.
+  - (* north, convex: the end moves weakly up relative to the start. *)
+    apply classified_term_slope_relative_upper; [exact Hh | |].
+    + eapply endpoint_order_classified; eauto.
+      apply rt_step. eapply order_on_segment with (seg := seg).
+      * exact HinWhole.
+      * now left.
+      * now right.
+      * pose proof (n_end_relation seg hor cx Hembed). lra.
+    + destruct hor.
+      * intros p Hx Hy. eapply northeast_cx_raise_term_slope; eauto.
+      * intros p Hx Hy. eapply northwest_cx_raise_term_slope; eauto.
+  - (* north, concave: the added reverse constraint forces equal regions. *)
+    apply classified_term_slope_same_region.
+    apply region_at_or_above_antisym.
+    + eapply endpoint_order_classified; eauto.
+      apply rt_step. eapply order_last_north_cc_reverse; eauto.
+    + eapply endpoint_order_classified; eauto.
+      apply rt_step. eapply order_on_segment with (seg := seg).
+      * exact HinWhole.
+      * now left.
+      * now right.
+      * pose proof (n_end_relation seg hor cc Hembed). lra.
+  - (* south, convex: the added reverse constraint forces equal regions. *)
+    apply classified_term_slope_same_region.
+    apply region_at_or_above_antisym.
+    + eapply endpoint_order_classified; eauto.
+      apply rt_step. eapply order_on_segment with (seg := seg).
+      * exact HinWhole.
+      * now right.
+      * now left.
+      * pose proof (s_end_relation seg hor cx Hembed). lra.
+    + eapply endpoint_order_classified; eauto.
+      apply rt_step. eapply order_last_south_cx_reverse; eauto.
+  - (* south, concave: the end moves weakly down relative to the start. *)
+    apply classified_term_slope_relative_lower; [exact Hh | |].
+    + eapply endpoint_order_classified; eauto.
+      apply rt_step. eapply order_on_segment with (seg := seg).
+      * exact HinWhole.
+      * now right.
+      * now left.
+      * pose proof (s_end_relation seg hor cc Hembed). lra.
+    + destruct hor.
+      * intros p Hx Hy. eapply southeast_cc_lower_term_slope; eauto.
+      * intros p Hx Hy. eapply southwest_cc_lower_term_slope; eauto.
+Qed.
+
+Lemma strict_extension_not_on_sub : forall l sub r p,
+  sparse_embedding (l ++ sub ++ r) ->
+  (onHead_extend_strict (l ++ sub ++ r) p
+   \/ onLast_extend_strict (l ++ sub ++ r) p) ->
+  onSegmentlist sub p -> False.
+Proof.
+  intros l sub r p Hsparse Hextend [seg [Hseg Hon]].
+  apply in_split in Hseg.
+  destruct Hseg as [sub_l [sub_r Hsub]]. subst sub.
+  assert (Hwhole :
+    l ++ (sub_l ++ seg :: sub_r) ++ r =
+    (l ++ sub_l) ++ [seg] ++ (sub_r ++ r)).
+  { repeat rewrite <- app_assoc. simpl. reflexivity. }
+  destruct (Hsparse (l ++ sub_l) seg (sub_r ++ r) Hwhole)
+    as [Havoid _].
+  apply (Havoid p).
+  - now rewrite <- Hwhole.
+  - change (in_segment_rect_or_endpoints seg p).
+    now apply segment_in_rect_or_endpoints.
+Qed.
+
+Lemma strict_extension_above_or_below_sub : forall l sub r p,
+  ClassificationContext l sub r ->
+  (onHead_extend_strict (l ++ sub ++ r) p
+   \/ onLast_extend_strict (l ++ sub ++ r) p) ->
+  in_sub_x_range sub p ->
+  above_sub_at_x sub p \/ below_sub_at_x sub p.
+Proof.
+  intros l sub r [xp yp] Hctx Hextend Hx.
+  destruct Hctx as [Hne Hconn Hmono Hsparse Hwhole Hembed].
+  destruct (x_monotone_sub_has_point sub xp Hne Hconn Hmono Hx)
+    as [[xz yz] [Hz Hxz]]. simpl in Hxz. subst xz.
+  assert (Hneq : yp <> yz).
+  { intros ->. eapply strict_extension_not_on_sub; eauto. }
+  destruct (total_order_T yp yz) as [[Hbelow | Heq] | Habove].
+  - right. exists (xp, yz). repeat split; assumption.
+  - contradiction.
+  - left. exists (xp, yz). repeat split; assumption.
+Qed.
+
+Lemma classify_spec :
+  forall l sub r,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    @ClassificationSpec l sub r (classify l sub r).
+Proof.
+  intros l sub r Hne Hconn Hmono Hsparse Hwhole Hembed.
+  pose (Hctx := Build_ClassificationContext
+                  l sub r Hne Hconn Hmono Hsparse Hwhole Hembed).
+  assert (HwholeNe : l ++ sub ++ r <> []) by now apply whole_nonempty.
+  constructor.
+  - intros p Hp. unfold classify, constraint_classifier.
+    destruct (excluded_middle_informative (onSegmentlist sub p));
+      [reflexivity | contradiction].
+  - intros seg Hseg. split; intros Hy.
+    + eapply endpoint_order_classified; eauto.
+      * exists seg. split; [exact Hseg | now left].
+      * exists seg. split; [exact Hseg | now right].
+      * apply rt_step. eapply order_on_segment with (seg := seg).
+        -- exact Hseg.
+        -- now left.
+        -- now right.
+        -- lra.
+    + eapply endpoint_order_classified; eauto.
+      * exists seg. split; [exact Hseg | now right].
+      * exists seg. split; [exact Hseg | now left].
+      * apply rt_step. eapply order_on_segment with (seg := seg).
+        -- exact Hseg.
+        -- now right.
+        -- now left.
+        -- lra.
+  - intros i j s0 t ps pt Hs Ht Hij Hover Hps Hpt Hy.
+    eapply endpoint_order_classified; eauto.
+    + exists s0. split; [eapply nth_error_In; eauto | exact Hps].
+    + exists t. split; [eapply nth_error_In; eauto | exact Hpt].
+    + apply rt_step.
+      exact (order_nonadjacent l sub r i j s0 t ps pt
+               Hs Ht Hij Hover Hps Hpt Hy).
+  - intros seg p Hseg Hon Hrange. split; intros Hside.
+    + split; apply (classify_forced_up l sub r _ Hctx).
+      * exists seg. split; [now apply nonadjacent_sides_in_whole | now left].
+      * apply endpoint_seed_forced_up. split.
+        -- exists seg. split; [now apply nonadjacent_sides_in_whole | now left].
+        -- left. exists seg, p. split; [exact Hseg |].
+           split; [now left |]. split; [exact Hon |].
+           split; assumption.
+      * exists seg. split; [now apply nonadjacent_sides_in_whole | now right].
+      * apply endpoint_seed_forced_up. split.
+        -- exists seg. split; [now apply nonadjacent_sides_in_whole | now right].
+        -- left. exists seg, p. split; [exact Hseg |].
+           split; [now right |]. split; [exact Hon |].
+           split; assumption.
+    + split; apply (classify_forced_down l sub r _ Hctx).
+      * exists seg. split; [now apply nonadjacent_sides_in_whole | now left].
+      * apply endpoint_seed_forced_down. split.
+        -- exists seg. split; [now apply nonadjacent_sides_in_whole | now left].
+        -- left. exists seg, p. split; [exact Hseg |].
+           split; [now left |]. split; [exact Hon |].
+           split; assumption.
+      * exists seg. split; [now apply nonadjacent_sides_in_whole | now right].
+      * apply endpoint_seed_forced_down. split.
+        -- exists seg. split; [now apply nonadjacent_sides_in_whole | now right].
+        -- left. exists seg, p. split; [exact Hseg |].
+           split; [now right |]. split; [exact Hon |].
+           split; assumption.
+  - intros p Hext Hrange.
+    destruct (strict_extension_above_or_below_sub l sub r p Hctx
+                (or_introl Hext) Hrange) as [Habove | Hbelow].
+    + left. apply (classify_forced_up l sub r _ Hctx).
+      * now apply head_endpoint_of.
+      * apply endpoint_seed_forced_up. split; [now apply head_endpoint_of |].
+        right; left. split; [reflexivity |].
+        destruct Habove as [z [Hz [Hx Hy]]].
+        exists p, z. repeat split; assumption.
+    + right. apply (classify_forced_down l sub r _ Hctx).
+      * now apply head_endpoint_of.
+      * apply endpoint_seed_forced_down. split; [now apply head_endpoint_of |].
+        right; left. split; [reflexivity |].
+        destruct Hbelow as [z [Hz [Hx Hy]]].
+        exists p, z. repeat split; assumption.
+  - intros p Hext Hrange.
+    destruct (strict_extension_above_or_below_sub l sub r p Hctx
+                (or_intror Hext) Hrange) as [Habove | Hbelow].
+    + left. apply (classify_forced_up l sub r _ Hctx).
+      * now apply last_endpoint_of.
+      * apply endpoint_seed_forced_up. split; [now apply last_endpoint_of |].
+        right; right. split; [reflexivity |].
+        destruct Habove as [z [Hz [Hx Hy]]].
+        exists p, z. repeat split; assumption.
+    + right. apply (classify_forced_down l sub r _ Hctx).
+      * now apply last_endpoint_of.
+      * apply endpoint_seed_forced_down. split; [now apply last_endpoint_of |].
+        right; right. split; [reflexivity |].
+        destruct Hbelow as [z [Hz [Hx Hy]]].
+        exists p, z. repeat split; assumption.
+  - intros ph pl Hph Hpl Hx. split; intros Hy.
+    + eapply endpoint_order_classified; eauto using head_endpoint_of, last_endpoint_of.
+      apply rt_step. eapply order_head_last; eauto. lra.
+    + eapply endpoint_order_classified; eauto using head_endpoint_of, last_endpoint_of.
+      apply rt_step. eapply order_last_head; eauto. lra.
+  - intros seg e q Hseg He Hq Hx. split; intros Hy; split.
+    + eapply endpoint_order_classified; eauto using head_endpoint_of.
+      * exists seg. split; [exact Hseg | now left].
+      * apply rt_step. eapply order_head_below_segment; eauto; [lra | now left].
+    + eapply endpoint_order_classified; eauto using head_endpoint_of.
+      * exists seg. split; [exact Hseg | now right].
+      * apply rt_step. eapply order_head_below_segment; eauto; [lra | now right].
+    + eapply endpoint_order_classified; eauto using head_endpoint_of.
+      * exists seg. split; [exact Hseg | now left].
+      * apply rt_step. eapply order_segment_below_head; eauto; [lra | now left].
+    + eapply endpoint_order_classified; eauto using head_endpoint_of.
+      * exists seg. split; [exact Hseg | now right].
+      * apply rt_step. eapply order_segment_below_head; eauto; [lra | now right].
+  - intros seg e q Hseg He Hq Hx. split; intros Hy; split.
+    + eapply endpoint_order_classified; eauto using last_endpoint_of.
+      * exists seg. split; [exact Hseg | now left].
+      * apply rt_step. eapply order_last_below_segment; eauto; [lra | now left].
+    + eapply endpoint_order_classified; eauto using last_endpoint_of.
+      * exists seg. split; [exact Hseg | now right].
+      * apply rt_step. eapply order_last_below_segment; eauto; [lra | now right].
+    + eapply endpoint_order_classified; eauto using last_endpoint_of.
+      * exists seg. split; [exact Hseg | now left].
+      * apply rt_step. eapply order_segment_below_last; eauto; [lra | now left].
+    + eapply endpoint_order_classified; eauto using last_endpoint_of.
+      * exists seg. split; [exact Hseg | now right].
+      * apply rt_step. eapply order_segment_below_last; eauto; [lra | now right].
+  - now apply head_classification_preserves_init_slope.
+  - now apply last_classification_preserves_term_slope.
+Qed.
+
+(* ================================================================= *)
+(*  2.  分類された端点の上下移動                                     *)
+(* ================================================================= *)
+
 Lemma shift_preserves_strict_vertical_order :
   forall h p q gp gq,
     0 < h ->
@@ -2080,84 +1320,17 @@ Proof.
   - destruct Habove; simpl in Hy |- *; lra.
 Qed.
 
-Lemma shift_preserves_vertical_order :
-  forall h p q gp gq,
-    0 < h ->
-    snd p <= snd q ->
-    region_at_or_above gq gp ->
-    snd (shift h gp p) <= snd (shift h gq q).
-Proof.
-  intros h [xp yp] [xq yq] gp gq Hh Hy [Heq | Habove].
-  - subst gq. destruct gp; simpl in Hy |- *; lra.
-  - destruct Habove; simpl in Hy |- *; lra.
-Qed.
-
 Definition operate_point
-  (l sub r : list Segment) (h : R) (p : Point) : Point :=
+    (l sub r : list Segment) (h : R) (p : Point) : Point :=
   shift h (classify l sub r p) p.
 
 Lemma shift_fst :
   forall h g p, fst (shift h g p) = fst p.
-Proof. intros h g p. destruct g; reflexivity. Qed.
+Proof. intros. destruct g; reflexivity. Qed.
 
 Lemma operate_point_fst :
   forall l sub r h p, fst (operate_point l sub r h p) = fst p.
 Proof. intros. unfold operate_point. apply shift_fst. Qed.
-
-(* 同じ x 上の分類単調性により、正の高さの上下移動は平面上で単射となる。 *)
-Lemma operate_point_injective :
-  forall l sub r h p q,
-    0 < h ->
-    operate_point l sub r h p = operate_point l sub r h q ->
-    p = q.
-Proof.
-  intros l sub r h [xp yp] [xq yq]
-    Hh Heq.
-  destruct (classify l sub r (xp, yp)) eqn:Hrp;
-  destruct (classify l sub r (xq, yq)) eqn:Hrq;
-  unfold operate_point, shift in Heq; rewrite Hrp, Hrq in Heq;
-  pose proof (f_equal fst Heq) as Hx;
-  pose proof (f_equal snd Heq) as Hy; simpl in Hx, Hy.
-  - f_equal; lra.
-  - exfalso.
-    pose proof (classified_vertical_order
-                  l sub r (xq, yq) (xp, yp)
-                  ltac:(symmetry; exact Hx)
-                  ltac:(rewrite Hrq, Hrp; constructor)) as Horder.
-    simpl in Horder. lra.
-  - exfalso.
-    pose proof (classified_vertical_order
-                  l sub r (xp, yp) (xq, yq)
-                  ltac:(exact Hx)
-                  ltac:(rewrite Hrp, Hrq; constructor)) as Horder.
-    simpl in Horder. lra.
-  - exfalso.
-    pose proof (classified_vertical_order
-                  l sub r (xp, yp) (xq, yq)
-                  ltac:(exact Hx)
-                  ltac:(rewrite Hrp, Hrq; constructor)) as Horder.
-    simpl in Horder. lra.
-  - f_equal; lra.
-  - exfalso.
-    pose proof (classified_vertical_order
-                  l sub r (xp, yp) (xq, yq)
-                  ltac:(exact Hx)
-                  ltac:(rewrite Hrp, Hrq; constructor)) as Horder.
-    simpl in Horder. lra.
-  - exfalso.
-    pose proof (classified_vertical_order
-                  l sub r (xq, yq) (xp, yp)
-                  ltac:(symmetry; exact Hx)
-                  ltac:(rewrite Hrq, Hrp; constructor)) as Horder.
-    simpl in Horder. lra.
-  - exfalso.
-    pose proof (classified_vertical_order
-                  l sub r (xq, yq) (xp, yp)
-                  ltac:(symmetry; exact Hx)
-                  ltac:(rewrite Hrq, Hrp; constructor)) as Horder.
-    simpl in Horder. lra.
-  - f_equal; lra.
-Qed.
 
 Lemma operate_point_RegFix :
   forall l sub r h p,
@@ -2174,13 +1347,14 @@ Lemma classify_sub_endpoint :
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
     connected (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
     endpoint_of sub p ->
     classify l sub r p = RegFix.
 Proof.
-  intros l sub r p Hne Hconn Hmono Hsparse Hwhole Hend.
+  intros l sub r p Hne Hconn Hmono Hsparse Hwhole Hembed Hend.
   exact (classified_sub_fixed
            l sub r
-           (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole)
+           (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole Hembed)
            p (endpoint_of_onSegmentlist sub p Hend)).
 Qed.
 
@@ -2191,10 +1365,11 @@ Lemma operate_sub_endpoint :
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
     connected (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
     endpoint_of sub p ->
     operate_point l sub r h p = p.
 Proof.
-  intros l sub r h p Hne Hconn Hmono Hsparse Hwhole Hend.
+  intros l sub r h p Hne Hconn Hmono Hsparse Hwhole Hembed Hend.
   apply operate_point_RegFix.
   now apply classify_sub_endpoint.
 Qed.
