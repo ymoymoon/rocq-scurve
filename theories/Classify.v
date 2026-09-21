@@ -924,54 +924,90 @@ Definition unsafe_up_point
     (sub : list Segment) (p : Point) : Prop :=
   in_sub_x_range sub p /\ at_or_below_sub_at_x sub p.
 
-(* x が増える向きに y も厳密に増える障壁。先頭・末尾延長を使う場合も
-   同じ順序を要求するため、[onExtendSegment] 上で直接定義する。 *)
+(* 障壁として選んだ trace が、先頭側と末尾側のどちらかを記録する。
+   Segment の値だけでは、同じ値の重複出現を区別できない。 *)
+Inductive BarrierEnd : Type := BarrierHead | BarrierLast.
+
+Definition barrier_segment (side : BarrierEnd) (whole : list Segment) : Segment :=
+  match side with
+  | BarrierHead => hd_segment whole
+  | BarrierLast => last_segment whole
+  end.
+
+Definition on_barrier_trace
+    (side : BarrierEnd) (whole : list Segment) (p : Point) : Prop :=
+  match side with
+  | BarrierHead => onHeadSegment (hd_segment whole) p
+  | BarrierLast => onLastSegment (last_segment whole) p
+  end.
+
+Lemma on_barrier_trace_onExtend : forall side whole p,
+  whole <> [] ->
+  on_barrier_trace side whole p ->
+  onExtendSegment whole (barrier_segment side whole) p.
+Proof.
+  intros side whole p Hwhole Htrace.
+  destruct side; cbn in *.
+  - destruct whole as [|head tail]; [contradiction|].
+    now apply OnSegHead.
+  - now apply OnSegLast.
+Qed.
+
+Lemma barrier_segment_In : forall side whole,
+  whole <> [] -> In (barrier_segment side whole) whole.
+Proof.
+  intros side whole Hwhole. destruct side; cbn.
+  - destruct whole as [|head tail]; [contradiction|]. now left.
+  - now apply last_In.
+Qed.
+
+(* x が増える向きに y も厳密に増える、選択済み end trace。 *)
 Definition right_rising_barrier
-    (whole : list Segment) (barrier : Segment) : Prop :=
+    (side : BarrierEnd) (whole : list Segment) : Prop :=
   forall p q,
-    onExtendSegment whole barrier p ->
-    onExtendSegment whole barrier q ->
+    on_barrier_trace side whole p ->
+    on_barrier_trace side whole q ->
     (fst p < fst q <-> snd p < snd q).
 
 (* 右側の障壁は左側と双対で、x が増えると y が厳密に下がる。 *)
 Definition right_falling_barrier
-    (whole : list Segment) (barrier : Segment) : Prop :=
+    (side : BarrierEnd) (whole : list Segment) : Prop :=
   forall p q,
-    onExtendSegment whole barrier p ->
-    onExtendSegment whole barrier q ->
+    on_barrier_trace side whole p ->
+    on_barrier_trace side whole q ->
     (fst p < fst q <-> snd q < snd p).
 
-(* 左側の点と init sub の間を、一つのセグメント出現（必要なら先頭・
-   末尾延長を含む）が閉じた高さ区間全体で塞ぐ。障壁は右上がりとし、
+(* 左側の点と init sub の間を、選んだ先頭または末尾 trace が
+   閉じた高さ区間全体で塞ぐ。障壁は右上がりとし、
    x は常に開区間内に置いて直接接続するセグメント自身を除く。 *)
 Definition left_vertical_guard_to_init
     (l sub r : list Segment) (p : Point) : Prop :=
   let whole := l ++ sub ++ r in
   let left := sub_left_anchor sub in
-  exists seg,
-    In seg whole
-    /\ right_rising_barrier whole seg
+  exists side,
+    whole <> []
+    /\ right_rising_barrier side whole
     /\ snd p < snd left
     /\ (forall y,
           snd p <= y <= snd left ->
           exists x,
             fst p < x < fst left
-            /\ onExtendSegment whole seg (x, y)).
+            /\ on_barrier_trace side whole (x, y)).
 
 (* 右側では term sub まで同じ障壁を張る。 *)
 Definition right_vertical_guard_to_term
     (l sub r : list Segment) (p : Point) : Prop :=
   let whole := l ++ sub ++ r in
   let right := sub_right_anchor sub in
-  exists seg,
-    In seg whole
-    /\ right_falling_barrier whole seg
+  exists side,
+    whole <> []
+    /\ right_falling_barrier side whole
     /\ snd p < snd right
     /\ (forall y,
           snd p <= y <= snd right ->
           exists x,
             fst right < x < fst p
-            /\ onExtendSegment whole seg (x, y)).
+            /\ on_barrier_trace side whole (x, y)).
 
 (* [p] の strict guard を構成するまさに同じ障壁に [q] が接触する。
    障壁の識別を失うと、無関係な別の障壁を選べてしまう。 *)
@@ -979,31 +1015,31 @@ Definition left_strict_guard_contact
     (l sub r : list Segment) (p q : Point) : Prop :=
   let whole := l ++ sub ++ r in
   let left := sub_left_anchor sub in
-  exists barrier,
-    In barrier whole
-    /\ right_rising_barrier whole barrier
+  exists side,
+    whole <> []
+    /\ right_rising_barrier side whole
     /\ snd p < snd left
     /\ (forall y,
           snd p <= y <= snd left ->
           exists x,
             fst p < x < fst left
-            /\ onExtendSegment whole barrier (x, y))
-    /\ onExtendSegment whole barrier q.
+            /\ on_barrier_trace side whole (x, y))
+    /\ on_barrier_trace side whole q.
 
 Definition right_strict_guard_contact
     (l sub r : list Segment) (p q : Point) : Prop :=
   let whole := l ++ sub ++ r in
   let right := sub_right_anchor sub in
-  exists barrier,
-    In barrier whole
-    /\ right_falling_barrier whole barrier
+  exists side,
+    whole <> []
+    /\ right_falling_barrier side whole
     /\ snd p < snd right
     /\ (forall y,
           snd p <= y <= snd right ->
           exists x,
             fst right < x < fst p
-            /\ onExtendSegment whole barrier (x, y))
-    /\ onExtendSegment whole barrier q.
+            /\ on_barrier_trace side whole (x, y))
+    /\ on_barrier_trace side whole q.
 
 (* 同一セグメントの上向き通常辺では、到達点は同じ障壁の左に
    残るか、障壁自身に到達する。右側へ突き抜けると自己交差になる。 *)
@@ -1024,7 +1060,7 @@ Proof.
     Hctx Hseg Hp Hq Hy Hguard Hqx Hqy.
   unfold left_vertical_guard_to_init in Hguard |- *.
   cbn in *.
-  destruct Hguard as [barrier [Hbarrier [Hrising [HpTop Hspan]]]].
+  destruct Hguard as [side [HbarWhole [Hrising [HpTop Hspan]]]].
   destruct (Hspan yp ltac:(lra)) as [xbp [[Hpxbp HbpLeft] Hbp]].
   destruct (Hspan yq ltac:(lra)) as [xbq [[Hpxbq HbqLeft] Hbq]].
   assert (Hwhole : l ++ sub ++ r <> []).
@@ -1036,7 +1072,7 @@ Proof.
   { apply OnSegMid; [exact Hwhole | exact Hseg |].
     destruct Hq as [-> | ->]; [apply onInit | apply onTerm]. }
   destruct (total_order_T xq xbq) as [[HqLeft | HqOn] | HqRight].
-  - left. exists barrier. split; [exact Hbarrier |].
+  - left. exists side. split; [exact HbarWhole |].
     split; [exact Hrising |].
     split; [exact Hqy |].
     intros y HyRange.
@@ -1049,15 +1085,24 @@ Proof.
       cbn in Hyy. lra. }
     exists xb. split; [lra | exact Hb].
   - right. unfold left_strict_guard_contact. cbn.
-    exists barrier. split; [exact Hbarrier |].
+    exists side. split; [exact HbarWhole |].
     split; [exact Hrising |].
     split; [exact HpTop |].
     split; [exact Hspan |].
     replace (xq, yq) with (xbq, yq) by now rewrite HqOn.
     exact Hbq.
   - exfalso. apply (context_whole_open l sub r Hctx).
+    assert (Hbarrier : In (barrier_segment side (l ++ sub ++ r))
+                           (l ++ sub ++ r))
+      by now apply barrier_segment_In.
+    assert (HbpExt : onExtendSegment (l ++ sub ++ r)
+                       (barrier_segment side (l ++ sub ++ r)) (xbp, yp))
+      by now apply on_barrier_trace_onExtend.
+    assert (HbqExt : onExtendSegment (l ++ sub ++ r)
+                       (barrier_segment side (l ++ sub ++ r)) (xbq, yq))
+      by now apply on_barrier_trace_onExtend.
     eapply x_cross_v with
-      (s1 := seg) (s2 := barrier)
+      (s1 := seg) (s2 := barrier_segment side (l ++ sub ++ r))
       (ya := yp) (yb := yq)
       (x1a := xp) (x1b := xq)
       (x2a := xbp) (x2b := xbq); eauto.
@@ -1083,7 +1128,7 @@ Proof.
     Hctx Hseg Hp Hq Hy Hguard Hqx Hqy.
   unfold right_vertical_guard_to_term in Hguard |- *.
   cbn in *.
-  destruct Hguard as [barrier [Hbarrier [Hfalling [HpTop Hspan]]]].
+  destruct Hguard as [side [HbarWhole [Hfalling [HpTop Hspan]]]].
   destruct (Hspan yp ltac:(lra)) as [xbp [[HbpRight HbpLeft] Hbp]].
   destruct (Hspan yq ltac:(lra)) as [xbq [[HbqRight HbqLeft] Hbq]].
   assert (Hwhole : l ++ sub ++ r <> []).
@@ -1095,7 +1140,7 @@ Proof.
   { apply OnSegMid; [exact Hwhole | exact Hseg |].
     destruct Hq as [-> | ->]; [apply onInit | apply onTerm]. }
   destruct (total_order_T xbq xq) as [[HqRight | HqOn] | HqLeft].
-  - left. exists barrier. split; [exact Hbarrier |].
+  - left. exists side. split; [exact HbarWhole |].
     split; [exact Hfalling |].
     split; [exact Hqy |].
     intros y HyRange.
@@ -1108,15 +1153,24 @@ Proof.
       cbn in Hyy. lra. }
     exists xb. split; [lra | exact Hb].
   - right. unfold right_strict_guard_contact. cbn.
-    exists barrier. split; [exact Hbarrier |].
+    exists side. split; [exact HbarWhole |].
     split; [exact Hfalling |].
     split; [exact HpTop |].
     split; [exact Hspan |].
     replace (xq, yq) with (xbq, yq) by now rewrite HqOn.
     exact Hbq.
   - exfalso. apply (context_whole_open l sub r Hctx).
+    assert (Hbarrier : In (barrier_segment side (l ++ sub ++ r))
+                           (l ++ sub ++ r))
+      by now apply barrier_segment_In.
+    assert (HbpExt : onExtendSegment (l ++ sub ++ r)
+                       (barrier_segment side (l ++ sub ++ r)) (xbp, yp))
+      by now apply on_barrier_trace_onExtend.
+    assert (HbqExt : onExtendSegment (l ++ sub ++ r)
+                       (barrier_segment side (l ++ sub ++ r)) (xbq, yq))
+      by now apply on_barrier_trace_onExtend.
     eapply x_cross_v with
-      (s1 := seg) (s2 := barrier)
+      (s1 := seg) (s2 := barrier_segment side (l ++ sub ++ r))
       (ya := yp) (yb := yq)
       (x1a := xp) (x1b := xq)
       (x2a := xbp) (x2b := xbq); eauto.
@@ -1202,14 +1256,14 @@ Definition up_path_invariant
       snd p < snd (sub_right_anchor sub) ->
       right_up_certificate l sub r p).
 
-Lemma right_rising_barrier_same_height_unique : forall whole barrier p q,
-  right_rising_barrier whole barrier ->
-  onExtendSegment whole barrier p ->
-  onExtendSegment whole barrier q ->
+Lemma right_rising_barrier_same_height_unique : forall side whole p q,
+  right_rising_barrier side whole ->
+  on_barrier_trace side whole p ->
+  on_barrier_trace side whole q ->
   snd p = snd q ->
   p = q.
 Proof.
-  intros whole barrier [xp yp] [xq yq] Hrising Hp Hq Hy.
+  intros side whole [xp yp] [xq yq] Hrising Hp Hq Hy.
   simpl in Hy. subst yq.
   assert (Hx : xp = xq).
   { destruct (total_order_T xp xq) as [[Hlt | Heq] | Hgt]; [|exact Heq|].
@@ -1220,14 +1274,14 @@ Proof.
   now subst xq.
 Qed.
 
-Lemma right_falling_barrier_same_height_unique : forall whole barrier p q,
-  right_falling_barrier whole barrier ->
-  onExtendSegment whole barrier p ->
-  onExtendSegment whole barrier q ->
+Lemma right_falling_barrier_same_height_unique : forall side whole p q,
+  right_falling_barrier side whole ->
+  on_barrier_trace side whole p ->
+  on_barrier_trace side whole q ->
   snd p = snd q ->
   p = q.
 Proof.
-  intros whole barrier [xp yp] [xq yq] Hfalling Hp Hq Hy.
+  intros side whole [xp yp] [xq yq] Hfalling Hp Hq Hy.
   simpl in Hy. subst yq.
   assert (Hx : xp = xq).
   { destruct (total_order_T xp xq) as [[Hlt | Heq] | Hgt]; [|exact Heq|].
@@ -1238,44 +1292,492 @@ Proof.
   now subst xq.
 Qed.
 
-(* 端点 q の上下に実在する単調障壁が q に触れると、
-   同一出現なら単射性、隣接なら共有端点の片側性、非隣接なら
-   sparse 性に反する。strict 延長部分は先頭・末尾の長方形回避で扱う。 *)
-Lemma two_sided_rising_barrier_endpoint_contact_impossible :
-  forall l sub r seg p q barrier below above,
+(* 埋め込まれた先頭 trace は、セグメント本体と始点側延長を合わせても、
+   終点を越えて垂直方向へ戻らない。 *)
+Lemma embedded_head_trace_vertical_bound : forall seg v h c p,
+  embed (v, h, c) seg ->
+  onHeadSegment seg p ->
+  match v with
+  | n => snd p <= snd (term seg)
+  | s => snd (term seg) <= snd p
+  end.
+Proof.
+  intros seg v h c [x y] Hembed [t [Ht <-]].
+  destruct (Rle_dec 0 t) as [Ht0 | Ht0].
+  - assert (Hon : onSegment seg (point seg t)).
+    { exists t. split; [lra | reflexivity]. }
+    destruct v.
+    + assert (Hon' : onSegment seg
+      (fst (point seg t), snd (point seg t))).
+      { replace (fst (point seg t), snd (point seg t)) with (point seg t)
+          by apply surjective_pairing. exact Hon. }
+      exact (proj2 (n_onseg_relation seg h c
+                      (fst (point seg t)) (snd (point seg t)) Hembed Hon')).
+    + assert (Hon' : onSegment seg
+      (fst (point seg t), snd (point seg t))).
+      { replace (fst (point seg t), snd (point seg t)) with (point seg t)
+          by apply surjective_pairing. exact Hon. }
+      exact (proj1 (s_onseg_relation seg h c
+                      (fst (point seg t)) (snd (point seg t)) Hembed Hon')).
+  - assert (Hhead : onHead seg (point seg t)).
+    { exists t. split; [lra | reflexivity]. }
+    destruct v.
+    + pose proof (north_head_extension_bounds seg h c (point seg t)
+                    Hembed Hhead) as Hext.
+      pose proof (n_end_relation seg h c Hembed) as Hend. lra.
+    + pose proof (south_head_extension_bounds seg h c (point seg t)
+                    Hembed Hhead) as Hext.
+      pose proof (s_end_relation seg h c Hembed) as Hend. lra.
+Qed.
+
+(* 南向き先頭 trace で終点と同じ高さを取る点は終点自身だけである。 *)
+Lemma south_head_trace_at_term_y : forall seg h c p,
+  embed (s, h, c) seg ->
+  onHeadSegment seg p ->
+  snd p = snd (term seg) ->
+  p = term seg.
+Proof.
+  intros seg h c [x y] Hembed [t [Ht Hpoint]] Hy.
+  cbn in Hy.
+  subst y.
+  destruct (Rle_dec 0 t) as [Ht0 | Ht0].
+  - apply on_segment_term_from_y.
+    exists t. split; [lra | exact Hpoint].
+    reflexivity.
+  - assert (Hhead : onHead seg (x, snd (term seg))).
+    { exists t. split; [lra | exact Hpoint]. }
+    pose proof (south_head_extension_bounds seg h c
+                  (x, snd (term seg)) Hembed Hhead) as Hext.
+    pose proof (s_end_relation seg h c Hembed) as Hend. cbn in Hext. lra.
+Qed.
+
+(* 先頭 trace が一つのセグメントの端点対を下から上へ横切り、その
+   一方の端点に触れることはない。同一・隣接・非隣接出現をそれぞれ
+   単射性、接続方向、sparse 性で処理する幾何補題である。 *)
+Lemma head_trace_cannot_straddle_segment_endpoint :
+  forall l sub r seg p q below above,
     ClassificationContext l sub r ->
     In seg (l ++ sub ++ r) ->
     endpoint_of_seg seg p ->
     endpoint_of_seg seg q ->
-    In barrier (l ++ sub ++ r) ->
-    right_rising_barrier (l ++ sub ++ r) barrier ->
-    onExtendSegment (l ++ sub ++ r) barrier below ->
-    onExtendSegment (l ++ sub ++ r) barrier q ->
-    onExtendSegment (l ++ sub ++ r) barrier above ->
+    onHeadSegment (hd_segment (l ++ sub ++ r)) below ->
+    onHeadSegment (hd_segment (l ++ sub ++ r)) q ->
+    onHeadSegment (hd_segment (l ++ sub ++ r)) above ->
+    snd below = snd p ->
+    fst p <> fst below ->
+    snd below < snd q ->
+    snd q < snd above ->
+    False.
+Proof.
+  intros l sub r seg p q below above Hctx Hseg Hp Hq
+    Hbelow HqHead Habove Hbelowp Hpx Hbelowq Hqabove.
+  set (whole := l ++ sub ++ r) in *.
+  assert (Hwhole : whole <> []).
+  { unfold whole. now apply whole_nonempty, context_sub_nonempty
+      with (l := l) (r := r). }
+  assert (HheadNth : nth_error whole 0 = Some (hd_segment whole)).
+  { destruct whole as [|head tail]; [contradiction | reflexivity]. }
+  destruct (context_whole_embedded l sub r Hctx)
+    as [ds [sc [_ Hembed]]].
+  change (embed_scurve sc whole) in Hembed.
+  destruct (embed_scurve_nth_embed sc whole Hembed 0
+              (hd_segment whole) HheadNth)
+    as [[[v h] c] [_ HheadEmbed]].
+  destruct (In_nth_error whole seg Hseg) as [i Hi].
+  destruct HqHead as [t [Ht Htq]].
+  destruct (Rlt_dec t 0) as [HtStrict | HtBody].
+  - (* q は先頭 strict 延長上にある。 *)
+    destruct i as [|i].
+    + rewrite HheadNth in Hi. injection Hi as HsegHead. subst seg.
+      destruct Hq as [Hq | Hq]; rewrite Hq in Htq.
+      * assert (Ht0eq : t = 0).
+        { apply (point_injective (hd_segment whole) t 0). exact Htq. }
+        lra.
+      * assert (Ht1 : t = 1).
+        { apply (point_injective (hd_segment whole) t 1). exact Htq. }
+        lra.
+    + destruct (@nth_error_split Segment whole (S i) seg Hi)
+        as [before [after [Hsplit Hlen]]].
+      destruct (context_sparse l sub r Hctx before seg after Hsplit)
+        as [Hext _].
+      apply (Hext q).
+      * left. split.
+        -- intros Hnil. subst before. simpl in Hlen. lia.
+        -- unfold onHead_extend_strict. exists t.
+           split; [exact HtStrict |].
+           change (point (hd_segment (before ++ seg :: after)) t = q).
+           rewrite <- Hsplit. exact Htq.
+      * destruct Hq as [-> | ->];
+          apply segment_in_rect_or_endpoints; [apply onInit | apply onTerm].
+  - (* q は先頭セグメント本体上にある。 *)
+    assert (Ht0 : 0 <= t) by lra.
+    assert (HqOnHead : onSegment (hd_segment whole) q).
+    { exists t. split; [lra | exact Htq]. }
+    destruct i as [|i].
+    + rewrite HheadNth in Hi. injection Hi as HsegHead. subst seg.
+      destruct v.
+      * pose proof (embedded_head_trace_vertical_bound
+                      (hd_segment whole) n h c above HheadEmbed Habove) as Htop.
+        destruct Hq as [Hq | Hq].
+        -- destruct Hp as [Hp | Hp].
+           ++ rewrite Hp in Hbelowp. rewrite Hq in Hbelowq. lra.
+           ++ pose proof (n_end_relation (hd_segment whole) h c HheadEmbed).
+              rewrite Hp in Hbelowp. rewrite Hq in Hbelowq. lra.
+        -- rewrite Hq in Hqabove. lra.
+      * pose proof (embedded_head_trace_vertical_bound
+                      (hd_segment whole) s h c below HheadEmbed Hbelow) as Hbottom.
+        destruct Hq as [Hq | Hq].
+        -- destruct Hp as [Hp | Hp].
+           ++ rewrite Hp in Hbelowp. rewrite Hq in Hbelowq. lra.
+           ++ assert (HbelowTerm : below = term (hd_segment whole)).
+              { apply (south_head_trace_at_term_y
+                         (hd_segment whole) h c below HheadEmbed Hbelow).
+                now rewrite Hbelowp, Hp. }
+              rewrite Hp in Hpx. apply Hpx. now rewrite HbelowTerm.
+        -- rewrite Hq in Hbelowq. lra.
+    + destruct Hq as [HqInit | HqTerm].
+      * destruct i as [|i].
+        -- (* q は先頭と直後のセグメントとの共有端点。 *)
+           destruct (embed_scurve_adjacent_data
+                       sc whole 0 (hd_segment whole) seg
+                       Hembed HheadNth Hi)
+             as [psHead [psSeg [HembHead [HembSeg [Hdc Hjoin]]]]].
+           assert (HqTermHead : q = term (hd_segment whole)).
+           { eapply adjacent_not_intersect_except_junction; eauto.
+             rewrite HqInit. apply onInit. }
+           destruct v.
+           ++ pose proof (embedded_head_trace_vertical_bound
+                            (hd_segment whole) n h c above
+                            HheadEmbed Habove) as Htop.
+              rewrite HqTermHead in Hqabove. lra.
+           ++ pose proof (embedded_head_trace_vertical_bound
+                            (hd_segment whole) s h c below
+                            HheadEmbed Hbelow) as Hbottom.
+              rewrite HqTermHead in Hbelowq. lra.
+        -- (* 二つ以上離れた始点との接触は sparse 性に反する。 *)
+           destruct (nth_error_far_in_nonadjacent_sides
+                       whole (S (S i)) 0 seg (hd_segment whole)
+                       Hi HheadNth ltac:(right; lia))
+             as [before [after [Hsplit HinHead]]].
+           destruct (context_sparse l sub r Hctx before seg after Hsplit)
+             as [_ Hrect].
+           apply (Hrect (hd_segment whole) q HinHead).
+           ++ now apply segment_in_rect_or_endpoints.
+           ++ rewrite HqInit. apply segment_in_rect_or_endpoints, onInit.
+      * (* 後続セグメントの終点が先頭本体へ戻ることはない。 *)
+        eapply (later_body_point_not_on_earlier_segment
+                  sc whole 0 (S i) (hd_segment whole) seg 1
+                  Hembed (context_sparse l sub r Hctx)
+                  HheadNth Hi ltac:(lia) ltac:(lra)).
+        replace (point seg 1) with q.
+        -- exact HqOnHead.
+Qed.
+
+(* 埋め込まれた末尾 trace は、始点より垂直方向へ戻らない。 *)
+Lemma embedded_last_trace_vertical_bound : forall seg v h c p,
+  embed (v, h, c) seg ->
+  onLastSegment seg p ->
+  match v with
+  | n => snd (init seg) <= snd p
+  | s => snd p <= snd (init seg)
+  end.
+Proof.
+  intros seg v h c [x y] Hembed [t [Ht <-]].
+  destruct (Rle_dec t 1) as [Ht1 | Ht1].
+  - assert (Hon : onSegment seg (point seg t)).
+    { exists t. split; [lra | reflexivity]. }
+    destruct v.
+    + assert (Hon' : onSegment seg
+        (fst (point seg t), snd (point seg t))).
+      { replace (fst (point seg t), snd (point seg t)) with (point seg t)
+          by apply surjective_pairing. exact Hon. }
+      exact (proj1 (n_onseg_relation seg h c
+                      (fst (point seg t)) (snd (point seg t)) Hembed Hon')).
+    + assert (Hon' : onSegment seg
+        (fst (point seg t), snd (point seg t))).
+      { replace (fst (point seg t), snd (point seg t)) with (point seg t)
+          by apply surjective_pairing. exact Hon. }
+      exact (proj2 (s_onseg_relation seg h c
+                      (fst (point seg t)) (snd (point seg t)) Hembed Hon')).
+  - assert (Hlast : onLast seg (point seg t)).
+    { exists t. split; [lra | reflexivity]. }
+    destruct v.
+    + pose proof (north_last_extension_bounds seg h c (point seg t)
+                    Hembed Hlast) as Hext.
+      pose proof (n_end_relation seg h c Hembed) as Hend. lra.
+    + pose proof (south_last_extension_bounds seg h c (point seg t)
+                    Hembed Hlast) as Hext.
+      pose proof (s_end_relation seg h c Hembed) as Hend. lra.
+Qed.
+
+Lemma on_segment_init_from_y : forall seg p,
+  onSegment seg p -> snd p = snd (init seg) -> p = init seg.
+Proof.
+  intros seg p [t [[Ht0 Ht1] <-]] Hy.
+  assert (Ht : t = 0).
+  { destruct (Req_dec t 0) as [-> | Hneq]; [reflexivity |].
+    assert (Hlt : 0 < t) by lra.
+    destruct (y_strictly_monotone_seg seg) as [Hinc | Hdec].
+    - pose proof (Hinc 0 t ltac:(lra)) as Hstrict.
+      unfold init in Hy. lra.
+    - pose proof (Hdec 0 t ltac:(lra)) as Hstrict.
+      unfold init in Hy. lra. }
+  subst t. reflexivity.
+Qed.
+
+(* 北向き末尾 trace で始点と同じ高さを取る点は始点自身だけである。 *)
+Lemma north_last_trace_at_init_y : forall seg h c p,
+  embed (n, h, c) seg ->
+  onLastSegment seg p ->
+  snd p = snd (init seg) ->
+  p = init seg.
+Proof.
+  intros seg h c [x y] Hembed [t [Ht Hpoint]] Hy.
+  cbn in Hy. subst y.
+  destruct (Rle_dec t 1) as [Ht1 | Ht1].
+  - apply on_segment_init_from_y.
+    exists t. split; [lra | exact Hpoint].
+    reflexivity.
+  - assert (Hlast : onLast seg (x, snd (init seg))).
+    { exists t. split; [lra | exact Hpoint]. }
+    pose proof (north_last_extension_bounds seg h c
+                  (x, snd (init seg)) Hembed Hlast) as Hext.
+    pose proof (n_end_relation seg h c Hembed) as Hend. cbn in Hext. lra.
+Qed.
+
+(* [later_body_point_not_on_earlier_segment] の双対。前のセグメントの
+   終点を除く本体点は、後のセグメント上へ戻らない。 *)
+Lemma earlier_body_point_not_on_later_segment :
+  forall sc ls earlier later s_earlier s_later u,
+    embed_scurve sc ls ->
+    sparse_embedding ls ->
+    nth_error ls earlier = Some s_earlier ->
+    nth_error ls later = Some s_later ->
+    (earlier < later)%nat ->
+    0 <= u < 1 ->
+    onSegment s_later (point s_earlier u) ->
+    False.
+Proof.
+  intros sc ls earlier later s_earlier s_later u
+    Hembed Hsparse Hearlier Hlater Hlt Hu HonLater.
+  assert (HonEarlier : onSegment s_earlier (point s_earlier u)).
+  { exists u. split; [split; lra | reflexivity]. }
+  destruct (Nat.eq_dec later (S earlier)) as [Hadj | Hfar].
+  - subst later.
+    destruct (embed_scurve_adjacent_data
+                sc ls earlier s_earlier s_later
+                Hembed Hearlier Hlater)
+      as [ps1 [ps2 [Hembed1 [Hembed2 [Hdc Hjoin]]]]].
+    pose proof (adjacent_not_intersect_except_junction
+                  ps1 ps2 s_earlier s_later (point s_earlier u)
+                  Hdc Hembed1 Hembed2 Hjoin HonEarlier HonLater) as Hp.
+    assert (Hone : u = 1).
+    { apply (point_injective s_earlier u 1).
+      change (point s_earlier u = term s_earlier). exact Hp. }
+    lra.
+  - assert (Hfar' : (S earlier < later)%nat) by lia.
+    destruct (nth_error_far_in_nonadjacent_sides
+                ls earlier later s_earlier s_later
+                Hearlier Hlater ltac:(left; exact Hfar'))
+      as [before [after [Hsplit HinLater]]].
+    destruct (Hsparse before s_earlier after Hsplit) as [_ Hrect].
+    apply (Hrect s_later (point s_earlier u) HinLater).
+    + now apply segment_in_rect_or_endpoints.
+    + now apply segment_in_rect_or_endpoints.
+Qed.
+
+(* 末尾 trace についての双対。末尾以前の各出現との位置関係だけが
+   異なり、衝突を排除する三つの理由は先頭の場合と同じである。 *)
+Lemma last_trace_cannot_straddle_segment_endpoint :
+  forall l sub r seg p q below above,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    onLastSegment (last_segment (l ++ sub ++ r)) below ->
+    onLastSegment (last_segment (l ++ sub ++ r)) q ->
+    onLastSegment (last_segment (l ++ sub ++ r)) above ->
+    snd below = snd p ->
+    fst p <> fst below ->
+    snd below < snd q ->
+    snd q < snd above ->
+    False.
+Proof.
+  intros l sub r seg p q below above Hctx Hseg Hp Hq
+    Hbelow HqLast Habove Hbelowp Hpx Hbelowq Hqabove.
+  set (whole := l ++ sub ++ r) in *.
+  assert (Hwhole : whole <> []).
+  { unfold whole. now apply whole_nonempty, context_sub_nonempty
+      with (l := l) (r := r). }
+  set (last_i := (length whole - 1)%nat).
+  assert (HlastNth : nth_error whole last_i = Some (last_segment whole)).
+  { unfold last_i. now apply nth_error_last. }
+  destruct (context_whole_embedded l sub r Hctx)
+    as [ds [sc [_ Hembed]]].
+  change (embed_scurve sc whole) in Hembed.
+  destruct (embed_scurve_nth_embed sc whole Hembed last_i
+              (last_segment whole) HlastNth)
+    as [[[v h] c] [_ HlastEmbed]].
+  destruct (In_nth_error whole seg Hseg) as [i Hi].
+  assert (HiBound : (i <= last_i)%nat).
+  { apply nth_error_lt in Hi. unfold last_i. lia. }
+  destruct HqLast as [t [Ht Htq]].
+  destruct (Rlt_dec 1 t) as [HtStrict | HtBody].
+  - (* q は末尾 strict 延長上にある。 *)
+    destruct (Nat.eq_dec i last_i) as [Heq | Hneq].
+    + subst i. rewrite HlastNth in Hi. injection Hi as HsegLast. subst seg.
+      destruct Hq as [Hq | Hq]; rewrite Hq in Htq.
+      * assert (Ht0eq : t = 0).
+        { apply (point_injective (last_segment whole) t 0). exact Htq. }
+        lra.
+      * assert (Ht1eq : t = 1).
+        { apply (point_injective (last_segment whole) t 1). exact Htq. }
+        lra.
+    + assert (HiLt : (i < last_i)%nat) by lia.
+      destruct (@nth_error_split Segment whole i seg Hi)
+        as [before [after [Hsplit Hlen]]].
+      destruct (context_sparse l sub r Hctx before seg after Hsplit)
+        as [Hext _].
+      apply (Hext q).
+      * right. split.
+        -- intros Hnil. subst after.
+           pose proof (f_equal (@length Segment) Hsplit) as Hlength.
+           unfold last_i in HiLt. rewrite length_app in Hlength.
+           simpl in Hlength. lia.
+        -- unfold onLast_extend_strict. exists t.
+           split; [exact HtStrict |].
+           change (point (last_segment (before ++ seg :: after)) t = q).
+           rewrite <- Hsplit. exact Htq.
+      * destruct Hq as [-> | ->];
+          apply segment_in_rect_or_endpoints; [apply onInit | apply onTerm].
+  - (* q は末尾セグメント本体上にある。 *)
+    assert (Ht1 : t <= 1) by lra.
+    assert (HqOnLast : onSegment (last_segment whole) q).
+    { exists t. split; [lra | exact Htq]. }
+    destruct (Nat.eq_dec i last_i) as [Heq | Hneq].
+    + subst i. rewrite HlastNth in Hi. injection Hi as HsegLast. subst seg.
+      destruct v.
+      * pose proof (embedded_last_trace_vertical_bound
+                      (last_segment whole) n h c below HlastEmbed Hbelow)
+          as Hbottom.
+        destruct Hq as [Hq | Hq].
+        -- rewrite Hq in Hbelowq. lra.
+        -- destruct Hp as [Hp | Hp].
+           ++ assert (HbelowInit : below = init (last_segment whole)).
+              { apply (north_last_trace_at_init_y
+                         (last_segment whole) h c below HlastEmbed Hbelow).
+                now rewrite Hbelowp, Hp. }
+              rewrite Hp in Hpx. apply Hpx. now rewrite HbelowInit.
+           ++ rewrite Hp in Hbelowp. rewrite Hq in Hbelowq. lra.
+      * pose proof (embedded_last_trace_vertical_bound
+                      (last_segment whole) s h c above HlastEmbed Habove)
+          as Htop.
+        destruct Hq as [Hq | Hq].
+        -- rewrite Hq in Hqabove. lra.
+        -- destruct Hp as [Hp | Hp].
+           ++ pose proof (s_end_relation (last_segment whole) h c HlastEmbed).
+              rewrite Hp in Hbelowp. rewrite Hq in Hbelowq. lra.
+           ++ rewrite Hp in Hbelowp. rewrite Hq in Hbelowq. lra.
+    + assert (HiLt : (i < last_i)%nat) by lia.
+      destruct Hq as [HqInit | HqTerm].
+      * (* 以前のセグメントの始点が末尾本体へ戻ることはない。 *)
+        eapply (earlier_body_point_not_on_later_segment
+                  sc whole i last_i seg (last_segment whole) 0
+                  Hembed (context_sparse l sub r Hctx)
+                  Hi HlastNth HiLt ltac:(lra)).
+        replace (point seg 0) with q.
+        -- exact HqOnLast.
+      * destruct (Nat.eq_dec last_i (S i)) as [Hadj | Hfar].
+        -- (* q は直前と末尾セグメントとの共有端点。 *)
+           destruct (embed_scurve_adjacent_data
+                       sc whole i seg (last_segment whole)
+                       Hembed Hi ltac:(now rewrite <- Hadj))
+             as [psSeg [psLast [HembSeg [HembLast [Hdc Hjoin]]]]].
+           assert (HqInitLast : q = init (last_segment whole)).
+           { rewrite <- Hjoin.
+             eapply adjacent_not_intersect_except_junction; eauto.
+             rewrite HqTerm. apply onTerm. }
+           destruct v.
+           ++ pose proof (embedded_last_trace_vertical_bound
+                            (last_segment whole) n h c below
+                            HlastEmbed Hbelow) as Hbottom.
+              rewrite HqInitLast in Hbelowq. lra.
+           ++ pose proof (embedded_last_trace_vertical_bound
+                            (last_segment whole) s h c above
+                            HlastEmbed Habove) as Htop.
+              rewrite HqInitLast in Hqabove. lra.
+        -- (* 二つ以上離れた終点との接触は sparse 性に反する。 *)
+           assert (Hfar' : (S i < last_i)%nat) by lia.
+           destruct (nth_error_far_in_nonadjacent_sides
+                       whole i last_i seg (last_segment whole)
+                       Hi HlastNth ltac:(left; exact Hfar'))
+             as [before [after [Hsplit HinLast]]].
+           destruct (context_sparse l sub r Hctx before seg after Hsplit)
+             as [_ Hrect].
+           apply (Hrect (last_segment whole) q HinLast).
+           ++ now apply segment_in_rect_or_endpoints.
+           ++ rewrite HqTerm. apply segment_in_rect_or_endpoints, onTerm.
+Qed.
+
+(* 端点 q の上下に実在する右上がりの end trace が q に触れる場合を、
+   上の先頭・末尾二ケースへ還元する。 *)
+Lemma two_sided_rising_barrier_endpoint_contact_impossible :
+  forall l sub r seg p q side below above,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    (l ++ sub ++ r) <> [] ->
+    right_rising_barrier side (l ++ sub ++ r) ->
+    on_barrier_trace side (l ++ sub ++ r) below ->
+    on_barrier_trace side (l ++ sub ++ r) q ->
+    on_barrier_trace side (l ++ sub ++ r) above ->
     snd below = snd p ->
     fst p < fst below ->
     snd below < snd q ->
     snd q < snd above ->
     False.
-Admitted.
+Proof.
+  intros l sub r seg p q side below above Hctx Hseg Hp Hq
+    Hwhole Hrising Hbelow Hqbar Habove Hbp Hpx Hbelowq Hqabove.
+  destruct side; cbn in *.
+  - apply (head_trace_cannot_straddle_segment_endpoint
+             l sub r seg p q below above Hctx Hseg Hp Hq
+             Hbelow Hqbar Habove Hbp); lra.
+  - apply (last_trace_cannot_straddle_segment_endpoint
+             l sub r seg p q below above Hctx Hseg Hp Hq
+             Hbelow Hqbar Habove Hbp); lra.
+Qed.
 
+(* 右下がりの場合も、x の不等号の向きだけを変えて同じ二ケースへ
+   還元できる。 *)
 Lemma two_sided_falling_barrier_endpoint_contact_impossible :
-  forall l sub r seg p q barrier below above,
+  forall l sub r seg p q side below above,
     ClassificationContext l sub r ->
     In seg (l ++ sub ++ r) ->
     endpoint_of_seg seg p ->
     endpoint_of_seg seg q ->
-    In barrier (l ++ sub ++ r) ->
-    right_falling_barrier (l ++ sub ++ r) barrier ->
-    onExtendSegment (l ++ sub ++ r) barrier below ->
-    onExtendSegment (l ++ sub ++ r) barrier q ->
-    onExtendSegment (l ++ sub ++ r) barrier above ->
+    (l ++ sub ++ r) <> [] ->
+    right_falling_barrier side (l ++ sub ++ r) ->
+    on_barrier_trace side (l ++ sub ++ r) below ->
+    on_barrier_trace side (l ++ sub ++ r) q ->
+    on_barrier_trace side (l ++ sub ++ r) above ->
     snd below = snd p ->
     fst below < fst p ->
     snd below < snd q ->
     snd q < snd above ->
     False.
-Admitted.
+Proof.
+  intros l sub r seg p q side below above Hctx Hseg Hp Hq
+    Hwhole Hfalling Hbelow Hqbar Habove Hbp Hpx Hbelowq Hqabove.
+  destruct side; cbn in *.
+  - apply (head_trace_cannot_straddle_segment_endpoint
+             l sub r seg p q below above Hctx Hseg Hp Hq
+             Hbelow Hqbar Habove Hbp); lra.
+  - apply (last_trace_cannot_straddle_segment_endpoint
+             l sub r seg p q below above Hctx Hseg Hp Hq
+             Hbelow Hqbar Habove Hbp); lra.
+Qed.
 
 (* strict 障壁は q の下から anchor の高さまで続く。従って、
    p から同一セグメントを上がった q が障壁の端点に接触すると、
@@ -1294,14 +1796,14 @@ Lemma same_segment_left_strict_guard_contact_impossible :
 Proof.
   intros l sub r seg [xp yp] [xq yq] Hctx Hseg Hp Hq Hy Hqx Hqy.
   unfold left_strict_guard_contact. cbn.
-  intros [barrier [Hbarrier [Hrising [HpTop [Hspan Hcontact]]]]].
+  intros [side [HbarWhole [Hrising [HpTop [Hspan Hcontact]]]]].
   destruct (Hspan yp ltac:(lra)) as [xb [[Hpxb _] Hbelow]].
   destruct (Hspan (snd (sub_left_anchor sub)) ltac:(lra))
     as [xt [_ Habove]].
   assert (Hpq : (xp, yp) <> (xq, yq)).
   { intros Heq. injection Heq as Hxeq Hyeq. subst xq yq.
     pose proof (right_rising_barrier_same_height_unique
-                  (l ++ sub ++ r) barrier (xb, yp) (xp, yp)
+                  side (l ++ sub ++ r) (xb, yp) (xp, yp)
                   Hrising Hbelow Hcontact eq_refl) as Hequal.
     pose proof (f_equal fst Hequal) as Hx. cbn in Hx. lra. }
   assert (Hylt : yp < yq).
@@ -1319,7 +1821,7 @@ Proof.
       rewrite <- Hqy', <- Hpy. exact (eq_sym Heq).
     - exfalso. apply Hpq. now rewrite Hp, Hq. }
   eapply two_sided_rising_barrier_endpoint_contact_impossible
-    with (seg := seg) (p := (xp, yp)) (barrier := barrier)
+    with (seg := seg) (p := (xp, yp)) (side := side)
          (below := (xb, yp)) (above := (xt, snd (sub_left_anchor sub)));
     eauto; cbn; lra.
 Qed.
@@ -1338,14 +1840,14 @@ Lemma same_segment_right_strict_guard_contact_impossible :
 Proof.
   intros l sub r seg [xp yp] [xq yq] Hctx Hseg Hp Hq Hy Hqx Hqy.
   unfold right_strict_guard_contact. cbn.
-  intros [barrier [Hbarrier [Hfalling [HpTop [Hspan Hcontact]]]]].
+  intros [side [HbarWhole [Hfalling [HpTop [Hspan Hcontact]]]]].
   destruct (Hspan yp ltac:(lra)) as [xb [[_ Hxbp] Hbelow]].
   destruct (Hspan (snd (sub_right_anchor sub)) ltac:(lra))
     as [xt [_ Habove]].
   assert (Hpq : (xp, yp) <> (xq, yq)).
   { intros Heq. injection Heq as Hxeq Hyeq. subst xq yq.
     pose proof (right_falling_barrier_same_height_unique
-                  (l ++ sub ++ r) barrier (xb, yp) (xp, yp)
+                  side (l ++ sub ++ r) (xb, yp) (xp, yp)
                   Hfalling Hbelow Hcontact eq_refl) as Hequal.
     pose proof (f_equal fst Hequal) as Hx. cbn in Hx. lra. }
   assert (Hylt : yp < yq).
@@ -1363,7 +1865,7 @@ Proof.
       rewrite <- Hqy', <- Hpy. exact (eq_sym Heq).
     - exfalso. apply Hpq. now rewrite Hp, Hq. }
   eapply two_sided_falling_barrier_endpoint_contact_impossible
-    with (seg := seg) (p := (xp, yp)) (barrier := barrier)
+    with (seg := seg) (p := (xp, yp)) (side := side)
          (below := (xb, yp)) (above := (xt, snd (sub_right_anchor sub)));
     eauto; cbn; lra.
 Qed.
