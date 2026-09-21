@@ -973,6 +973,38 @@ Definition right_vertical_guard_to_term
             fst right < x < fst p
             /\ onExtendSegment whole seg (x, y)).
 
+(* [p] の strict guard を構成するまさに同じ障壁に [q] が接触する。
+   障壁の識別を失うと、無関係な別の障壁を選べてしまう。 *)
+Definition left_strict_guard_contact
+    (l sub r : list Segment) (p q : Point) : Prop :=
+  let whole := l ++ sub ++ r in
+  let left := sub_left_anchor sub in
+  exists barrier,
+    In barrier whole
+    /\ right_rising_barrier whole barrier
+    /\ snd p < snd left
+    /\ (forall y,
+          snd p <= y <= snd left ->
+          exists x,
+            fst p < x < fst left
+            /\ onExtendSegment whole barrier (x, y))
+    /\ onExtendSegment whole barrier q.
+
+Definition right_strict_guard_contact
+    (l sub r : list Segment) (p q : Point) : Prop :=
+  let whole := l ++ sub ++ r in
+  let right := sub_right_anchor sub in
+  exists barrier,
+    In barrier whole
+    /\ right_falling_barrier whole barrier
+    /\ snd p < snd right
+    /\ (forall y,
+          snd p <= y <= snd right ->
+          exists x,
+            fst right < x < fst p
+            /\ onExtendSegment whole barrier (x, y))
+    /\ onExtendSegment whole barrier q.
+
 (* 同一セグメントの上向き通常辺では、到達点は同じ障壁の左に
    残るか、障壁自身に到達する。右側へ突き抜けると自己交差になる。 *)
 Lemma left_guard_preserved_by_same_segment_or_contact :
@@ -986,16 +1018,13 @@ Lemma left_guard_preserved_by_same_segment_or_contact :
     fst q < fst (sub_left_anchor sub) ->
     snd q < snd (sub_left_anchor sub) ->
     left_vertical_guard_to_init l sub r q
-    \/ exists barrier,
-        In barrier (l ++ sub ++ r)
-        /\ right_rising_barrier (l ++ sub ++ r) barrier
-        /\ onExtendSegment (l ++ sub ++ r) barrier q.
+    \/ left_strict_guard_contact l sub r p q.
 Proof.
   intros l sub r seg [xp yp] [xq yq]
     Hctx Hseg Hp Hq Hy Hguard Hqx Hqy.
   unfold left_vertical_guard_to_init in Hguard |- *.
   cbn in *.
-  destruct Hguard as [barrier [Hbarrier [Hrising [_ Hspan]]]].
+  destruct Hguard as [barrier [Hbarrier [Hrising [HpTop Hspan]]]].
   destruct (Hspan yp ltac:(lra)) as [xbp [[Hpxbp HbpLeft] Hbp]].
   destruct (Hspan yq ltac:(lra)) as [xbq [[Hpxbq HbqLeft] Hbq]].
   assert (Hwhole : l ++ sub ++ r <> []).
@@ -1019,9 +1048,13 @@ Proof.
         (proj1 (Hrising (xb, y) (xbq, yq) Hb Hbq) Hxb) as Hyy.
       cbn in Hyy. lra. }
     exists xb. split; [lra | exact Hb].
-  - right. exists barrier. split; [exact Hbarrier |].
+  - right. unfold left_strict_guard_contact. cbn.
+    exists barrier. split; [exact Hbarrier |].
     split; [exact Hrising |].
-    now subst xbq.
+    split; [exact HpTop |].
+    split; [exact Hspan |].
+    replace (xq, yq) with (xbq, yq) by now rewrite HqOn.
+    exact Hbq.
   - exfalso. apply (context_whole_open l sub r Hctx).
     eapply x_cross_v with
       (s1 := seg) (s2 := barrier)
@@ -1044,16 +1077,13 @@ Lemma right_guard_preserved_by_same_segment_or_contact :
     fst (sub_right_anchor sub) < fst q ->
     snd q < snd (sub_right_anchor sub) ->
     right_vertical_guard_to_term l sub r q
-    \/ exists barrier,
-        In barrier (l ++ sub ++ r)
-        /\ right_falling_barrier (l ++ sub ++ r) barrier
-        /\ onExtendSegment (l ++ sub ++ r) barrier q.
+    \/ right_strict_guard_contact l sub r p q.
 Proof.
   intros l sub r seg [xp yp] [xq yq]
     Hctx Hseg Hp Hq Hy Hguard Hqx Hqy.
   unfold right_vertical_guard_to_term in Hguard |- *.
   cbn in *.
-  destruct Hguard as [barrier [Hbarrier [Hfalling [_ Hspan]]]].
+  destruct Hguard as [barrier [Hbarrier [Hfalling [HpTop Hspan]]]].
   destruct (Hspan yp ltac:(lra)) as [xbp [[HbpRight HbpLeft] Hbp]].
   destruct (Hspan yq ltac:(lra)) as [xbq [[HbqRight HbqLeft] Hbq]].
   assert (Hwhole : l ++ sub ++ r <> []).
@@ -1077,9 +1107,13 @@ Proof.
         (proj1 (Hfalling (xbq, yq) (xb, y) Hbq Hb) Hlt) as Hyy.
       cbn in Hyy. lra. }
     exists xb. split; [lra | exact Hb].
-  - right. exists barrier. split; [exact Hbarrier |].
+  - right. unfold right_strict_guard_contact. cbn.
+    exists barrier. split; [exact Hbarrier |].
     split; [exact Hfalling |].
-    now subst xbq.
+    split; [exact HpTop |].
+    split; [exact Hspan |].
+    replace (xq, yq) with (xbq, yq) by now rewrite HqOn.
+    exact Hbq.
   - exfalso. apply (context_whole_open l sub r Hctx).
     eapply x_cross_v with
       (s1 := seg) (s2 := barrier)
@@ -1168,36 +1202,182 @@ Definition up_path_invariant
       snd p < snd (sub_right_anchor sub) ->
       right_up_certificate l sub r p).
 
-(* 障壁との等号接触は新しい障壁を与えるか、延長線 seed /
-   逆向き end-step の局所例外に入る。その幾何学的分岐をここに集約する。 *)
-Lemma left_barrier_contact_gives_certificate :
-  forall l sub r q,
+Lemma right_rising_barrier_same_height_unique : forall whole barrier p q,
+  right_rising_barrier whole barrier ->
+  onExtendSegment whole barrier p ->
+  onExtendSegment whole barrier q ->
+  snd p = snd q ->
+  p = q.
+Proof.
+  intros whole barrier [xp yp] [xq yq] Hrising Hp Hq Hy.
+  simpl in Hy. subst yq.
+  assert (Hx : xp = xq).
+  { destruct (total_order_T xp xq) as [[Hlt | Heq] | Hgt]; [|exact Heq|].
+    - pose proof (proj1 (Hrising (xp, yp) (xq, yp) Hp Hq) Hlt).
+      simpl in H. lra.
+    - pose proof (proj1 (Hrising (xq, yp) (xp, yp) Hq Hp) Hgt).
+      simpl in H. lra. }
+  now subst xq.
+Qed.
+
+Lemma right_falling_barrier_same_height_unique : forall whole barrier p q,
+  right_falling_barrier whole barrier ->
+  onExtendSegment whole barrier p ->
+  onExtendSegment whole barrier q ->
+  snd p = snd q ->
+  p = q.
+Proof.
+  intros whole barrier [xp yp] [xq yq] Hfalling Hp Hq Hy.
+  simpl in Hy. subst yq.
+  assert (Hx : xp = xq).
+  { destruct (total_order_T xp xq) as [[Hlt | Heq] | Hgt]; [|exact Heq|].
+    - pose proof (proj1 (Hfalling (xp, yp) (xq, yp) Hp Hq) Hlt).
+      simpl in H. lra.
+    - pose proof (proj1 (Hfalling (xq, yp) (xp, yp) Hq Hp) Hgt).
+      simpl in H. lra. }
+  now subst xq.
+Qed.
+
+(* 端点 q の上下に実在する単調障壁が q に触れると、
+   同一出現なら単射性、隣接なら共有端点の片側性、非隣接なら
+   sparse 性に反する。strict 延長部分は先頭・末尾の長方形回避で扱う。 *)
+Lemma two_sided_rising_barrier_endpoint_contact_impossible :
+  forall l sub r seg p q barrier below above,
     ClassificationContext l sub r ->
-    endpoint_of (l ++ sub ++ r) q ->
-    fst q < fst (sub_left_anchor sub) ->
-    snd q < snd (sub_left_anchor sub) ->
-    (exists barrier,
-      In barrier (l ++ sub ++ r)
-      /\ right_rising_barrier (l ++ sub ++ r) barrier
-      /\ onExtendSegment (l ++ sub ++ r) barrier q) ->
-    left_up_certificate l sub r q.
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    In barrier (l ++ sub ++ r) ->
+    right_rising_barrier (l ++ sub ++ r) barrier ->
+    onExtendSegment (l ++ sub ++ r) barrier below ->
+    onExtendSegment (l ++ sub ++ r) barrier q ->
+    onExtendSegment (l ++ sub ++ r) barrier above ->
+    snd below = snd p ->
+    fst p < fst below ->
+    snd below < snd q ->
+    snd q < snd above ->
+    False.
 Admitted.
 
-Lemma right_barrier_contact_gives_certificate :
-  forall l sub r q,
+Lemma two_sided_falling_barrier_endpoint_contact_impossible :
+  forall l sub r seg p q barrier below above,
     ClassificationContext l sub r ->
-    endpoint_of (l ++ sub ++ r) q ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    In barrier (l ++ sub ++ r) ->
+    right_falling_barrier (l ++ sub ++ r) barrier ->
+    onExtendSegment (l ++ sub ++ r) barrier below ->
+    onExtendSegment (l ++ sub ++ r) barrier q ->
+    onExtendSegment (l ++ sub ++ r) barrier above ->
+    snd below = snd p ->
+    fst below < fst p ->
+    snd below < snd q ->
+    snd q < snd above ->
+    False.
+Admitted.
+
+(* strict 障壁は q の下から anchor の高さまで続く。従って、
+   p から同一セグメントを上がった q が障壁の端点に接触すると、
+   非隣接交差または隣接端点の単調性に反する。 *)
+Lemma same_segment_left_strict_guard_contact_impossible :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    fst q < fst (sub_left_anchor sub) ->
+    snd q < snd (sub_left_anchor sub) ->
+    left_strict_guard_contact l sub r p q ->
+    False.
+Proof.
+  intros l sub r seg [xp yp] [xq yq] Hctx Hseg Hp Hq Hy Hqx Hqy.
+  unfold left_strict_guard_contact. cbn.
+  intros [barrier [Hbarrier [Hrising [HpTop [Hspan Hcontact]]]]].
+  destruct (Hspan yp ltac:(lra)) as [xb [[Hpxb _] Hbelow]].
+  destruct (Hspan (snd (sub_left_anchor sub)) ltac:(lra))
+    as [xt [_ Habove]].
+  assert (Hpq : (xp, yp) <> (xq, yq)).
+  { intros Heq. injection Heq as Hxeq Hyeq. subst xq yq.
+    pose proof (right_rising_barrier_same_height_unique
+                  (l ++ sub ++ r) barrier (xb, yp) (xp, yp)
+                  Hrising Hbelow Hcontact eq_refl) as Hequal.
+    pose proof (f_equal fst Hequal) as Hx. cbn in Hx. lra. }
+  assert (Hylt : yp < yq).
+  { destruct Hp as [Hp | Hp], Hq as [Hq | Hq].
+    - exfalso. apply Hpq. now rewrite Hp, Hq.
+    - pose proof (f_equal snd Hp) as Hpy.
+      pose proof (f_equal snd Hq) as Hqy'. cbn in Hpy, Hqy'.
+      destruct (Rle_lt_or_eq_dec yp yq Hy) as [Hlt | Heq]; [exact Hlt |].
+      exfalso. apply (neq_init_term_y seg). unfold init_y, term_y.
+      rewrite <- Hpy, <- Hqy'. exact Heq.
+    - pose proof (f_equal snd Hp) as Hpy.
+      pose proof (f_equal snd Hq) as Hqy'. cbn in Hpy, Hqy'.
+      destruct (Rle_lt_or_eq_dec yp yq Hy) as [Hlt | Heq]; [exact Hlt |].
+      exfalso. apply (neq_init_term_y seg). unfold init_y, term_y.
+      rewrite <- Hqy', <- Hpy. exact (eq_sym Heq).
+    - exfalso. apply Hpq. now rewrite Hp, Hq. }
+  eapply two_sided_rising_barrier_endpoint_contact_impossible
+    with (seg := seg) (p := (xp, yp)) (barrier := barrier)
+         (below := (xb, yp)) (above := (xt, snd (sub_left_anchor sub)));
+    eauto; cbn; lra.
+Qed.
+
+Lemma same_segment_right_strict_guard_contact_impossible :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
     fst (sub_right_anchor sub) < fst q ->
     snd q < snd (sub_right_anchor sub) ->
-    (exists barrier,
-      In barrier (l ++ sub ++ r)
-      /\ right_falling_barrier (l ++ sub ++ r) barrier
-      /\ onExtendSegment (l ++ sub ++ r) barrier q) ->
-    right_up_certificate l sub r q.
+    right_strict_guard_contact l sub r p q ->
+    False.
+Proof.
+  intros l sub r seg [xp yp] [xq yq] Hctx Hseg Hp Hq Hy Hqx Hqy.
+  unfold right_strict_guard_contact. cbn.
+  intros [barrier [Hbarrier [Hfalling [HpTop [Hspan Hcontact]]]]].
+  destruct (Hspan yp ltac:(lra)) as [xb [[_ Hxbp] Hbelow]].
+  destruct (Hspan (snd (sub_right_anchor sub)) ltac:(lra))
+    as [xt [_ Habove]].
+  assert (Hpq : (xp, yp) <> (xq, yq)).
+  { intros Heq. injection Heq as Hxeq Hyeq. subst xq yq.
+    pose proof (right_falling_barrier_same_height_unique
+                  (l ++ sub ++ r) barrier (xb, yp) (xp, yp)
+                  Hfalling Hbelow Hcontact eq_refl) as Hequal.
+    pose proof (f_equal fst Hequal) as Hx. cbn in Hx. lra. }
+  assert (Hylt : yp < yq).
+  { destruct Hp as [Hp | Hp], Hq as [Hq | Hq].
+    - exfalso. apply Hpq. now rewrite Hp, Hq.
+    - pose proof (f_equal snd Hp) as Hpy.
+      pose proof (f_equal snd Hq) as Hqy'. cbn in Hpy, Hqy'.
+      destruct (Rle_lt_or_eq_dec yp yq Hy) as [Hlt | Heq]; [exact Hlt |].
+      exfalso. apply (neq_init_term_y seg). unfold init_y, term_y.
+      rewrite <- Hpy, <- Hqy'. exact Heq.
+    - pose proof (f_equal snd Hp) as Hpy.
+      pose proof (f_equal snd Hq) as Hqy'. cbn in Hpy, Hqy'.
+      destruct (Rle_lt_or_eq_dec yp yq Hy) as [Hlt | Heq]; [exact Hlt |].
+      exfalso. apply (neq_init_term_y seg). unfold init_y, term_y.
+      rewrite <- Hqy', <- Hpy. exact (eq_sym Heq).
+    - exfalso. apply Hpq. now rewrite Hp, Hq. }
+  eapply two_sided_falling_barrier_endpoint_contact_impossible
+    with (seg := seg) (p := (xp, yp)) (barrier := barrier)
+         (below := (xb, yp)) (above := (xt, snd (sub_right_anchor sub)));
+    eauto; cbn; lra.
+Qed.
+
+(* 例外端点の役割は、そこから sub 以下の危険点へ直接出る
+   order step を拒むことに限られる。 *)
+Lemma barrier_exception_locally_blocks_unsafe_up : forall l sub r p,
+  ClassificationContext l sub r ->
+  barrier_exception l sub r p ->
+  locally_blocks_unsafe_up l sub r p.
 Admitted.
 
 (* 同一セグメントの通常辺について、直接の障壁を左下領域の
-   不変量証明書へ移す。接触した場合だけ専用の幾何補題へ送る。 *)
+   不変量証明書へ移す。右へ抜ければ交差、等号接触も上の補題に反する。 *)
 Lemma same_segment_upward_preserves_direct_left_certificate :
   forall l sub r seg p q,
     ClassificationContext l sub r ->
@@ -1215,12 +1395,9 @@ Proof.
               l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy)
     as [Hguard' | Hcontact].
   - now left.
-  - eapply left_barrier_contact_gives_certificate.
-    + exact Hctx.
-    + exists seg. split; [exact Hseg | exact Hq].
-    + exact Hqx.
-    + exact Hqy.
-    + exact Hcontact.
+  - exfalso.
+    exact (same_segment_left_strict_guard_contact_impossible
+             l sub r seg p q Hctx Hseg Hp Hq Hy Hqx Hqy Hcontact).
 Qed.
 
 Lemma same_segment_upward_preserves_direct_right_certificate :
@@ -1240,12 +1417,9 @@ Proof.
               l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy)
     as [Hguard' | Hcontact].
   - now left.
-  - eapply right_barrier_contact_gives_certificate.
-    + exact Hctx.
-    + exists seg. split; [exact Hseg | exact Hq].
-    + exact Hqx.
-    + exact Hqy.
-    + exact Hcontact.
+  - exfalso.
+    exact (same_segment_right_strict_guard_contact_impossible
+             l sub r seg p q Hctx Hseg Hp Hq Hy Hqx Hqy Hcontact).
 Qed.
 
 Lemma up_path_invariant_not_on_sub : forall l sub r p,
@@ -1983,7 +2157,11 @@ Lemma extension_up_seed_locally_blocks_unsafe_up : forall l sub r p,
   fst p < fst (sub_left_anchor sub) ->
   snd p < snd (sub_left_anchor sub) ->
   locally_blocks_unsafe_up l sub r p.
-Admitted.
+Proof.
+  intros l sub r p Hctx Hseed _ _.
+  apply barrier_exception_locally_blocks_unsafe_up; [exact Hctx |].
+  now left.
+Qed.
 
 (* 左下の Up seed は body seed ではあり得ず、必ず延長線 seed である。 *)
 Lemma endpoint_up_seed_left_low_is_extension_seed : forall l sub r p,
