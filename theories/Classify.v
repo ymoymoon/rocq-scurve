@@ -75,12 +75,6 @@ Definition below_sub_at_x (sub : list Segment) (p : Point) : Prop :=
     /\ fst p = fst q
     /\ snd p < snd q.
 
-(* 点が sub の上側成分にあることを、sub 上でないことと、共通 x
-   範囲内では sub より上にあることによって表す。 *)
-Definition above_sub_side (sub : list Segment) (p : Point) : Prop :=
-  ~ onSegmentlist sub p
-  /\ (in_sub_x_range sub p -> above_sub_at_x sub p).
-
 (* [p] と同じ x にある sub 上の全ての点より、[p] が厳密に上にある。
    全称形にしておくと、sub 上への到達時には [q := p] で直ちに矛盾する。 *)
 Definition strictly_above_sub_at_x
@@ -108,71 +102,6 @@ Definition on_trace_above_sub (sub : list Segment) (p : Point) : Prop :=
     /\ onSegmentlist sub q0
     /\ fst p0 = fst q0
     /\ snd q0 < snd p0.
-
-Record TraceCarrier : Type := mkTraceCarrier {
-  carrier_part : SegmentTracePart;
-  carrier_segment : Segment
-}.
-
-Definition onCarrier (carrier : TraceCarrier) (p : Point) : Prop :=
-  onSegmentTrace
-    (carrier_part carrier) (carrier_segment carrier) p.
-
-Definition body_carrier (seg : Segment) : TraceCarrier :=
-  mkTraceCarrier TraceBody seg.
-
-Definition head_carrier (seg : Segment) : TraceCarrier :=
-  mkTraceCarrier TraceHead seg.
-
-Definition last_carrier (seg : Segment) : TraceCarrier :=
-  mkTraceCarrier TraceLast seg.
-
-Definition TraceState : Type := (TraceCarrier * Point)%type.
-
-Definition valid_trace_state (state : TraceState) : Prop :=
-  onCarrier (fst state) (snd state).
-
-(* carrier だけでなく現在点も保持する。これにより junction 後に同じ
-   carrier の無関係な点へ飛ぶことを防ぐ。 *)
-Inductive TraceStateLink : TraceState -> TraceState -> Prop :=
-  | TraceStateJunction : forall from to p,
-      onCarrier from p ->
-      onCarrier to p ->
-      TraceStateLink (from, p) (to, p)
-  | TraceStateAlongUp : forall carrier p q,
-      onCarrier carrier p ->
-      onCarrier carrier q ->
-      snd p <= snd q ->
-      TraceStateLink (carrier, p) (carrier, q)
-  | TraceStateAbove : forall from to p q,
-      onCarrier from p ->
-      onCarrier to q ->
-      fst p = fst q ->
-      snd p <= snd q ->
-      TraceStateLink (from, p) (to, q).
-
-Definition TraceStateChain : TraceState -> TraceState -> Prop :=
-  clos_refl_trans TraceState TraceStateLink.
-
-Lemma connected_adjacent_body_link :
-  forall ls i s t,
-    connected ls ->
-    nth_error ls i = Some s ->
-    nth_error ls (S i) = Some t ->
-    TraceStateLink
-      (body_carrier s, term s) (body_carrier t, init t).
-Proof.
-  intros ls i s t Hconn Hs Ht.
-  assert (Hjoin : term s = init t) by
-    exact (Hconn i s t Hs Ht).
-  rewrite <- Hjoin.
-  apply (TraceStateJunction
-           (body_carrier s) (body_carrier t) (term s)).
-  - exact (onTerm s).
-  - change (onSegment t (term s)).
-    rewrite Hjoin.
-    apply onInit.
-Qed.
 
 (* x 方向の閉区間が交わる二つの端点長方形。 *)
 Definition segment_x_ranges_overlap (s t : Segment) : Prop :=
@@ -427,33 +356,6 @@ Proof.
       * exact Hqx.
 Qed.
 
-(* 非交差 trace 上の一点で得た上下関係は、sub と共有する全 x へ
-   持ち上がる。これは一般の trace 上下不変性の直接の系である。 *)
-Lemma on_trace_above_sub_implies_above_sub_side :
-  forall sub p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    on_trace_above_sub sub p ->
-    above_sub_side sub p.
-Proof.
-  intros sub p Hne Hconn Hmono
-    [part [seg [p0 [q0 [Hdisjoint
-      [Hp [Hp0 [Hq0 [Hx0 Hy0]]]]]]]]].
-  split.
-  - exact (Hdisjoint p Hp).
-  - intros Hx.
-    destruct (x_monotone_sub_has_point sub (fst p)
-                Hne Hconn Hmono Hx) as [q [Hq Hqx]].
-    exists q. repeat split; try assumption.
-    + now symmetry.
-    + destruct (disjoint_trace_sub_vertical_order_constant
-                  part seg sub Hne Hconn Hmono Hdisjoint
-                  p0 q0 p q Hp0 Hq0 Hx0 Hp Hq ltac:(now symmetry))
-        as [Habove _].
-      now apply Habove.
-Qed.
-
 Lemma on_trace_above_sub_implies_strictly_above_at_x :
   forall sub p,
     sub <> [] ->
@@ -536,6 +438,28 @@ Proof.
   intros l sub r Hctx.
   apply connected_middle with (l := l) (r := r).
   now apply context_whole_connected.
+Qed.
+
+Lemma whole_nonempty : forall (l sub r : list Segment),
+  sub <> [] -> l ++ sub ++ r <> [].
+Proof.
+  intros l sub r HsubNe Hnil.
+  apply app_eq_nil in Hnil as [_ Hsubr].
+  apply app_eq_nil in Hsubr as [Hsub _].
+  exact (HsubNe Hsub).
+Qed.
+
+(* context の sparse 性と延長線非交差性から、曲線全体は開いている。 *)
+Lemma context_whole_open : forall l sub r,
+  ClassificationContext l sub r -> ~ close (l ++ sub ++ r).
+Proof.
+  intros l sub r Hctx.
+  destruct (context_whole_embedded l sub r Hctx) as [ds Hembed].
+  eapply sparse_extensions_open.
+  - now apply whole_nonempty, context_sub_nonempty with (l := l) (r := r).
+  - exact Hembed.
+  - now apply context_sparse.
+  - now apply context_extensions_disjoint.
 Qed.
 
 (* 仕様の結論で分類する点は sub 上の点または端点だけである。
@@ -840,123 +764,6 @@ Proof.
     lra.
 Qed.
 
-Definition vertically_upward_closed (P : Point -> Prop) : Prop :=
-  forall p q, P p -> snd p <= snd q -> P q.
-
-Definition vertically_downward_closed (P : Point -> Prop) : Prop :=
-  forall p q, P q -> snd p <= snd q -> P p.
-
-(* y に関して上方閉な不変量は core 区間を順方向に伝播する。 *)
-Lemma endpoint_core_path_preserves_upward_closed :
-  forall l sub r (P : Point -> Prop) p q,
-    vertically_upward_closed P ->
-    endpoint_core_path l sub r p q ->
-    P p ->
-    P q.
-Proof.
-  intros l sub r P p q Hclosed Hpath Hp.
-  exact (Hclosed p q Hp
-           (endpoint_core_path_vertical_monotone l sub r p q Hpath)).
-Qed.
-
-(* Down 側で使う下方閉な不変量は、core 区間を逆方向に伝播する。 *)
-Lemma endpoint_core_path_reflects_downward_closed :
-  forall l sub r (P : Point -> Prop) p q,
-    vertically_downward_closed P ->
-    endpoint_core_path l sub r p q ->
-    P q ->
-    P p.
-Proof.
-  intros l sub r P p q Hclosed Hpath Hq.
-  exact (Hclosed p q Hq
-           (endpoint_core_path_vertical_monotone l sub r p q Hpath)).
-Qed.
-
-Definition above_sub_bbox (sub : list Segment) (p : Point) : Prop :=
-  ry1 (bbox_of sub) < snd p.
-
-Definition below_sub_bbox (sub : list Segment) (p : Point) : Prop :=
-  snd p < ry0 (bbox_of sub).
-
-Lemma above_sub_bbox_upward_closed : forall sub,
-  vertically_upward_closed (above_sub_bbox sub).
-Proof.
-  intros sub p q Hp Hpq. unfold above_sub_bbox in *. lra.
-Qed.
-
-Lemma below_sub_bbox_downward_closed : forall sub,
-  vertically_downward_closed (below_sub_bbox sub).
-Proof.
-  intros sub p q Hq Hpq. unfold below_sub_bbox in *. lra.
-Qed.
-
-(* bbox より上という単純な Up 不変量は core 区間だけなら保存される。 *)
-Lemma endpoint_core_path_preserves_above_sub_bbox :
-  forall l sub r p q,
-    endpoint_core_path l sub r p q ->
-    above_sub_bbox sub p ->
-    above_sub_bbox sub q.
-Proof.
-  intros l sub r p q Hpath Hp.
-  eapply endpoint_core_path_preserves_upward_closed; eauto.
-  apply above_sub_bbox_upward_closed.
-Qed.
-
-(* bbox より下という Down 不変量は、core 区間の終点から始点へ戻せる。 *)
-Lemma endpoint_core_path_reflects_below_sub_bbox :
-  forall l sub r p q,
-    endpoint_core_path l sub r p q ->
-    below_sub_bbox sub q ->
-    below_sub_bbox sub p.
-Proof.
-  intros l sub r p q Hpath Hq.
-  eapply endpoint_core_path_reflects_downward_closed; eauto.
-  apply below_sub_bbox_downward_closed.
-Qed.
-
-Lemma above_sub_bbox_not_on_sub : forall sub p,
-  above_sub_bbox sub p ->
-  ~ onSegmentlist sub p.
-Proof.
-  intros sub p Habove Hsub.
-  pose proof (bbox_of_bounds sub p Hsub). unfold above_sub_bbox in Habove.
-  lra.
-Qed.
-
-Lemma below_sub_bbox_not_on_sub : forall sub p,
-  below_sub_bbox sub p ->
-  ~ onSegmentlist sub p.
-Proof.
-  intros sub p Hbelow Hsub.
-  pose proof (bbox_of_bounds sub p Hsub). unfold below_sub_bbox in Hbelow.
-  lra.
-Qed.
-
-Lemma endpoint_core_path_above_bbox_not_reaches_sub :
-  forall l sub r p q,
-    above_sub_bbox sub p ->
-    endpoint_core_path l sub r p q ->
-    ~ onSegmentlist sub q.
-Proof.
-  intros l sub r p q Hp Hpath.
-  apply above_sub_bbox_not_on_sub.
-  exact (endpoint_core_path_preserves_above_sub_bbox
-           l sub r p q Hpath Hp).
-Qed.
-
-Lemma endpoint_core_path_sub_not_reaches_below_bbox :
-  forall l sub r p q,
-    onSegmentlist sub p ->
-    endpoint_core_path l sub r p q ->
-    ~ below_sub_bbox sub q.
-Proof.
-  intros l sub r p q Hsub Hpath Hq.
-  apply (below_sub_bbox_not_on_sub sub p
-           (endpoint_core_path_reflects_below_sub_bbox
-              l sub r p q Hpath Hq)).
-  exact Hsub.
-Qed.
-
 (* 任意の順序経路を「通常区間の後に、例外辺と通常区間を反復する」形で保持する。
    各 [end] でのみ Head/Last 用の不変量を切り替えればよい。 *)
 Inductive endpoint_factored_path
@@ -1176,6 +983,537 @@ Definition endpoint_down_seed
             /\ onSegmentlist sub z
             /\ fst q = fst z
             /\ snd q < snd z)).
+
+(* ----------------------------------------------------------------- *)
+(*  Up 経路を sub より上に保つための不変量                       *)
+(* ----------------------------------------------------------------- *)
+
+Definition sub_left_anchor (sub : list Segment) : Point :=
+  init (hd_segment sub).
+
+Definition sub_right_anchor (sub : list Segment) : Point :=
+  term (last_segment sub).
+
+(* sub と同じ x にあり、その高さ以下にある点。等号を含めることで
+   sub 上への再衝突も同時に危険点として扱う。 *)
+Definition at_or_below_sub_at_x
+    (sub : list Segment) (p : Point) : Prop :=
+  exists q,
+    onSegmentlist sub q
+    /\ fst p = fst q
+    /\ snd p <= snd q.
+
+Definition unsafe_up_point
+    (sub : list Segment) (p : Point) : Prop :=
+  in_sub_x_range sub p /\ at_or_below_sub_at_x sub p.
+
+(* 左側の点と init sub の間を、一つのセグメント出現（必要なら先頭・
+   末尾延長を含む）が閉じた高さ区間全体で塞ぐ。x は常に開区間内に
+   置き、p や init sub へ直接つながるセグメント自身を障壁から除く。 *)
+Definition left_vertical_guard_to_init
+    (l sub r : list Segment) (p : Point) : Prop :=
+  let whole := l ++ sub ++ r in
+  let left := sub_left_anchor sub in
+  exists seg,
+    In seg whole
+    /\ snd p < snd left
+    /\ (forall y,
+          snd p <= y <= snd left ->
+          exists x,
+            fst p < x < fst left
+            /\ onExtendSegment whole seg (x, y)).
+
+(* 右側では term sub まで同じ障壁を張る。 *)
+Definition right_vertical_guard_to_term
+    (l sub r : list Segment) (p : Point) : Prop :=
+  let whole := l ++ sub ++ r in
+  let right := sub_right_anchor sub in
+  exists seg,
+    In seg whole
+    /\ snd p < snd right
+    /\ (forall y,
+          snd p <= y <= snd right ->
+          exists x,
+            fst right < x < fst p
+            /\ onExtendSegment whole seg (x, y)).
+
+(* 障壁との共有点になり得る先頭終点・末尾始点。ここから危険点へ出られ
+   ないこと自体は、dc と sparse を使う別の局所補題で示す。 *)
+Definition end_special_point
+    (l sub r : list Segment) (p : Point) : Prop :=
+  p = term (hd_segment (l ++ sub ++ r))
+  \/ p = init (last_segment (l ++ sub ++ r)).
+
+Definition left_special_point
+    (l sub r : list Segment) (p : Point) : Prop :=
+  end_special_point l sub r p
+  /\ fst p < fst (sub_left_anchor sub)
+  /\ snd p <= snd (sub_left_anchor sub).
+
+Definition right_special_point
+    (l sub r : list Segment) (p : Point) : Prop :=
+  end_special_point l sub r p
+  /\ fst (sub_right_anchor sub) < fst p
+  /\ snd p <= snd (sub_right_anchor sub).
+
+(* 経路全体を禁止するのではなく、特殊点から sub 以下へ出る直接の一辺
+   だけを拒む。従って最終目標の言い換えにはなっていない。 *)
+Definition locally_blocks_unsafe_up
+    (l sub r : list Segment) (p : Point) : Prop :=
+  forall q,
+    endpoint_order_step l sub r p q ->
+    ~ unsafe_up_point sub q.
+
+Definition left_up_certificate
+    (l sub r : list Segment) (p : Point) : Prop :=
+  on_trace_above_sub sub p
+  \/ left_vertical_guard_to_init l sub r p
+  \/ (left_special_point l sub r p
+      /\ locally_blocks_unsafe_up l sub r p).
+
+Definition right_up_certificate
+    (l sub r : list Segment) (p : Point) : Prop :=
+  on_trace_above_sub sub p
+  \/ right_vertical_guard_to_term l sub r p
+  \/ (right_special_point l sub r p
+      /\ locally_blocks_unsafe_up l sub r p).
+
+(* 中央では欲しい結論そのものを保ち、左右で端点の高さ以下まで下がる
+   場合にだけ、trace・障壁・特殊点のいずれかの証明書を要求する。 *)
+Definition up_path_invariant
+    (l sub r : list Segment) (p : Point) : Prop :=
+  (in_sub_x_range sub p -> strictly_above_sub_at_x sub p)
+  /\ (fst p < fst (sub_left_anchor sub) ->
+      snd p <= snd (sub_left_anchor sub) ->
+      left_up_certificate l sub r p)
+  /\ (fst (sub_right_anchor sub) < fst p ->
+      snd p <= snd (sub_right_anchor sub) ->
+      right_up_certificate l sub r p).
+
+Lemma strictly_above_sub_excludes_at_or_below : forall sub p,
+  strictly_above_sub_at_x sub p ->
+  ~ at_or_below_sub_at_x sub p.
+Proof.
+  intros sub p Habove [q [Hq [Hx Hy]]].
+  specialize (Habove q Hq Hx). lra.
+Qed.
+
+Lemma at_or_below_sub_at_x_is_in_range : forall l sub r p,
+  ClassificationContext l sub r ->
+  at_or_below_sub_at_x sub p ->
+  in_sub_x_range sub p.
+Proof.
+  intros l sub r p Hctx [q [Hq [Hx _]]].
+  unfold in_sub_x_range.
+  rewrite Hx.
+  change (in_sub_x_range sub q).
+  exact (x_monotone_sub_point_in_x_range sub q
+           (context_sub_nonempty l sub r Hctx)
+           (context_sub_connected l sub r Hctx)
+           (context_sub_x_monotone l sub r Hctx) Hq).
+Qed.
+
+Lemma unsafe_up_point_iff_at_or_below : forall l sub r p,
+  ClassificationContext l sub r ->
+  unsafe_up_point sub p <-> at_or_below_sub_at_x sub p.
+Proof.
+  intros l sub r p Hctx. split.
+  - now intros [_ Hbelow].
+  - intro Hbelow. split; [|exact Hbelow].
+    now apply at_or_below_sub_at_x_is_in_range with (l := l) (r := r).
+Qed.
+
+Lemma on_trace_above_sub_gives_up_path_invariant : forall l sub r p,
+  ClassificationContext l sub r ->
+  on_trace_above_sub sub p ->
+  up_path_invariant l sub r p.
+Proof.
+  intros l sub r p Hctx Htrace.
+  assert (Habove : strictly_above_sub_at_x sub p).
+  { eapply on_trace_above_sub_implies_strictly_above_at_x; eauto using
+      context_sub_nonempty, context_sub_connected, context_sub_x_monotone. }
+  split.
+  - intros _. exact Habove.
+  - split; intros; [left | left]; exact Htrace.
+Qed.
+
+Lemma up_path_invariant_not_on_sub : forall l sub r p,
+  ClassificationContext l sub r ->
+  up_path_invariant l sub r p ->
+  ~ onSegmentlist sub p.
+Proof.
+  intros l sub r p Hctx [Hcenter _] Hsub.
+  apply (strictly_above_sub_at_x_not_on_sub sub p
+           (Hcenter
+             (x_monotone_sub_point_in_x_range sub p
+               (context_sub_nonempty l sub r Hctx)
+               (context_sub_connected l sub r Hctx)
+               (context_sub_x_monotone l sub r Hctx) Hsub))).
+  exact Hsub.
+Qed.
+
+(* 開いた曲線では、左の障壁を構成するセグメントと、p から init sub
+   へ直接上がるセグメントとの x 順序は反転できない。 *)
+Lemma left_guard_blocks_segment_to_init : forall l sub r p seg,
+  ClassificationContext l sub r ->
+  In seg (l ++ sub ++ r) ->
+  endpoint_of_seg seg p ->
+  endpoint_of_seg seg (sub_left_anchor sub) ->
+  fst p < fst (sub_left_anchor sub) ->
+  left_vertical_guard_to_init l sub r p ->
+  False.
+Proof.
+  intros l sub r p seg Hctx Hseg Hp Hleft Hpx.
+  unfold left_vertical_guard_to_init.
+  cbn.
+  intros [barrier [Hbarrier [Hy Hspan]]].
+  destruct (Hspan (snd p) ltac:(lra)) as [xb [Hxb HbarrierBottom]].
+  destruct (Hspan (snd (sub_left_anchor sub)) ltac:(lra))
+    as [xt [Hxt HbarrierTop]].
+  assert (Hwhole : l ++ sub ++ r <> []).
+  { now apply whole_nonempty, context_sub_nonempty with (l := l) (r := r). }
+  assert (HpathBottom :
+      onExtendSegment (l ++ sub ++ r) seg (fst p, snd p)).
+  { replace (fst p, snd p) with p by (destruct p; reflexivity).
+    apply OnSegMid; [exact Hwhole | exact Hseg |].
+    destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
+  assert (HpathTop :
+      onExtendSegment (l ++ sub ++ r) seg
+        (fst (sub_left_anchor sub), snd (sub_left_anchor sub))).
+  { replace (fst (sub_left_anchor sub), snd (sub_left_anchor sub))
+      with (sub_left_anchor sub) by
+      (destruct (sub_left_anchor sub); reflexivity).
+    apply OnSegMid; [exact Hwhole | exact Hseg |].
+    destruct Hleft as [-> | ->]; [apply onInit | apply onTerm]. }
+  apply (context_whole_open l sub r Hctx).
+  eapply x_cross_v with
+    (s1 := seg) (s2 := barrier)
+    (ya := snd p) (yb := snd (sub_left_anchor sub))
+    (x1a := fst p) (x1b := fst (sub_left_anchor sub))
+    (x2a := xb) (x2b := xt); eauto.
+  nra.
+Qed.
+
+(* 右側でも、term sub へ直接上がるセグメントは障壁を横切ってしまう。 *)
+Lemma right_guard_blocks_segment_to_term : forall l sub r p seg,
+  ClassificationContext l sub r ->
+  In seg (l ++ sub ++ r) ->
+  endpoint_of_seg seg p ->
+  endpoint_of_seg seg (sub_right_anchor sub) ->
+  fst (sub_right_anchor sub) < fst p ->
+  right_vertical_guard_to_term l sub r p ->
+  False.
+Proof.
+  intros l sub r p seg Hctx Hseg Hp Hright Hpx.
+  unfold right_vertical_guard_to_term.
+  cbn.
+  intros [barrier [Hbarrier [Hy Hspan]]].
+  destruct (Hspan (snd p) ltac:(lra)) as [xb [Hxb HbarrierBottom]].
+  destruct (Hspan (snd (sub_right_anchor sub)) ltac:(lra))
+    as [xt [Hxt HbarrierTop]].
+  assert (Hwhole : l ++ sub ++ r <> []).
+  { now apply whole_nonempty, context_sub_nonempty with (l := l) (r := r). }
+  assert (HpathBottom :
+      onExtendSegment (l ++ sub ++ r) seg (fst p, snd p)).
+  { replace (fst p, snd p) with p by (destruct p; reflexivity).
+    apply OnSegMid; [exact Hwhole | exact Hseg |].
+    destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
+  assert (HpathTop :
+      onExtendSegment (l ++ sub ++ r) seg
+        (fst (sub_right_anchor sub), snd (sub_right_anchor sub))).
+  { replace (fst (sub_right_anchor sub), snd (sub_right_anchor sub))
+      with (sub_right_anchor sub) by
+      (destruct (sub_right_anchor sub); reflexivity).
+    apply OnSegMid; [exact Hwhole | exact Hseg |].
+    destruct Hright as [-> | ->]; [apply onInit | apply onTerm]. }
+  apply (context_whole_open l sub r Hctx).
+  eapply x_cross_v with
+    (s1 := seg) (s2 := barrier)
+    (ya := snd p) (yb := snd (sub_right_anchor sub))
+    (x1a := fst p) (x1b := fst (sub_right_anchor sub))
+    (x2a := xb) (x2b := xt); eauto.
+  nra.
+Qed.
+
+(* ----------------------------------------------------------------- *)
+(*  Up 不変量を一つの順序辺に沿って移すための幾何学的補題       *)
+(* ----------------------------------------------------------------- *)
+
+(* 同一セグメント上で低い端点から高い端点へ進む通常辺。 *)
+Lemma same_segment_upward_preserves_up_path_invariant :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    up_path_invariant l sub r p ->
+    up_path_invariant l sub r q.
+Admitted.
+
+(* x 範囲が重なる非隣接セグメント間の、下側端点から上側端点への辺。 *)
+Lemma nonadjacent_upward_preserves_up_path_invariant :
+  forall l sub r i j s t ps pt,
+    ClassificationContext l sub r ->
+    nth_error (l ++ sub ++ r) i = Some s ->
+    nth_error (l ++ sub ++ r) j = Some t ->
+    (S i < j \/ S j < i)%nat ->
+    segment_x_ranges_overlap s t ->
+    endpoint_of_seg s ps ->
+    endpoint_of_seg t pt ->
+    snd ps <= snd pt ->
+    up_path_invariant l sub r ps ->
+    up_path_invariant l sub r pt.
+Admitted.
+
+(* 以下の四補題は、先頭・末尾の傾き保存のために加えた逆向き辺だけを扱う。 *)
+Lemma head_north_cx_reverse_preserves_up_path_invariant :
+  forall l sub r hor,
+    ClassificationContext l sub r ->
+    l <> [] ->
+    embed (n, hor, cx) (hd_segment l) ->
+    up_path_invariant l sub r (term (hd_segment l)) ->
+    up_path_invariant l sub r (init (hd_segment l)).
+Admitted.
+
+Lemma head_south_cc_reverse_preserves_up_path_invariant :
+  forall l sub r hor,
+    ClassificationContext l sub r ->
+    l <> [] ->
+    embed (s, hor, cc) (hd_segment l) ->
+    up_path_invariant l sub r (init (hd_segment l)) ->
+    up_path_invariant l sub r (term (hd_segment l)).
+Admitted.
+
+Lemma last_north_cc_reverse_preserves_up_path_invariant :
+  forall l sub r hor,
+    ClassificationContext l sub r ->
+    r <> [] ->
+    embed (n, hor, cc) (last_segment r) ->
+    up_path_invariant l sub r (term (last_segment r)) ->
+    up_path_invariant l sub r (init (last_segment r)).
+Admitted.
+
+Lemma last_south_cx_reverse_preserves_up_path_invariant :
+  forall l sub r hor,
+    ClassificationContext l sub r ->
+    r <> [] ->
+    embed (s, hor, cx) (last_segment r) ->
+    up_path_invariant l sub r (init (last_segment r)) ->
+    up_path_invariant l sub r (term (last_segment r)).
+Admitted.
+
+(* 同じ x にある先頭・末尾延長線の上下比較を、その基点間へ移す二場合。 *)
+Lemma head_below_last_preserves_up_path_invariant :
+  forall l sub r ph pl,
+    ClassificationContext l sub r ->
+    onHead_extend (l ++ sub ++ r) ph ->
+    onLast_extend (l ++ sub ++ r) pl ->
+    fst ph = fst pl ->
+    snd ph <= snd pl ->
+    up_path_invariant l sub r
+      (init (hd_segment (l ++ sub ++ r))) ->
+    up_path_invariant l sub r
+      (term (last_segment (l ++ sub ++ r))).
+Admitted.
+
+Lemma last_below_head_preserves_up_path_invariant :
+  forall l sub r ph pl,
+    ClassificationContext l sub r ->
+    onHead_extend (l ++ sub ++ r) ph ->
+    onLast_extend (l ++ sub ++ r) pl ->
+    fst ph = fst pl ->
+    snd pl <= snd ph ->
+    up_path_invariant l sub r
+      (term (last_segment (l ++ sub ++ r))) ->
+    up_path_invariant l sub r
+      (init (hd_segment (l ++ sub ++ r))).
+Admitted.
+
+(* 延長線と一セグメントの上下比較を、基点とその端点へ移す四場合。 *)
+Lemma head_below_segment_preserves_up_path_invariant :
+  forall l sub r seg e q p,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    onSegment seg e ->
+    onHead_extend_strict (l ++ sub ++ r) q ->
+    fst e = fst q ->
+    snd q <= snd e ->
+    endpoint_of_seg seg p ->
+    up_path_invariant l sub r
+      (init (hd_segment (l ++ sub ++ r))) ->
+    up_path_invariant l sub r p.
+Admitted.
+
+Lemma segment_below_head_preserves_up_path_invariant :
+  forall l sub r seg e q p,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    onSegment seg e ->
+    onHead_extend_strict (l ++ sub ++ r) q ->
+    fst e = fst q ->
+    snd e <= snd q ->
+    endpoint_of_seg seg p ->
+    up_path_invariant l sub r p ->
+    up_path_invariant l sub r
+      (init (hd_segment (l ++ sub ++ r))).
+Admitted.
+
+Lemma last_below_segment_preserves_up_path_invariant :
+  forall l sub r seg e q p,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    onSegment seg e ->
+    onLast_extend_strict (l ++ sub ++ r) q ->
+    fst e = fst q ->
+    snd q <= snd e ->
+    endpoint_of_seg seg p ->
+    up_path_invariant l sub r
+      (term (last_segment (l ++ sub ++ r))) ->
+    up_path_invariant l sub r p.
+Admitted.
+
+Lemma segment_below_last_preserves_up_path_invariant :
+  forall l sub r seg e q p,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    onSegment seg e ->
+    onLast_extend_strict (l ++ sub ++ r) q ->
+    fst e = fst q ->
+    snd e <= snd q ->
+    endpoint_of_seg seg p ->
+    up_path_invariant l sub r p ->
+    up_path_invariant l sub r
+      (term (last_segment (l ++ sub ++ r))).
+Admitted.
+
+(* 以下の二命題が、今後埋める幾何学的な核心である。通常辺と
+   Head/Last 由来の一辺を分け、経路全体の帰納から切り離す。 *)
+Definition core_steps_preserve_up_invariant
+    (l sub r : list Segment) : Prop :=
+  forall p q,
+    endpoint_core_step l sub r p q ->
+    up_path_invariant l sub r p ->
+    up_path_invariant l sub r q.
+
+Definition core_paths_preserve_up_invariant
+    (l sub r : list Segment) : Prop :=
+  forall p q,
+    endpoint_core_path l sub r p q ->
+    up_path_invariant l sub r p ->
+    up_path_invariant l sub r q.
+
+Definition end_steps_preserve_up_invariant
+    (l sub r : list Segment) : Prop :=
+  forall p q,
+    endpoint_end_step l sub r p q ->
+    up_path_invariant l sub r p ->
+    up_path_invariant l sub r q.
+
+(* 通常辺の二つの幾何補題を、core 一辺の保存則へまとめる。 *)
+Lemma classification_context_core_steps_preserve_up_invariant :
+  forall l sub r,
+    ClassificationContext l sub r ->
+    core_steps_preserve_up_invariant l sub r.
+Proof.
+  intros l sub r Hctx p q Hstep Hp.
+  destruct Hstep as
+      [seg p q Hin Hendpoint_p Hendpoint_q Hheight
+      | i j s0 t ps pt Hs Ht Hfar Hover Hps Hpt Hheight].
+  - eapply same_segment_upward_preserves_up_path_invariant.
+    + exact Hctx.
+    + exact Hin.
+    + exact Hendpoint_p.
+    + exact Hendpoint_q.
+    + exact Hheight.
+    + exact Hp.
+  - eapply nonadjacent_upward_preserves_up_path_invariant.
+    + exact Hctx.
+    + exact Hs.
+    + exact Ht.
+    + exact Hfar.
+    + exact Hover.
+    + exact Hps.
+    + exact Hpt.
+    + exact Hheight.
+    + exact Hp.
+Qed.
+
+(* 十種類の例外辺を、それぞれに対応する局所幾何補題から合成する。 *)
+Lemma classification_context_end_steps_preserve_up_invariant :
+  forall l sub r,
+    ClassificationContext l sub r ->
+    end_steps_preserve_up_invariant l sub r.
+Proof.
+  intros l sub r Hctx p q Hstep Hp.
+  destruct Hstep.
+  - eapply head_north_cx_reverse_preserves_up_path_invariant; eauto.
+  - eapply head_south_cc_reverse_preserves_up_path_invariant; eauto.
+  - eapply last_north_cc_reverse_preserves_up_path_invariant; eauto.
+  - eapply last_south_cx_reverse_preserves_up_path_invariant; eauto.
+  - eapply head_below_last_preserves_up_path_invariant; eauto.
+  - eapply last_below_head_preserves_up_path_invariant; eauto.
+  - eapply head_below_segment_preserves_up_path_invariant; eauto.
+  - eapply segment_below_head_preserves_up_path_invariant; eauto.
+  - eapply last_below_segment_preserves_up_path_invariant; eauto.
+  - eapply segment_below_last_preserves_up_path_invariant; eauto.
+Qed.
+
+Lemma core_step_preservation_lifts_to_paths : forall l sub r,
+  core_steps_preserve_up_invariant l sub r ->
+  core_paths_preserve_up_invariant l sub r.
+Proof.
+  intros l sub r Hstep p q Hpath Hp.
+  induction Hpath as [p | p next q Hfirst Htail IH].
+  - exact Hp.
+  - apply IH. now apply (Hstep p next Hfirst).
+Qed.
+
+(* core 区間と end 一辺の保存さえ得られれば、分解済み経路については
+   純粋な関係の帰納だけで不変量が保存される。 *)
+Lemma endpoint_factored_path_preserves_up_invariant : forall l sub r,
+  core_paths_preserve_up_invariant l sub r ->
+  end_steps_preserve_up_invariant l sub r ->
+  forall p q,
+    endpoint_factored_path l sub r p q ->
+    up_path_invariant l sub r p ->
+    up_path_invariant l sub r q.
+Proof.
+  intros l sub r Hcore Hend p q Hpath Hp.
+  induction Hpath as
+      [p q Hpath | p before after q Hprefix Hstep Htail IH].
+  - exact (Hcore p q Hpath Hp).
+  - apply IH.
+    apply (Hend before after Hstep).
+    exact (Hcore p before Hprefix Hp).
+Qed.
+
+Lemma endpoint_order_path_preserves_up_invariant : forall l sub r,
+  core_paths_preserve_up_invariant l sub r ->
+  end_steps_preserve_up_invariant l sub r ->
+  forall p q,
+    endpoint_order_path l sub r p q ->
+    up_path_invariant l sub r p ->
+    up_path_invariant l sub r q.
+Proof.
+  intros l sub r Hcore Hend p q Hpath Hp.
+  eapply endpoint_factored_path_preserves_up_invariant; eauto.
+  now apply endpoint_order_path_is_factored.
+Qed.
+
+Lemma invariant_up_path_does_not_reach_sub : forall l sub r,
+  ClassificationContext l sub r ->
+  core_paths_preserve_up_invariant l sub r ->
+  end_steps_preserve_up_invariant l sub r ->
+  forall p q,
+    up_path_invariant l sub r p ->
+    endpoint_order_path l sub r p q ->
+    ~ onSegmentlist sub q.
+Proof.
+  intros l sub r Hctx Hcore Hend p q Hp Hpath.
+  apply up_path_invariant_not_on_sub with (l := l) (r := r); [exact Hctx |].
+  eapply endpoint_order_path_preserves_up_invariant; eauto.
+Qed.
 
 (* 非隣接セグメントの端点は、閉長方形 sparse 性により sub 上にはない。 *)
 Lemma nonadjacent_endpoint_not_on_sub : forall l sub r seg p,
@@ -1407,6 +1745,115 @@ Proof.
   - exact (external_last_endpoint_not_on_sub l sub r Hctx Hr).
 Qed.
 
+Lemma strict_extension_not_on_sub : forall l sub r p,
+  sparse_embedding (l ++ sub ++ r) ->
+  ((l <> [] /\ onHead_extend_strict (l ++ sub ++ r) p)
+   \/ (r <> [] /\ onLast_extend_strict (l ++ sub ++ r) p)) ->
+  onSegmentlist sub p -> False.
+Proof.
+  intros l sub r p Hsparse Hextend [seg [Hseg Hon]].
+  apply in_split in Hseg.
+  destruct Hseg as [sub_l [sub_r Hsub]]. subst sub.
+  assert (Hwhole :
+    l ++ (sub_l ++ seg :: sub_r) ++ r =
+    (l ++ sub_l) ++ [seg] ++ (sub_r ++ r)).
+  { repeat rewrite <- app_assoc. simpl. reflexivity. }
+  destruct (Hsparse (l ++ sub_l) seg (sub_r ++ r) Hwhole)
+    as [Havoid _].
+  apply (Havoid p).
+  - destruct Hextend as [[Hl Hhead] | [Hr Hlast]].
+    + left. split.
+      * intros Hnil. apply app_eq_nil in Hnil. tauto.
+      * now rewrite <- Hwhole.
+    + right. split.
+      * intros Hnil. apply app_eq_nil in Hnil. tauto.
+      * now rewrite <- Hwhole.
+  - change (in_segment_rect_or_endpoints seg p).
+    now apply segment_in_rect_or_endpoints.
+Qed.
+
+Lemma nonadjacent_body_trace_disjoint_from_sub : forall l sub r seg,
+  sparse_embedding (l ++ sub ++ r) ->
+  In seg (nonadjacent_sides l r) ->
+  trace_disjoint_from_segmentlist TraceBody seg sub.
+Proof.
+  intros l sub r seg Hsparse Hseg p Hp Hsub.
+  apply (sparse_nonadjacent_box_avoids_sub_points
+           l sub r seg p Hsparse Hseg Hsub).
+  change (in_segment_rect_or_endpoints seg p).
+  now apply segment_in_rect_or_endpoints.
+Qed.
+
+Lemma external_head_trace_disjoint_from_sub : forall l sub r,
+  ClassificationContext l sub r ->
+  l <> [] ->
+  trace_disjoint_from_segmentlist
+    TraceHead (hd_segment (l ++ sub ++ r)) sub.
+Proof.
+  intros l sub r Hctx Hl p [t [Ht Hpoint]] Hsub.
+  destruct (Rlt_dec t 0) as [Hstrict | Hbase].
+  - eapply strict_extension_not_on_sub; eauto using context_sparse.
+    left. split; [exact Hl |].
+    exists t. split; assumption.
+  - assert (Ht0 : t = 0) by lra. subst t.
+    change (init (hd_segment (l ++ sub ++ r)) = p) in Hpoint.
+    subst p.
+    exact (external_head_endpoint_not_on_sub l sub r Hctx Hl Hsub).
+Qed.
+
+Lemma external_last_trace_disjoint_from_sub : forall l sub r,
+  ClassificationContext l sub r ->
+  r <> [] ->
+  trace_disjoint_from_segmentlist
+    TraceLast (last_segment (l ++ sub ++ r)) sub.
+Proof.
+  intros l sub r Hctx Hr p [t [Ht Hpoint]] Hsub.
+  destruct (Rlt_dec 1 t) as [Hstrict | Hbase].
+  - eapply strict_extension_not_on_sub; eauto using context_sparse.
+    right. split; [exact Hr |].
+    exists t. split; assumption.
+  - assert (Ht1 : t = 1) by lra. subst t.
+    change (term (last_segment (l ++ sub ++ r)) = p) in Hpoint.
+    subst p.
+    exact (external_last_endpoint_not_on_sub l sub r Hctx Hr Hsub).
+Qed.
+
+(* 三種類の Up seed はいずれも、sub の上側にある非交差 trace を
+   自身の証明書として持つ。従って経路不変量の初期状態を満たす。 *)
+Lemma endpoint_up_seed_satisfies_up_path_invariant : forall l sub r p,
+  ClassificationContext l sub r ->
+  endpoint_up_seed l sub r p ->
+  up_path_invariant l sub r p.
+Proof.
+  intros l sub r p Hctx [_ [Hbody | [Hhead | Hlast]]].
+  - destruct Hbody as
+      [seg [q [Hseg [Hp [Hq [_ [z [Hz [Hx Hy]]]]]]]]].
+    apply on_trace_above_sub_gives_up_path_invariant with
+      (l := l) (r := r); [exact Hctx |].
+    exists TraceBody, seg, q, z. repeat split; try assumption.
+    + now apply nonadjacent_body_trace_disjoint_from_sub
+        with (l := l) (r := r); [apply context_sparse |].
+    + destruct Hp as [-> | ->]; [apply onInit | apply onTerm].
+  - destruct Hhead as [Hl [-> [q [z [Hq [Hz [Hx Hy]]]]]]].
+    apply on_trace_above_sub_gives_up_path_invariant with
+      (l := l) (r := r); [exact Hctx |].
+    exists TraceHead, (hd_segment (l ++ sub ++ r)), q, z.
+    repeat split; try assumption.
+    + now apply external_head_trace_disjoint_from_sub.
+    + unfold onSegmentTrace, onHead. exists 0. split; [lra | reflexivity].
+    + destruct Hq as [t [Ht Htq]].
+      unfold onSegmentTrace, onHead. exists t. split; [lra | exact Htq].
+  - destruct Hlast as [Hr [-> [q [z [Hq [Hz [Hx Hy]]]]]]].
+    apply on_trace_above_sub_gives_up_path_invariant with
+      (l := l) (r := r); [exact Hctx |].
+    exists TraceLast, (last_segment (l ++ sub ++ r)), q, z.
+    repeat split; try assumption.
+    + now apply external_last_trace_disjoint_from_sub.
+    + unfold onSegmentTrace, onLast. exists 1. split; [lra | reflexivity].
+    + destruct Hq as [t [Ht Htq]].
+      unfold onSegmentTrace, onLast. exists t. split; [lra | exact Htq].
+Qed.
+
 (* Up は順序の上向き、Down は順序の下向きへ閉じる。 *)
 Definition endpoint_forced_up
     (l sub r : list Segment) (p : Point) : Prop :=
@@ -1451,14 +1898,6 @@ Proof.
   eapply rt_trans; eauto.
 Qed.
 
-Lemma whole_nonempty : forall (l sub r : list Segment),
-  sub <> [] -> l ++ sub ++ r <> [].
-Proof.
-  intros l sub r Hsub Hnil.
-  apply app_eq_nil in Hnil as [_ Hnil].
-  apply app_eq_nil in Hnil as [Hbad _]. contradiction.
-Qed.
-
 Lemma head_endpoint_of : forall (ls : list Segment),
   ls <> [] -> endpoint_of ls (init (hd_segment ls)).
 Proof.
@@ -1498,6 +1937,23 @@ Axiom endpoint_order_up_down_path_meets_sub :
         /\ endpoint_order_path l sub r upper at_sub
         /\ endpoint_order_path l sub r at_sub lower.
 
+(* 幾何学的な核心：Up 用不変量は、通常辺と Head/Last 由来の例外辺を
+   任意に組み合わせた順序経路の全体で保存される。 *)
+Lemma up_path_invariant_preserved_by_order_path :
+  forall l sub r,
+    ClassificationContext l sub r ->
+    forall p q,
+      up_path_invariant l sub r p ->
+      endpoint_order_path l sub r p q ->
+      up_path_invariant l sub r q.
+Proof.
+  intros l sub r Hctx p q Hp Hpath.
+  eapply endpoint_order_path_preserves_up_invariant; eauto.
+  - apply core_step_preservation_lifts_to_paths.
+    now apply classification_context_core_steps_preserve_up_invariant.
+  - now apply classification_context_end_steps_preserve_up_invariant.
+Qed.
+
 (* Up source から sub 外だけを通ってきたパスは、次の一辺で初めて
    sub へ入ることができない。共通 x 区間の上下不変性と、その区間を
    外れた部分での端点順序を組み合わせて示す。 *)
@@ -1511,7 +1967,22 @@ Lemma endpoint_order_up_first_sub_entry_impossible :
       endpoint_order_step l sub r before at_sub ->
       onSegmentlist sub at_sub ->
       False.
-Admitted.
+Proof.
+  intros l sub r Hctx upper before at_sub
+    Hseed Hprefix _ Hstep Hat_sub.
+  assert (Hlast : endpoint_order_path l sub r before at_sub).
+  { eapply Stdlib.Relations.Relation_Operators.rt1n_trans.
+    - exact Hstep.
+    - apply Stdlib.Relations.Relation_Operators.rt1n_refl. }
+  assert (Hpath : endpoint_order_path l sub r upper at_sub).
+  { eapply endpoint_order_path_trans; eauto. }
+  assert (Hinitial : up_path_invariant l sub r upper).
+  { now apply endpoint_up_seed_satisfies_up_path_invariant. }
+  assert (Hfinal : up_path_invariant l sub r at_sub).
+  { eapply up_path_invariant_preserved_by_order_path; eauto. }
+  exact (up_path_invariant_not_on_sub
+           l sub r at_sub Hctx Hfinal Hat_sub).
+Qed.
 
 (* sub 上から出た順序パスは、sub 外だけを通って Down source へ
    到達できない。末尾側まで含む下側の局所的な障壁補題である。 *)
@@ -2121,31 +2592,54 @@ Proof.
       * intros p Hx Hy. eapply southwest_cc_lower_term_slope; eauto.
 Qed.
 
-Lemma strict_extension_not_on_sub : forall l sub r p,
-  sparse_embedding (l ++ sub ++ r) ->
-  ((l <> [] /\ onHead_extend_strict (l ++ sub ++ r) p)
-   \/ (r <> [] /\ onLast_extend_strict (l ++ sub ++ r) p)) ->
-  onSegmentlist sub p -> False.
+(* 残る二つの保存補題を仮定すれば、Up seed からの任意の順序経路で
+   不変量が成立する。以後の幾何証明が目指す合成点である。 *)
+Lemma endpoint_up_seed_path_preserves_invariant : forall l sub r,
+  ClassificationContext l sub r ->
+  core_steps_preserve_up_invariant l sub r ->
+  end_steps_preserve_up_invariant l sub r ->
+  forall seed p,
+    endpoint_up_seed l sub r seed ->
+    endpoint_order_path l sub r seed p ->
+    up_path_invariant l sub r p.
 Proof.
-  intros l sub r p Hsparse Hextend [seg [Hseg Hon]].
-  apply in_split in Hseg.
-  destruct Hseg as [sub_l [sub_r Hsub]]. subst sub.
-  assert (Hwhole :
-    l ++ (sub_l ++ seg :: sub_r) ++ r =
-    (l ++ sub_l) ++ [seg] ++ (sub_r ++ r)).
-  { repeat rewrite <- app_assoc. simpl. reflexivity. }
-  destruct (Hsparse (l ++ sub_l) seg (sub_r ++ r) Hwhole)
-    as [Havoid _].
-  apply (Havoid p).
-  - destruct Hextend as [[Hl Hhead] | [Hr Hlast]].
-    + left. split.
-      * intros Hnil. apply app_eq_nil in Hnil. tauto.
-      * now rewrite <- Hwhole.
-    + right. split.
-      * intros Hnil. apply app_eq_nil in Hnil. tauto.
-      * now rewrite <- Hwhole.
-  - change (in_segment_rect_or_endpoints seg p).
-    now apply segment_in_rect_or_endpoints.
+  intros l sub r Hctx Hcore Hend seed p Hseed Hpath.
+  eapply endpoint_order_path_preserves_up_invariant.
+  - now apply core_step_preservation_lifts_to_paths.
+  - exact Hend.
+  - exact Hpath.
+  - now apply endpoint_up_seed_satisfies_up_path_invariant.
+Qed.
+
+Lemma endpoint_up_seed_path_above_in_sub_x : forall l sub r,
+  ClassificationContext l sub r ->
+  core_steps_preserve_up_invariant l sub r ->
+  end_steps_preserve_up_invariant l sub r ->
+  forall seed p,
+    endpoint_up_seed l sub r seed ->
+    endpoint_order_path l sub r seed p ->
+    in_sub_x_range sub p ->
+    strictly_above_sub_at_x sub p.
+Proof.
+  intros l sub r Hctx Hcore Hend seed p Hseed Hpath Hx.
+  pose proof (endpoint_up_seed_path_preserves_invariant
+                l sub r Hctx Hcore Hend seed p Hseed Hpath) as [Hcenter _].
+  now apply Hcenter.
+Qed.
+
+Lemma endpoint_up_seed_path_does_not_reach_sub : forall l sub r,
+  ClassificationContext l sub r ->
+  core_steps_preserve_up_invariant l sub r ->
+  end_steps_preserve_up_invariant l sub r ->
+  forall seed p,
+    endpoint_up_seed l sub r seed ->
+    endpoint_order_path l sub r seed p ->
+    ~ onSegmentlist sub p.
+Proof.
+  intros l sub r Hctx Hcore Hend seed p Hseed Hpath.
+  apply up_path_invariant_not_on_sub with (l := l) (r := r); [exact Hctx |].
+  exact (endpoint_up_seed_path_preserves_invariant
+           l sub r Hctx Hcore Hend seed p Hseed Hpath).
 Qed.
 
 Lemma strict_extension_above_or_below_sub : forall l sub r p,
