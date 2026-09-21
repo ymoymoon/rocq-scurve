@@ -742,28 +742,6 @@ Definition endpoint_core_path
     (l sub r : list Segment) : Point -> Point -> Prop :=
   clos_refl_trans_1n Point (endpoint_core_step l sub r).
 
-(* core 辺は例外なく y の弱い増加方向を向く。 *)
-Lemma endpoint_core_step_vertical_monotone : forall l sub r p q,
-  endpoint_core_step l sub r p q ->
-  snd p <= snd q.
-Proof.
-  intros l sub r p q Hstep.
-  destruct Hstep; assumption.
-Qed.
-
-(* したがって、例外辺を含まない区間全体でも y は減少しない。 *)
-Lemma endpoint_core_path_vertical_monotone : forall l sub r p q,
-  endpoint_core_path l sub r p q ->
-  snd p <= snd q.
-Proof.
-  intros l sub r p q Hpath.
-  induction Hpath as [p | p next q Hstep Htail IH].
-  - lra.
-  - pose proof
-      (endpoint_core_step_vertical_monotone l sub r p next Hstep).
-    lra.
-Qed.
-
 (* 任意の順序経路を「通常区間の後に、例外辺と通常区間を反復する」形で保持する。
    各 [end] でのみ Head/Last 用の不変量を切り替えればよい。 *)
 Inductive endpoint_factored_path
@@ -784,18 +762,6 @@ Proof.
   apply clos_rt_rt1n_iff.
 Qed.
 
-Lemma endpoint_core_path_is_order_path : forall l sub r p q,
-  endpoint_core_path l sub r p q ->
-  endpoint_order_path l sub r p q.
-Proof.
-  intros l sub r p q Hpath.
-  induction Hpath as [p | p next q Hstep Htail IH].
-  - apply Stdlib.Relations.Relation_Operators.rt1n_refl.
-  - eapply Stdlib.Relations.Relation_Operators.rt1n_trans.
-    + exact (order_core_step l sub r p next Hstep).
-    + exact IH.
-Qed.
-
 Lemma endpoint_order_path_trans : forall l sub r p q z,
   endpoint_order_path l sub r p q ->
   endpoint_order_path l sub r q z ->
@@ -806,21 +772,6 @@ Proof.
   eapply rt_trans.
   - now apply (proj2 (endpoint_order_path_iff l sub r p q)).
   - now apply (proj2 (endpoint_order_path_iff l sub r q z)).
-Qed.
-
-Lemma endpoint_factored_path_is_order_path : forall l sub r p q,
-  endpoint_factored_path l sub r p q ->
-  endpoint_order_path l sub r p q.
-Proof.
-  intros l sub r p q Hpath.
-  induction Hpath as
-      [p q Hcore | p before after q Hcore Hend Htail IH].
-  - now apply endpoint_core_path_is_order_path.
-  - eapply endpoint_order_path_trans.
-    + apply endpoint_core_path_is_order_path. exact Hcore.
-    + eapply Stdlib.Relations.Relation_Operators.rt1n_trans.
-      * exact (order_end_step l sub r before after Hend).
-      * exact IH.
 Qed.
 
 Lemma endpoint_order_path_is_factored : forall l sub r p q,
@@ -843,40 +794,6 @@ Proof.
       * apply Stdlib.Relations.Relation_Operators.rt1n_refl.
       * exact Hend.
       * exact IH.
-Qed.
-
-Lemma endpoint_factored_path_iff : forall l sub r p q,
-  endpoint_factored_path l sub r p q <->
-  endpoint_order_path l sub r p q.
-Proof.
-  split; [apply endpoint_factored_path_is_order_path
-         | apply endpoint_order_path_is_factored].
-Qed.
-
-(* 隣接セグメント間には新しい順序辺は要らない。両セグメント内の辺を、
-   [term s = init t] で同じ点として推移的に合成する。 *)
-Lemma endpoint_order_path_across_rising_junction :
-  forall l sub r s t,
-    In s (l ++ sub ++ r) ->
-    In t (l ++ sub ++ r) ->
-    term s = init t ->
-    snd (init s) <= snd (term s) ->
-    snd (init t) <= snd (term t) ->
-    endpoint_order_path l sub r (init s) (term t).
-Proof.
-  intros l sub r s t Hs Ht Hjoin Hsy Hty.
-  apply (proj1
-    (endpoint_order_path_iff l sub r (init s) (term t))).
-  eapply rt_trans.
-  - apply rt_step.
-    apply order_core_step.
-    exact (order_on_segment l sub r s (init s) (term s)
-             Hs (or_introl eq_refl) (or_intror eq_refl) Hsy).
-  - rewrite Hjoin.
-    apply rt_step.
-    apply order_core_step.
-    exact (order_on_segment l sub r t (init t) (term t)
-             Ht (or_introl eq_refl) (or_intror eq_refl) Hty).
 Qed.
 
 (* パスの始点が性質 [P] を持ち終点が持たないなら、[P] を初めて
@@ -1007,15 +924,33 @@ Definition unsafe_up_point
     (sub : list Segment) (p : Point) : Prop :=
   in_sub_x_range sub p /\ at_or_below_sub_at_x sub p.
 
+(* x が増える向きに y も厳密に増える障壁。先頭・末尾延長を使う場合も
+   同じ順序を要求するため、[onExtendSegment] 上で直接定義する。 *)
+Definition right_rising_barrier
+    (whole : list Segment) (barrier : Segment) : Prop :=
+  forall p q,
+    onExtendSegment whole barrier p ->
+    onExtendSegment whole barrier q ->
+    (fst p < fst q <-> snd p < snd q).
+
+(* 右側の障壁は左側と双対で、x が増えると y が厳密に下がる。 *)
+Definition right_falling_barrier
+    (whole : list Segment) (barrier : Segment) : Prop :=
+  forall p q,
+    onExtendSegment whole barrier p ->
+    onExtendSegment whole barrier q ->
+    (fst p < fst q <-> snd q < snd p).
+
 (* 左側の点と init sub の間を、一つのセグメント出現（必要なら先頭・
-   末尾延長を含む）が閉じた高さ区間全体で塞ぐ。x は常に開区間内に
-   置き、p や init sub へ直接つながるセグメント自身を障壁から除く。 *)
+   末尾延長を含む）が閉じた高さ区間全体で塞ぐ。障壁は右上がりとし、
+   x は常に開区間内に置いて直接接続するセグメント自身を除く。 *)
 Definition left_vertical_guard_to_init
     (l sub r : list Segment) (p : Point) : Prop :=
   let whole := l ++ sub ++ r in
   let left := sub_left_anchor sub in
   exists seg,
     In seg whole
+    /\ right_rising_barrier whole seg
     /\ snd p < snd left
     /\ (forall y,
           snd p <= y <= snd left ->
@@ -1030,6 +965,7 @@ Definition right_vertical_guard_to_term
   let right := sub_right_anchor sub in
   exists seg,
     In seg whole
+    /\ right_falling_barrier whole seg
     /\ snd p < snd right
     /\ (forall y,
           snd p <= y <= snd right ->
@@ -1037,24 +973,168 @@ Definition right_vertical_guard_to_term
             fst right < x < fst p
             /\ onExtendSegment whole seg (x, y)).
 
-(* 障壁との共有点になり得る先頭終点・末尾始点。ここから危険点へ出られ
-   ないこと自体は、dc と sparse を使う別の局所補題で示す。 *)
-Definition end_special_point
-    (l sub r : list Segment) (p : Point) : Prop :=
-  p = term (hd_segment (l ++ sub ++ r))
-  \/ p = init (last_segment (l ++ sub ++ r)).
+(* 同一セグメントの上向き通常辺では、到達点は同じ障壁の左に
+   残るか、障壁自身に到達する。右側へ突き抜けると自己交差になる。 *)
+Lemma left_guard_preserved_by_same_segment_or_contact :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    left_vertical_guard_to_init l sub r p ->
+    fst q < fst (sub_left_anchor sub) ->
+    snd q < snd (sub_left_anchor sub) ->
+    left_vertical_guard_to_init l sub r q
+    \/ exists barrier,
+        In barrier (l ++ sub ++ r)
+        /\ right_rising_barrier (l ++ sub ++ r) barrier
+        /\ onExtendSegment (l ++ sub ++ r) barrier q.
+Proof.
+  intros l sub r seg [xp yp] [xq yq]
+    Hctx Hseg Hp Hq Hy Hguard Hqx Hqy.
+  unfold left_vertical_guard_to_init in Hguard |- *.
+  cbn in *.
+  destruct Hguard as [barrier [Hbarrier [Hrising [_ Hspan]]]].
+  destruct (Hspan yp ltac:(lra)) as [xbp [[Hpxbp HbpLeft] Hbp]].
+  destruct (Hspan yq ltac:(lra)) as [xbq [[Hpxbq HbqLeft] Hbq]].
+  assert (Hwhole : l ++ sub ++ r <> []).
+  { now apply whole_nonempty, context_sub_nonempty with (l := l) (r := r). }
+  assert (Hpseg : onExtendSegment (l ++ sub ++ r) seg (xp, yp)).
+  { apply OnSegMid; [exact Hwhole | exact Hseg |].
+    destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
+  assert (Hqseg : onExtendSegment (l ++ sub ++ r) seg (xq, yq)).
+  { apply OnSegMid; [exact Hwhole | exact Hseg |].
+    destruct Hq as [-> | ->]; [apply onInit | apply onTerm]. }
+  destruct (total_order_T xq xbq) as [[HqLeft | HqOn] | HqRight].
+  - left. exists barrier. split; [exact Hbarrier |].
+    split; [exact Hrising |].
+    split; [exact Hqy |].
+    intros y HyRange.
+    destruct (Hspan y ltac:(lra)) as [xb [[Hpxb HbLeft] Hb]].
+    assert (Hbqxb : xbq <= xb).
+    { destruct (Rle_dec xbq xb) as [Hle | Hnle]; [exact Hle |].
+      assert (Hxb : xb < xbq) by lra.
+      pose proof
+        (proj1 (Hrising (xb, y) (xbq, yq) Hb Hbq) Hxb) as Hyy.
+      cbn in Hyy. lra. }
+    exists xb. split; [lra | exact Hb].
+  - right. exists barrier. split; [exact Hbarrier |].
+    split; [exact Hrising |].
+    now subst xbq.
+  - exfalso. apply (context_whole_open l sub r Hctx).
+    eapply x_cross_v with
+      (s1 := seg) (s2 := barrier)
+      (ya := yp) (yb := yq)
+      (x1a := xp) (x1b := xq)
+      (x2a := xbp) (x2b := xbq); eauto.
+    nra.
+Qed.
 
-Definition left_special_point
-    (l sub r : list Segment) (p : Point) : Prop :=
-  end_special_point l sub r p
-  /\ fst p < fst (sub_left_anchor sub)
-  /\ snd p <= snd (sub_left_anchor sub).
+(* 右側でも、同一セグメントは同じ障壁の右に残るか、
+   障壁上の端点に到達する。左へ突き抜けると自己交差になる。 *)
+Lemma right_guard_preserved_by_same_segment_or_contact :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    right_vertical_guard_to_term l sub r p ->
+    fst (sub_right_anchor sub) < fst q ->
+    snd q < snd (sub_right_anchor sub) ->
+    right_vertical_guard_to_term l sub r q
+    \/ exists barrier,
+        In barrier (l ++ sub ++ r)
+        /\ right_falling_barrier (l ++ sub ++ r) barrier
+        /\ onExtendSegment (l ++ sub ++ r) barrier q.
+Proof.
+  intros l sub r seg [xp yp] [xq yq]
+    Hctx Hseg Hp Hq Hy Hguard Hqx Hqy.
+  unfold right_vertical_guard_to_term in Hguard |- *.
+  cbn in *.
+  destruct Hguard as [barrier [Hbarrier [Hfalling [_ Hspan]]]].
+  destruct (Hspan yp ltac:(lra)) as [xbp [[HbpRight HbpLeft] Hbp]].
+  destruct (Hspan yq ltac:(lra)) as [xbq [[HbqRight HbqLeft] Hbq]].
+  assert (Hwhole : l ++ sub ++ r <> []).
+  { now apply whole_nonempty, context_sub_nonempty with (l := l) (r := r). }
+  assert (Hpseg : onExtendSegment (l ++ sub ++ r) seg (xp, yp)).
+  { apply OnSegMid; [exact Hwhole | exact Hseg |].
+    destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
+  assert (Hqseg : onExtendSegment (l ++ sub ++ r) seg (xq, yq)).
+  { apply OnSegMid; [exact Hwhole | exact Hseg |].
+    destruct Hq as [-> | ->]; [apply onInit | apply onTerm]. }
+  destruct (total_order_T xbq xq) as [[HqRight | HqOn] | HqLeft].
+  - left. exists barrier. split; [exact Hbarrier |].
+    split; [exact Hfalling |].
+    split; [exact Hqy |].
+    intros y HyRange.
+    destruct (Hspan y ltac:(lra)) as [xb [[HbRight HbLeft] Hb]].
+    assert (Hxbq : xb <= xbq).
+    { destruct (Rle_dec xb xbq) as [Hle | Hnle]; [exact Hle |].
+      assert (Hlt : xbq < xb) by lra.
+      pose proof
+        (proj1 (Hfalling (xbq, yq) (xb, y) Hbq Hb) Hlt) as Hyy.
+      cbn in Hyy. lra. }
+    exists xb. split; [lra | exact Hb].
+  - right. exists barrier. split; [exact Hbarrier |].
+    split; [exact Hfalling |].
+    now subst xbq.
+  - exfalso. apply (context_whole_open l sub r Hctx).
+    eapply x_cross_v with
+      (s1 := seg) (s2 := barrier)
+      (ya := yp) (yb := yq)
+      (x1a := xp) (x1b := xq)
+      (x2a := xbp) (x2b := xbq); eauto.
+    nra.
+Qed.
 
-Definition right_special_point
+(* 障壁なしで認める seed は、非隣接セグメント本体由来ではなく、
+   sub より上を通る先頭・末尾延長線の基点だけである。 *)
+Definition extension_up_seed
     (l sub r : list Segment) (p : Point) : Prop :=
-  end_special_point l sub r p
-  /\ fst (sub_right_anchor sub) < fst p
-  /\ snd p <= snd (sub_right_anchor sub).
+  (l <> []
+   /\ p = init (hd_segment (l ++ sub ++ r))
+   /\ exists q z,
+        onHead_extend_strict (l ++ sub ++ r) q
+        /\ onSegmentlist sub z
+        /\ fst q = fst z
+        /\ snd z < snd q)
+  \/
+  (r <> []
+   /\ p = term (last_segment (l ++ sub ++ r))
+   /\ exists q z,
+        onLast_extend_strict (l ++ sub ++ r) q
+        /\ onSegmentlist sub z
+        /\ fst q = fst z
+        /\ snd z < snd q).
+
+(* 傾き保存用の逆向き end-step が、Up を低い端点へ移す四つの場合。
+   単に先頭・末尾の端点であるだけでは例外にしない。 *)
+Definition reverse_end_target
+    (l sub r : list Segment) (p : Point) : Prop :=
+  (exists hor,
+      l <> []
+      /\ embed (n, hor, cx) (hd_segment l)
+      /\ p = init (hd_segment l))
+  \/ (exists hor,
+      l <> []
+      /\ embed (s, hor, cc) (hd_segment l)
+      /\ p = term (hd_segment l))
+  \/ (exists hor,
+      r <> []
+      /\ embed (n, hor, cc) (last_segment r)
+      /\ p = init (last_segment r))
+  \/ (exists hor,
+      r <> []
+      /\ embed (s, hor, cx) (last_segment r)
+      /\ p = term (last_segment r)).
+
+(* 左下で障壁を持たない可能性は、延長線 seed と、
+   傾き保存用の逆向き end-step の到達点に限定する。 *)
+Definition barrier_exception
+    (l sub r : list Segment) (p : Point) : Prop :=
+  extension_up_seed l sub r p \/ reverse_end_target l sub r p.
 
 (* 経路全体を禁止するのではなく、特殊点から sub 以下へ出る直接の一辺
    だけを拒む。従って最終目標の言い換えにはなっていない。 *)
@@ -1066,75 +1146,106 @@ Definition locally_blocks_unsafe_up
 
 Definition left_up_certificate
     (l sub r : list Segment) (p : Point) : Prop :=
-  on_trace_above_sub sub p
-  \/ left_vertical_guard_to_init l sub r p
-  \/ (left_special_point l sub r p
+  left_vertical_guard_to_init l sub r p
+  \/ (barrier_exception l sub r p
       /\ locally_blocks_unsafe_up l sub r p).
 
 Definition right_up_certificate
     (l sub r : list Segment) (p : Point) : Prop :=
-  on_trace_above_sub sub p
-  \/ right_vertical_guard_to_term l sub r p
-  \/ (right_special_point l sub r p
+  right_vertical_guard_to_term l sub r p
+  \/ (barrier_exception l sub r p
       /\ locally_blocks_unsafe_up l sub r p).
 
-(* 中央では欲しい結論そのものを保ち、左右で端点の高さ以下まで下がる
-   場合にだけ、trace・障壁・特殊点のいずれかの証明書を要求する。 *)
+(* 中央では欲しい結論そのものを保つ。左右の下側では通常点に
+   障壁を必須とし、上の二種類の例外だけ局所的な進出禁止で扱う。 *)
 Definition up_path_invariant
     (l sub r : list Segment) (p : Point) : Prop :=
   (in_sub_x_range sub p -> strictly_above_sub_at_x sub p)
   /\ (fst p < fst (sub_left_anchor sub) ->
-      snd p <= snd (sub_left_anchor sub) ->
+      snd p < snd (sub_left_anchor sub) ->
       left_up_certificate l sub r p)
   /\ (fst (sub_right_anchor sub) < fst p ->
-      snd p <= snd (sub_right_anchor sub) ->
+      snd p < snd (sub_right_anchor sub) ->
       right_up_certificate l sub r p).
 
-Lemma strictly_above_sub_excludes_at_or_below : forall sub p,
-  strictly_above_sub_at_x sub p ->
-  ~ at_or_below_sub_at_x sub p.
+(* 障壁との等号接触は新しい障壁を与えるか、延長線 seed /
+   逆向き end-step の局所例外に入る。その幾何学的分岐をここに集約する。 *)
+Lemma left_barrier_contact_gives_certificate :
+  forall l sub r q,
+    ClassificationContext l sub r ->
+    endpoint_of (l ++ sub ++ r) q ->
+    fst q < fst (sub_left_anchor sub) ->
+    snd q < snd (sub_left_anchor sub) ->
+    (exists barrier,
+      In barrier (l ++ sub ++ r)
+      /\ right_rising_barrier (l ++ sub ++ r) barrier
+      /\ onExtendSegment (l ++ sub ++ r) barrier q) ->
+    left_up_certificate l sub r q.
+Admitted.
+
+Lemma right_barrier_contact_gives_certificate :
+  forall l sub r q,
+    ClassificationContext l sub r ->
+    endpoint_of (l ++ sub ++ r) q ->
+    fst (sub_right_anchor sub) < fst q ->
+    snd q < snd (sub_right_anchor sub) ->
+    (exists barrier,
+      In barrier (l ++ sub ++ r)
+      /\ right_falling_barrier (l ++ sub ++ r) barrier
+      /\ onExtendSegment (l ++ sub ++ r) barrier q) ->
+    right_up_certificate l sub r q.
+Admitted.
+
+(* 同一セグメントの通常辺について、直接の障壁を左下領域の
+   不変量証明書へ移す。接触した場合だけ専用の幾何補題へ送る。 *)
+Lemma same_segment_upward_preserves_direct_left_certificate :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    left_vertical_guard_to_init l sub r p ->
+    fst q < fst (sub_left_anchor sub) ->
+    snd q < snd (sub_left_anchor sub) ->
+    left_up_certificate l sub r q.
 Proof.
-  intros sub p Habove [q [Hq [Hx Hy]]].
-  specialize (Habove q Hq Hx). lra.
+  intros l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy.
+  destruct (left_guard_preserved_by_same_segment_or_contact
+              l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy)
+    as [Hguard' | Hcontact].
+  - now left.
+  - eapply left_barrier_contact_gives_certificate.
+    + exact Hctx.
+    + exists seg. split; [exact Hseg | exact Hq].
+    + exact Hqx.
+    + exact Hqy.
+    + exact Hcontact.
 Qed.
 
-Lemma at_or_below_sub_at_x_is_in_range : forall l sub r p,
-  ClassificationContext l sub r ->
-  at_or_below_sub_at_x sub p ->
-  in_sub_x_range sub p.
+Lemma same_segment_upward_preserves_direct_right_certificate :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    right_vertical_guard_to_term l sub r p ->
+    fst (sub_right_anchor sub) < fst q ->
+    snd q < snd (sub_right_anchor sub) ->
+    right_up_certificate l sub r q.
 Proof.
-  intros l sub r p Hctx [q [Hq [Hx _]]].
-  unfold in_sub_x_range.
-  rewrite Hx.
-  change (in_sub_x_range sub q).
-  exact (x_monotone_sub_point_in_x_range sub q
-           (context_sub_nonempty l sub r Hctx)
-           (context_sub_connected l sub r Hctx)
-           (context_sub_x_monotone l sub r Hctx) Hq).
-Qed.
-
-Lemma unsafe_up_point_iff_at_or_below : forall l sub r p,
-  ClassificationContext l sub r ->
-  unsafe_up_point sub p <-> at_or_below_sub_at_x sub p.
-Proof.
-  intros l sub r p Hctx. split.
-  - now intros [_ Hbelow].
-  - intro Hbelow. split; [|exact Hbelow].
-    now apply at_or_below_sub_at_x_is_in_range with (l := l) (r := r).
-Qed.
-
-Lemma on_trace_above_sub_gives_up_path_invariant : forall l sub r p,
-  ClassificationContext l sub r ->
-  on_trace_above_sub sub p ->
-  up_path_invariant l sub r p.
-Proof.
-  intros l sub r p Hctx Htrace.
-  assert (Habove : strictly_above_sub_at_x sub p).
-  { eapply on_trace_above_sub_implies_strictly_above_at_x; eauto using
-      context_sub_nonempty, context_sub_connected, context_sub_x_monotone. }
-  split.
-  - intros _. exact Habove.
-  - split; intros; [left | left]; exact Htrace.
+  intros l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy.
+  destruct (right_guard_preserved_by_same_segment_or_contact
+              l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy)
+    as [Hguard' | Hcontact].
+  - now left.
+  - eapply right_barrier_contact_gives_certificate.
+    + exact Hctx.
+    + exists seg. split; [exact Hseg | exact Hq].
+    + exact Hqx.
+    + exact Hqy.
+    + exact Hcontact.
 Qed.
 
 Lemma up_path_invariant_not_on_sub : forall l sub r p,
@@ -1152,92 +1263,95 @@ Proof.
   exact Hsub.
 Qed.
 
-(* 開いた曲線では、左の障壁を構成するセグメントと、p から init sub
-   へ直接上がるセグメントとの x 順序は反転できない。 *)
-Lemma left_guard_blocks_segment_to_init : forall l sub r p seg,
-  ClassificationContext l sub r ->
-  In seg (l ++ sub ++ r) ->
-  endpoint_of_seg seg p ->
-  endpoint_of_seg seg (sub_left_anchor sub) ->
-  fst p < fst (sub_left_anchor sub) ->
-  left_vertical_guard_to_init l sub r p ->
-  False.
-Proof.
-  intros l sub r p seg Hctx Hseg Hp Hleft Hpx.
-  unfold left_vertical_guard_to_init.
-  cbn.
-  intros [barrier [Hbarrier [Hy Hspan]]].
-  destruct (Hspan (snd p) ltac:(lra)) as [xb [Hxb HbarrierBottom]].
-  destruct (Hspan (snd (sub_left_anchor sub)) ltac:(lra))
-    as [xt [Hxt HbarrierTop]].
-  assert (Hwhole : l ++ sub ++ r <> []).
-  { now apply whole_nonempty, context_sub_nonempty with (l := l) (r := r). }
-  assert (HpathBottom :
-      onExtendSegment (l ++ sub ++ r) seg (fst p, snd p)).
-  { replace (fst p, snd p) with p by (destruct p; reflexivity).
-    apply OnSegMid; [exact Hwhole | exact Hseg |].
-    destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
-  assert (HpathTop :
-      onExtendSegment (l ++ sub ++ r) seg
-        (fst (sub_left_anchor sub), snd (sub_left_anchor sub))).
-  { replace (fst (sub_left_anchor sub), snd (sub_left_anchor sub))
-      with (sub_left_anchor sub) by
-      (destruct (sub_left_anchor sub); reflexivity).
-    apply OnSegMid; [exact Hwhole | exact Hseg |].
-    destruct Hleft as [-> | ->]; [apply onInit | apply onTerm]. }
-  apply (context_whole_open l sub r Hctx).
-  eapply x_cross_v with
-    (s1 := seg) (s2 := barrier)
-    (ya := snd p) (yb := snd (sub_left_anchor sub))
-    (x1a := fst p) (x1b := fst (sub_left_anchor sub))
-    (x2a := xb) (x2b := xt); eauto.
-  nra.
-Qed.
-
-(* 右側でも、term sub へ直接上がるセグメントは障壁を横切ってしまう。 *)
-Lemma right_guard_blocks_segment_to_term : forall l sub r p seg,
-  ClassificationContext l sub r ->
-  In seg (l ++ sub ++ r) ->
-  endpoint_of_seg seg p ->
-  endpoint_of_seg seg (sub_right_anchor sub) ->
-  fst (sub_right_anchor sub) < fst p ->
-  right_vertical_guard_to_term l sub r p ->
-  False.
-Proof.
-  intros l sub r p seg Hctx Hseg Hp Hright Hpx.
-  unfold right_vertical_guard_to_term.
-  cbn.
-  intros [barrier [Hbarrier [Hy Hspan]]].
-  destruct (Hspan (snd p) ltac:(lra)) as [xb [Hxb HbarrierBottom]].
-  destruct (Hspan (snd (sub_right_anchor sub)) ltac:(lra))
-    as [xt [Hxt HbarrierTop]].
-  assert (Hwhole : l ++ sub ++ r <> []).
-  { now apply whole_nonempty, context_sub_nonempty with (l := l) (r := r). }
-  assert (HpathBottom :
-      onExtendSegment (l ++ sub ++ r) seg (fst p, snd p)).
-  { replace (fst p, snd p) with p by (destruct p; reflexivity).
-    apply OnSegMid; [exact Hwhole | exact Hseg |].
-    destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
-  assert (HpathTop :
-      onExtendSegment (l ++ sub ++ r) seg
-        (fst (sub_right_anchor sub), snd (sub_right_anchor sub))).
-  { replace (fst (sub_right_anchor sub), snd (sub_right_anchor sub))
-      with (sub_right_anchor sub) by
-      (destruct (sub_right_anchor sub); reflexivity).
-    apply OnSegMid; [exact Hwhole | exact Hseg |].
-    destruct Hright as [-> | ->]; [apply onInit | apply onTerm]. }
-  apply (context_whole_open l sub r Hctx).
-  eapply x_cross_v with
-    (s1 := seg) (s2 := barrier)
-    (ya := snd p) (yb := snd (sub_right_anchor sub))
-    (x1a := fst p) (x1b := fst (sub_right_anchor sub))
-    (x2a := xb) (x2b := xt); eauto.
-  nra.
-Qed.
-
 (* ----------------------------------------------------------------- *)
 (*  Up 不変量を一つの順序辺に沿って移すための幾何学的補題       *)
 (* ----------------------------------------------------------------- *)
+
+(* 同一セグメントが sub の x 範囲へ入る場合、sub との上下関係は
+   交差なしに反転しない。連続性の中間値部分は後で幾何補題へ切り出す。 *)
+Lemma same_segment_upward_preserves_sub_above :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    up_path_invariant l sub r p ->
+    in_sub_x_range sub q ->
+    strictly_above_sub_at_x sub q.
+Admitted.
+
+(* 直接障壁を持たない場合だけを暫定的に隔離する。ここに
+   trace の継続と Head/Last 端点例外の最終的な条件が入る。 *)
+Lemma same_segment_upward_preserves_nondirect_left_certificate :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    up_path_invariant l sub r p ->
+    ~ left_vertical_guard_to_init l sub r p ->
+    fst q < fst (sub_left_anchor sub) ->
+    snd q < snd (sub_left_anchor sub) ->
+    left_up_certificate l sub r q.
+Admitted.
+
+Lemma same_segment_upward_preserves_left_certificate :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    up_path_invariant l sub r p ->
+    fst q < fst (sub_left_anchor sub) ->
+    snd q < snd (sub_left_anchor sub) ->
+    left_up_certificate l sub r q.
+Proof.
+  intros l sub r seg p q Hctx Hseg Hp Hq Hy Hinv Hqx Hqy.
+  destruct (classic (left_vertical_guard_to_init l sub r p))
+    as [Hguard | Hguard].
+  - exact (same_segment_upward_preserves_direct_left_certificate
+             l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy).
+  - exact (same_segment_upward_preserves_nondirect_left_certificate
+             l sub r seg p q Hctx Hseg Hp Hq Hy Hinv Hguard Hqx Hqy).
+Qed.
+
+Lemma same_segment_upward_preserves_nondirect_right_certificate :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    up_path_invariant l sub r p ->
+    ~ right_vertical_guard_to_term l sub r p ->
+    fst (sub_right_anchor sub) < fst q ->
+    snd q < snd (sub_right_anchor sub) ->
+    right_up_certificate l sub r q.
+Admitted.
+
+Lemma same_segment_upward_preserves_right_certificate :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    up_path_invariant l sub r p ->
+    fst (sub_right_anchor sub) < fst q ->
+    snd q < snd (sub_right_anchor sub) ->
+    right_up_certificate l sub r q.
+Proof.
+  intros l sub r seg p q Hctx Hseg Hp Hq Hy Hinv Hqx Hqy.
+  destruct (classic (right_vertical_guard_to_term l sub r p))
+    as [Hguard | Hguard].
+  - exact (same_segment_upward_preserves_direct_right_certificate
+             l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy).
+  - exact (same_segment_upward_preserves_nondirect_right_certificate
+             l sub r seg p q Hctx Hseg Hp Hq Hy Hinv Hguard Hqx Hqy).
+Qed.
 
 (* 同一セグメント上で低い端点から高い端点へ進む通常辺。 *)
 Lemma same_segment_upward_preserves_up_path_invariant :
@@ -1249,7 +1363,17 @@ Lemma same_segment_upward_preserves_up_path_invariant :
     snd p <= snd q ->
     up_path_invariant l sub r p ->
     up_path_invariant l sub r q.
-Admitted.
+Proof.
+  intros l sub r seg p q Hctx Hseg Hp Hq Hy Hinv.
+  split.
+  - now apply same_segment_upward_preserves_sub_above
+      with (l := l) (r := r) (seg := seg) (p := p).
+  - split.
+    + now apply same_segment_upward_preserves_left_certificate
+        with (seg := seg) (p := p).
+    + now apply same_segment_upward_preserves_right_certificate
+        with (seg := seg) (p := p).
+Qed.
 
 (* x 範囲が重なる非隣接セグメント間の、下側端点から上側端点への辺。 *)
 Lemma nonadjacent_upward_preserves_up_path_invariant :
@@ -1499,20 +1623,6 @@ Proof.
   intros l sub r Hcore Hend p q Hpath Hp.
   eapply endpoint_factored_path_preserves_up_invariant; eauto.
   now apply endpoint_order_path_is_factored.
-Qed.
-
-Lemma invariant_up_path_does_not_reach_sub : forall l sub r,
-  ClassificationContext l sub r ->
-  core_paths_preserve_up_invariant l sub r ->
-  end_steps_preserve_up_invariant l sub r ->
-  forall p q,
-    up_path_invariant l sub r p ->
-    endpoint_order_path l sub r p q ->
-    ~ onSegmentlist sub q.
-Proof.
-  intros l sub r Hctx Hcore Hend p q Hp Hpath.
-  apply up_path_invariant_not_on_sub with (l := l) (r := r); [exact Hctx |].
-  eapply endpoint_order_path_preserves_up_invariant; eauto.
 Qed.
 
 (* 非隣接セグメントの端点は、閉長方形 sparse 性により sub 上にはない。 *)
@@ -1819,24 +1929,21 @@ Proof.
 Qed.
 
 (* 三種類の Up seed はいずれも、sub の上側にある非交差 trace を
-   自身の証明書として持つ。従って経路不変量の初期状態を満たす。 *)
-Lemma endpoint_up_seed_satisfies_up_path_invariant : forall l sub r p,
+   持つ。trace は中央での上下関係にだけ使い、左右の障壁の代用にはしない。 *)
+Lemma endpoint_up_seed_has_trace : forall l sub r p,
   ClassificationContext l sub r ->
   endpoint_up_seed l sub r p ->
-  up_path_invariant l sub r p.
+  on_trace_above_sub sub p.
 Proof.
-  intros l sub r p Hctx [_ [Hbody | [Hhead | Hlast]]].
+  intros l sub r p Hctx Hseed.
+  destruct Hseed as [_ [Hbody | [Hhead | Hlast]]].
   - destruct Hbody as
       [seg [q [Hseg [Hp [Hq [_ [z [Hz [Hx Hy]]]]]]]]].
-    apply on_trace_above_sub_gives_up_path_invariant with
-      (l := l) (r := r); [exact Hctx |].
     exists TraceBody, seg, q, z. repeat split; try assumption.
     + now apply nonadjacent_body_trace_disjoint_from_sub
         with (l := l) (r := r); [apply context_sparse |].
     + destruct Hp as [-> | ->]; [apply onInit | apply onTerm].
   - destruct Hhead as [Hl [-> [q [z [Hq [Hz [Hx Hy]]]]]]].
-    apply on_trace_above_sub_gives_up_path_invariant with
-      (l := l) (r := r); [exact Hctx |].
     exists TraceHead, (hd_segment (l ++ sub ++ r)), q, z.
     repeat split; try assumption.
     + now apply external_head_trace_disjoint_from_sub.
@@ -1844,14 +1951,97 @@ Proof.
     + destruct Hq as [t [Ht Htq]].
       unfold onSegmentTrace, onHead. exists t. split; [lra | exact Htq].
   - destruct Hlast as [Hr [-> [q [z [Hq [Hz [Hx Hy]]]]]]].
-    apply on_trace_above_sub_gives_up_path_invariant with
-      (l := l) (r := r); [exact Hctx |].
     exists TraceLast, (last_segment (l ++ sub ++ r)), q, z.
     repeat split; try assumption.
     + now apply external_last_trace_disjoint_from_sub.
     + unfold onSegmentTrace, onLast. exists 1. split; [lra | reflexivity].
     + destruct Hq as [t [Ht Htq]].
       unfold onSegmentTrace, onLast. exists t. split; [lra | exact Htq].
+Qed.
+
+(* body seed の端点が init sub より左下にあると、sub の x 範囲で
+   その上へ至るまでに端点長方形が sub 上の点を含み、閉長方形
+   sparse 性に反する。 *)
+Lemma body_up_seed_cannot_be_left_below : forall l sub r p,
+  ClassificationContext l sub r ->
+  (exists seg q,
+      In seg (nonadjacent_sides l r)
+      /\ endpoint_of_seg seg p
+      /\ onSegment seg q
+      /\ in_sub_x_range sub q
+      /\ above_sub_at_x sub q) ->
+  fst p < fst (sub_left_anchor sub) ->
+  snd p < snd (sub_left_anchor sub) ->
+  False.
+Admitted.
+
+(* 左下に残り得る延長線 seed からは、次の一辺で sub 以下の
+   危険点へ出られない。 *)
+Lemma extension_up_seed_locally_blocks_unsafe_up : forall l sub r p,
+  ClassificationContext l sub r ->
+  extension_up_seed l sub r p ->
+  fst p < fst (sub_left_anchor sub) ->
+  snd p < snd (sub_left_anchor sub) ->
+  locally_blocks_unsafe_up l sub r p.
+Admitted.
+
+(* 左下の Up seed は body seed ではあり得ず、必ず延長線 seed である。 *)
+Lemma endpoint_up_seed_left_low_is_extension_seed : forall l sub r p,
+  ClassificationContext l sub r ->
+  endpoint_up_seed l sub r p ->
+  fst p < fst (sub_left_anchor sub) ->
+  snd p < snd (sub_left_anchor sub) ->
+  extension_up_seed l sub r p.
+Proof.
+  intros l sub r p Hctx [_ [Hbody | [Hhead | Hlast]]] Hx Hy.
+  - exfalso.
+    exact (body_up_seed_cannot_be_left_below
+             l sub r p Hctx Hbody Hx Hy).
+  - left. exact Hhead.
+  - right. exact Hlast.
+Qed.
+
+Lemma endpoint_up_seed_has_left_certificate : forall l sub r p,
+  ClassificationContext l sub r ->
+  endpoint_up_seed l sub r p ->
+  fst p < fst (sub_left_anchor sub) ->
+  snd p < snd (sub_left_anchor sub) ->
+  left_up_certificate l sub r p.
+Proof.
+  intros l sub r p Hctx Hseed Hx Hy.
+  assert (Hextension : extension_up_seed l sub r p).
+  { now eapply endpoint_up_seed_left_low_is_extension_seed. }
+  right. split.
+  - now left.
+  - now eapply extension_up_seed_locally_blocks_unsafe_up.
+Qed.
+
+(* 右側も双対で、body seed は障壁を作り、延長線 seed だけを
+   局所的な進出禁止で扱う。 *)
+Lemma endpoint_up_seed_has_right_certificate : forall l sub r p,
+  ClassificationContext l sub r ->
+  endpoint_up_seed l sub r p ->
+  fst (sub_right_anchor sub) < fst p ->
+  snd p < snd (sub_right_anchor sub) ->
+  right_up_certificate l sub r p.
+Admitted.
+
+Lemma endpoint_up_seed_satisfies_up_path_invariant : forall l sub r p,
+  ClassificationContext l sub r ->
+  endpoint_up_seed l sub r p ->
+  up_path_invariant l sub r p.
+Proof.
+  intros l sub r p Hctx Hseed.
+  assert (Htrace : on_trace_above_sub sub p).
+  { now apply endpoint_up_seed_has_trace with (l := l) (r := r). }
+  assert (Habove : strictly_above_sub_at_x sub p).
+  { eapply on_trace_above_sub_implies_strictly_above_at_x; eauto using
+      context_sub_nonempty, context_sub_connected, context_sub_x_monotone. }
+  split.
+  - intros _. exact Habove.
+  - split; intros Hx Hy.
+    + now apply endpoint_up_seed_has_left_certificate.
+    + now apply endpoint_up_seed_has_right_certificate.
 Qed.
 
 (* Up は順序の上向き、Down は順序の下向きへ閉じる。 *)
@@ -2590,56 +2780,6 @@ Proof.
     + destruct hor.
       * intros p Hx Hy. eapply southeast_cc_lower_term_slope; eauto.
       * intros p Hx Hy. eapply southwest_cc_lower_term_slope; eauto.
-Qed.
-
-(* 残る二つの保存補題を仮定すれば、Up seed からの任意の順序経路で
-   不変量が成立する。以後の幾何証明が目指す合成点である。 *)
-Lemma endpoint_up_seed_path_preserves_invariant : forall l sub r,
-  ClassificationContext l sub r ->
-  core_steps_preserve_up_invariant l sub r ->
-  end_steps_preserve_up_invariant l sub r ->
-  forall seed p,
-    endpoint_up_seed l sub r seed ->
-    endpoint_order_path l sub r seed p ->
-    up_path_invariant l sub r p.
-Proof.
-  intros l sub r Hctx Hcore Hend seed p Hseed Hpath.
-  eapply endpoint_order_path_preserves_up_invariant.
-  - now apply core_step_preservation_lifts_to_paths.
-  - exact Hend.
-  - exact Hpath.
-  - now apply endpoint_up_seed_satisfies_up_path_invariant.
-Qed.
-
-Lemma endpoint_up_seed_path_above_in_sub_x : forall l sub r,
-  ClassificationContext l sub r ->
-  core_steps_preserve_up_invariant l sub r ->
-  end_steps_preserve_up_invariant l sub r ->
-  forall seed p,
-    endpoint_up_seed l sub r seed ->
-    endpoint_order_path l sub r seed p ->
-    in_sub_x_range sub p ->
-    strictly_above_sub_at_x sub p.
-Proof.
-  intros l sub r Hctx Hcore Hend seed p Hseed Hpath Hx.
-  pose proof (endpoint_up_seed_path_preserves_invariant
-                l sub r Hctx Hcore Hend seed p Hseed Hpath) as [Hcenter _].
-  now apply Hcenter.
-Qed.
-
-Lemma endpoint_up_seed_path_does_not_reach_sub : forall l sub r,
-  ClassificationContext l sub r ->
-  core_steps_preserve_up_invariant l sub r ->
-  end_steps_preserve_up_invariant l sub r ->
-  forall seed p,
-    endpoint_up_seed l sub r seed ->
-    endpoint_order_path l sub r seed p ->
-    ~ onSegmentlist sub p.
-Proof.
-  intros l sub r Hctx Hcore Hend seed p Hseed Hpath.
-  apply up_path_invariant_not_on_sub with (l := l) (r := r); [exact Hctx |].
-  exact (endpoint_up_seed_path_preserves_invariant
-           l sub r Hctx Hcore Hend seed p Hseed Hpath).
 Qed.
 
 Lemma strict_extension_above_or_below_sub : forall l sub r p,
