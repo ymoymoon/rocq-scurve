@@ -81,6 +81,23 @@ Definition above_sub_side (sub : list Segment) (p : Point) : Prop :=
   ~ onSegmentlist sub p
   /\ (in_sub_x_range sub p -> above_sub_at_x sub p).
 
+(* [p] と同じ x にある sub 上の全ての点より、[p] が厳密に上にある。
+   全称形にしておくと、sub 上への到達時には [q := p] で直ちに矛盾する。 *)
+Definition strictly_above_sub_at_x
+    (sub : list Segment) (p : Point) : Prop :=
+  forall q,
+    onSegmentlist sub q ->
+    fst p = fst q ->
+    snd q < snd p.
+
+Lemma strictly_above_sub_at_x_not_on_sub : forall sub p,
+  strictly_above_sub_at_x sub p ->
+  ~ onSegmentlist sub p.
+Proof.
+  intros sub p Habove Hsub.
+  specialize (Habove p Hsub eq_refl). lra.
+Qed.
+
 (* [p] が、sub と交わらず、共通 x の一点で sub より上にある連続
    trace に属することを表す。分類や端点順序には依存しない。 *)
 Definition on_trace_above_sub (sub : list Segment) (p : Point) : Prop :=
@@ -91,6 +108,71 @@ Definition on_trace_above_sub (sub : list Segment) (p : Point) : Prop :=
     /\ onSegmentlist sub q0
     /\ fst p0 = fst q0
     /\ snd q0 < snd p0.
+
+Record TraceCarrier : Type := mkTraceCarrier {
+  carrier_part : SegmentTracePart;
+  carrier_segment : Segment
+}.
+
+Definition onCarrier (carrier : TraceCarrier) (p : Point) : Prop :=
+  onSegmentTrace
+    (carrier_part carrier) (carrier_segment carrier) p.
+
+Definition body_carrier (seg : Segment) : TraceCarrier :=
+  mkTraceCarrier TraceBody seg.
+
+Definition head_carrier (seg : Segment) : TraceCarrier :=
+  mkTraceCarrier TraceHead seg.
+
+Definition last_carrier (seg : Segment) : TraceCarrier :=
+  mkTraceCarrier TraceLast seg.
+
+Definition TraceState : Type := (TraceCarrier * Point)%type.
+
+Definition valid_trace_state (state : TraceState) : Prop :=
+  onCarrier (fst state) (snd state).
+
+(* carrier だけでなく現在点も保持する。これにより junction 後に同じ
+   carrier の無関係な点へ飛ぶことを防ぐ。 *)
+Inductive TraceStateLink : TraceState -> TraceState -> Prop :=
+  | TraceStateJunction : forall from to p,
+      onCarrier from p ->
+      onCarrier to p ->
+      TraceStateLink (from, p) (to, p)
+  | TraceStateAlongUp : forall carrier p q,
+      onCarrier carrier p ->
+      onCarrier carrier q ->
+      snd p <= snd q ->
+      TraceStateLink (carrier, p) (carrier, q)
+  | TraceStateAbove : forall from to p q,
+      onCarrier from p ->
+      onCarrier to q ->
+      fst p = fst q ->
+      snd p <= snd q ->
+      TraceStateLink (from, p) (to, q).
+
+Definition TraceStateChain : TraceState -> TraceState -> Prop :=
+  clos_refl_trans TraceState TraceStateLink.
+
+Lemma connected_adjacent_body_link :
+  forall ls i s t,
+    connected ls ->
+    nth_error ls i = Some s ->
+    nth_error ls (S i) = Some t ->
+    TraceStateLink
+      (body_carrier s, term s) (body_carrier t, init t).
+Proof.
+  intros ls i s t Hconn Hs Ht.
+  assert (Hjoin : term s = init t) by
+    exact (Hconn i s t Hs Ht).
+  rewrite <- Hjoin.
+  apply (TraceStateJunction
+           (body_carrier s) (body_carrier t) (term s)).
+  - exact (onTerm s).
+  - change (onSegment t (term s)).
+    rewrite Hjoin.
+    apply onInit.
+Qed.
 
 (* x 方向の閉区間が交わる二つの端点長方形。 *)
 Definition segment_x_ranges_overlap (s t : Segment) : Prop :=
@@ -138,6 +220,104 @@ Proof.
   rewrite Rmin_left by lra.
   rewrite Rmax_right by lra.
   split; reflexivity.
+Qed.
+
+Lemma x_monotone_segment_point_bounds :
+  forall s p,
+    x_monotone_seg s ->
+    onSegment s p ->
+    fst (init s) <= fst p <= fst (term s).
+Proof.
+  intros s p Hmono Hp.
+  destruct (segment_in_rectangle_or_endpoints s p Hp)
+    as [-> | [-> | Hinside]].
+  - unfold x_monotone_seg, init_x, term_x in Hmono. lra.
+  - unfold x_monotone_seg, init_x, term_x in Hmono. lra.
+  - unfold in_open_segment_rectangle, in_rect, rect_between in Hinside.
+    cbn in Hinside.
+    destruct Hinside as [Hx _].
+    unfold x_monotone_seg, init_x, term_x in Hmono.
+    rewrite Rmin_left in Hx by lra. rewrite Rmax_right in Hx by lra.
+    lra.
+Qed.
+
+(* 連結な x 単調 sub 上の点は、その始点と終点が定める閉 x 範囲に入る。 *)
+Lemma x_monotone_sub_point_in_x_range :
+  forall sub p,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    onSegmentlist sub p ->
+    in_sub_x_range sub p.
+Proof.
+  intros sub p Hne. destruct sub as [|a tail]; [contradiction|].
+  clear Hne. revert a p.
+  induction tail as [|b tail IH]; intros a p Hconn Hmono
+      [seg [Hseg Hon]].
+  - simpl in Hseg. destruct Hseg as [Hseg | Hseg]; [subst seg | contradiction].
+    pose proof (Hmono a ltac:(now left)) as Ha.
+    pose proof (x_monotone_rect_x_bounds
+                  [a] ltac:(discriminate) Hconn Hmono) as [Hleft Hright].
+    pose proof (x_monotone_segment_point_bounds a p Ha Hon) as Hx.
+    unfold in_sub_x_range. rewrite Hleft, Hright.
+    exact Hx.
+  - simpl in Hseg. destruct Hseg as [Hseg | Hseg].
+    + subst seg.
+      pose proof (Hmono a ltac:(now left)) as Ha.
+      pose proof (x_monotone_segment_point_bounds a p Ha Hon) as Hx.
+      assert (Hab : term a = init b).
+      { apply (Hconn 0%nat a b); reflexivity. }
+      assert (HconnTail : connected (b :: tail)).
+      { intros i s1 s2 H1 H2.
+        apply (Hconn (S i) s1 s2); simpl; assumption. }
+      assert (HmonoTail : x_monotone_segs (b :: tail)).
+      { intros t Ht. apply Hmono. now right. }
+      pose proof (x_monotone_rect_x_bounds
+                    (a :: b :: tail) ltac:(discriminate) Hconn Hmono)
+        as [Hleft Hright].
+      pose proof (connected_x_monotone_endpoints
+                    (b :: tail) ltac:(discriminate)
+                    HconnTail HmonoTail) as Htail.
+      assert (Hlast :
+          last_segment (a :: b :: tail) = last_segment (b :: tail)).
+      { change (last_segment ([a] ++ b :: tail) = last_segment (b :: tail)).
+        apply last_app_nonnil. discriminate. }
+      unfold in_sub_x_range. rewrite Hleft, Hright.
+      rewrite Hlast.
+      change (fst (init a) <= fst p <=
+              fst (term (last_segment (b :: tail)))).
+      change (fst (init b) < fst (term (last_segment (b :: tail)))) in Htail.
+      rewrite <- Hab in Htail. lra.
+    + assert (Hab : term a = init b).
+    { apply (Hconn 0%nat a b); reflexivity. }
+    assert (HconnTail : connected (b :: tail)).
+    { intros i s1 s2 H1 H2.
+      apply (Hconn (S i) s1 s2); simpl; assumption. }
+    assert (HmonoTail : x_monotone_segs (b :: tail)).
+    { intros t Ht. apply Hmono. now right. }
+    pose proof (x_monotone_rect_x_bounds
+                  (a :: b :: tail) ltac:(discriminate) Hconn Hmono)
+      as [Hleft Hright].
+    unfold in_sub_x_range. rewrite Hleft, Hright.
+    pose proof (IH b p HconnTail HmonoTail
+                  (ex_intro _ seg (conj Hseg Hon))) as HpTail.
+    pose proof (Hmono a ltac:(now left)) as Ha.
+    pose proof (x_monotone_rect_x_bounds
+                  (b :: tail) ltac:(discriminate)
+                  HconnTail HmonoTail) as [HtailLeft HtailRight].
+    unfold in_sub_x_range in HpTail.
+    rewrite HtailLeft, HtailRight in HpTail.
+    change (fst (init b) <= fst p <=
+            fst (term (last_segment (b :: tail)))) in HpTail.
+    assert (Hlast :
+        last_segment (a :: b :: tail) = last_segment (b :: tail)).
+    { change (last_segment ([a] ++ b :: tail) = last_segment (b :: tail)).
+      apply last_app_nonnil. discriminate. }
+    rewrite Hlast.
+    change (fst (init a) <= fst p <=
+            fst (term (last_segment (b :: tail)))).
+    unfold x_monotone_seg, init_x, term_x in Ha.
+    rewrite Hab in Ha. lra.
 Qed.
 
 Lemma segment_has_point_at_x :
@@ -272,6 +452,24 @@ Proof.
                   p0 q0 p q Hp0 Hq0 Hx0 Hp Hq ltac:(now symmetry))
         as [Habove _].
       now apply Habove.
+Qed.
+
+Lemma on_trace_above_sub_implies_strictly_above_at_x :
+  forall sub p,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    on_trace_above_sub sub p ->
+    strictly_above_sub_at_x sub p.
+Proof.
+  intros sub p Hne Hconn Hmono
+    [part [seg [p0 [q0 [Hdisjoint
+      [Hp [Hp0 [Hq0 [Hx0 Hy0]]]]]]]]] q Hq Hx.
+  destruct (disjoint_trace_sub_vertical_order_constant
+              part seg sub Hne Hconn Hmono Hdisjoint
+              p0 q0 p q Hp0 Hq0 Hx0 Hp Hq Hx)
+    as [Habove _].
+  now apply Habove.
 Qed.
 
 Definition EndpointClassifier : Type := Point -> Region.
@@ -486,9 +684,9 @@ Record ClassificationSpec
 (*  端点制約                                                         *)
 (* ----------------------------------------------------------------- *)
 
-(* [endpoint_order_step p q] は、q の領域を p の領域以上にする
-   直接の幾何学的制約を表す。 *)
-Inductive endpoint_order_step
+(* 通常の端点順序。セグメント本体と非隣接セグメント間の比較だけを含み、
+   先頭・末尾の傾き保存や延長線には依存しない。 *)
+Inductive endpoint_core_step
     (l sub r : list Segment) : Point -> Point -> Prop :=
   (* 同一セグメントでは、低い端点から高い端点へ領域順序を付ける。 *)
   | order_on_segment : forall seg p q,
@@ -496,31 +694,7 @@ Inductive endpoint_order_step
       endpoint_of_seg seg p ->
       endpoint_of_seg seg q ->
       snd p <= snd q ->
-      endpoint_order_step l sub r p q
-  (* 北向き・上に凸な先頭では、通常順序の逆も加えて両端を同じ領域にする。 *)
-  | order_head_north_cx_reverse : forall hor,
-      l <> [] ->
-      embed (n, hor, cx) (hd_segment l) ->
-      endpoint_order_step l sub r
-        (term (hd_segment l)) (init (hd_segment l))
-  (* 南向き・下に凸な先頭でも、始点傾き保存のため通常順序の逆を加える。 *)
-  | order_head_south_cc_reverse : forall hor,
-      l <> [] ->
-      embed (s, hor, cc) (hd_segment l) ->
-      endpoint_order_step l sub r
-        (init (hd_segment l)) (term (hd_segment l))
-  (* 北向き・下に凸な末尾では、終点傾き保存のため通常順序の逆を加える。 *)
-  | order_last_north_cc_reverse : forall hor,
-      r <> [] ->
-      embed (n, hor, cc) (last_segment r) ->
-      endpoint_order_step l sub r
-        (term (last_segment r)) (init (last_segment r))
-  (* 南向き・上に凸な末尾でも、通常順序の逆を加えて両端を同じ領域にする。 *)
-  | order_last_south_cx_reverse : forall hor,
-      r <> [] ->
-      embed (s, hor, cx) (last_segment r) ->
-      endpoint_order_step l sub r
-        (init (last_segment r)) (term (last_segment r))
+      endpoint_core_step l sub r p q
   (* x 範囲が重なる非隣接セグメント間では、低い端点から高い端点へ制約する。 *)
   | order_nonadjacent : forall i j s t ps pt,
       nth_error (l ++ sub ++ r) i = Some s ->
@@ -530,14 +704,43 @@ Inductive endpoint_order_step
       endpoint_of_seg s ps ->
       endpoint_of_seg t pt ->
       snd ps <= snd pt ->
-      endpoint_order_step l sub r ps pt
+      endpoint_core_step l sub r ps pt.
+
+(* 先頭・末尾に固有の例外順序。傾き保存のための逆向き辺と、
+   延長線を介した比較をここに隔離する。 *)
+Inductive endpoint_end_step
+    (l sub r : list Segment) : Point -> Point -> Prop :=
+  (* 北向き・上に凸な先頭では、通常順序の逆も加えて両端を同じ領域にする。 *)
+  | order_head_north_cx_reverse : forall hor,
+      l <> [] ->
+      embed (n, hor, cx) (hd_segment l) ->
+      endpoint_end_step l sub r
+        (term (hd_segment l)) (init (hd_segment l))
+  (* 南向き・下に凸な先頭でも、始点傾き保存のため通常順序の逆を加える。 *)
+  | order_head_south_cc_reverse : forall hor,
+      l <> [] ->
+      embed (s, hor, cc) (hd_segment l) ->
+      endpoint_end_step l sub r
+        (init (hd_segment l)) (term (hd_segment l))
+  (* 北向き・下に凸な末尾では、終点傾き保存のため通常順序の逆を加える。 *)
+  | order_last_north_cc_reverse : forall hor,
+      r <> [] ->
+      embed (n, hor, cc) (last_segment r) ->
+      endpoint_end_step l sub r
+        (term (last_segment r)) (init (last_segment r))
+  (* 南向き・上に凸な末尾でも、通常順序の逆を加えて両端を同じ領域にする。 *)
+  | order_last_south_cx_reverse : forall hor,
+      r <> [] ->
+      embed (s, hor, cx) (last_segment r) ->
+      endpoint_end_step l sub r
+        (init (last_segment r)) (term (last_segment r))
   (* 同じ x で先頭延長線が末尾延長線以下なら、先頭基点を末尾基点以下にする。 *)
   | order_head_last : forall ph pl,
       onHead_extend (l ++ sub ++ r) ph ->
       onLast_extend (l ++ sub ++ r) pl ->
       fst ph = fst pl ->
       snd ph <= snd pl ->
-      endpoint_order_step l sub r
+      endpoint_end_step l sub r
         (init (hd_segment (l ++ sub ++ r)))
         (term (last_segment (l ++ sub ++ r)))
   (* 同じ x で末尾延長線が先頭延長線以下なら、末尾基点を先頭基点以下にする。 *)
@@ -546,7 +749,7 @@ Inductive endpoint_order_step
       onLast_extend (l ++ sub ++ r) pl ->
       fst ph = fst pl ->
       snd pl <= snd ph ->
-      endpoint_order_step l sub r
+      endpoint_end_step l sub r
         (term (last_segment (l ++ sub ++ r)))
         (init (hd_segment (l ++ sub ++ r)))
   (* 先頭延長線がセグメントより下なら、その基点をセグメントの各端点以下にする。 *)
@@ -557,7 +760,7 @@ Inductive endpoint_order_step
       fst e = fst q ->
       snd q <= snd e ->
       endpoint_of_seg seg p ->
-      endpoint_order_step l sub r
+      endpoint_end_step l sub r
         (init (hd_segment (l ++ sub ++ r))) p
   (* セグメントが先頭延長線より下なら、その各端点を先頭基点以下にする。 *)
   | order_segment_below_head : forall seg e q p,
@@ -567,7 +770,7 @@ Inductive endpoint_order_step
       fst e = fst q ->
       snd e <= snd q ->
       endpoint_of_seg seg p ->
-      endpoint_order_step l sub r p
+      endpoint_end_step l sub r p
         (init (hd_segment (l ++ sub ++ r)))
   (* 末尾延長線がセグメントより下なら、その基点をセグメントの各端点以下にする。 *)
   | order_last_below_segment : forall seg e q p,
@@ -577,7 +780,7 @@ Inductive endpoint_order_step
       fst e = fst q ->
       snd q <= snd e ->
       endpoint_of_seg seg p ->
-      endpoint_order_step l sub r
+      endpoint_end_step l sub r
         (term (last_segment (l ++ sub ++ r))) p
   (* セグメントが末尾延長線より下なら、その各端点を末尾基点以下にする。 *)
   | order_segment_below_last : forall seg e q p,
@@ -587,8 +790,18 @@ Inductive endpoint_order_step
       fst e = fst q ->
       snd e <= snd q ->
       endpoint_of_seg seg p ->
-      endpoint_order_step l sub r p
+      endpoint_end_step l sub r p
         (term (last_segment (l ++ sub ++ r))).
+
+(* 全順序の一辺は、通常辺か先頭・末尾由来の例外辺のいずれかである。 *)
+Inductive endpoint_order_step
+    (l sub r : list Segment) : Point -> Point -> Prop :=
+  | order_core_step : forall p q,
+      endpoint_core_step l sub r p q ->
+      endpoint_order_step l sub r p q
+  | order_end_step : forall p q,
+      endpoint_end_step l sub r p q ->
+      endpoint_order_step l sub r p q.
 
 Definition endpoint_order (l sub r : list Segment) : Point -> Point -> Prop :=
   clos_refl_trans Point (endpoint_order_step l sub r).
@@ -599,11 +812,264 @@ Definition endpoint_order_path
     (l sub r : list Segment) : Point -> Point -> Prop :=
   clos_refl_trans_1n Point (endpoint_order_step l sub r).
 
+(* 例外辺を含まない一つの通常区間。例外辺の前後で保存する不変量を
+   切り替える際の単位として用いる。 *)
+Definition endpoint_core_path
+    (l sub r : list Segment) : Point -> Point -> Prop :=
+  clos_refl_trans_1n Point (endpoint_core_step l sub r).
+
+(* core 辺は例外なく y の弱い増加方向を向く。 *)
+Lemma endpoint_core_step_vertical_monotone : forall l sub r p q,
+  endpoint_core_step l sub r p q ->
+  snd p <= snd q.
+Proof.
+  intros l sub r p q Hstep.
+  destruct Hstep; assumption.
+Qed.
+
+(* したがって、例外辺を含まない区間全体でも y は減少しない。 *)
+Lemma endpoint_core_path_vertical_monotone : forall l sub r p q,
+  endpoint_core_path l sub r p q ->
+  snd p <= snd q.
+Proof.
+  intros l sub r p q Hpath.
+  induction Hpath as [p | p next q Hstep Htail IH].
+  - lra.
+  - pose proof
+      (endpoint_core_step_vertical_monotone l sub r p next Hstep).
+    lra.
+Qed.
+
+Definition vertically_upward_closed (P : Point -> Prop) : Prop :=
+  forall p q, P p -> snd p <= snd q -> P q.
+
+Definition vertically_downward_closed (P : Point -> Prop) : Prop :=
+  forall p q, P q -> snd p <= snd q -> P p.
+
+(* y に関して上方閉な不変量は core 区間を順方向に伝播する。 *)
+Lemma endpoint_core_path_preserves_upward_closed :
+  forall l sub r (P : Point -> Prop) p q,
+    vertically_upward_closed P ->
+    endpoint_core_path l sub r p q ->
+    P p ->
+    P q.
+Proof.
+  intros l sub r P p q Hclosed Hpath Hp.
+  exact (Hclosed p q Hp
+           (endpoint_core_path_vertical_monotone l sub r p q Hpath)).
+Qed.
+
+(* Down 側で使う下方閉な不変量は、core 区間を逆方向に伝播する。 *)
+Lemma endpoint_core_path_reflects_downward_closed :
+  forall l sub r (P : Point -> Prop) p q,
+    vertically_downward_closed P ->
+    endpoint_core_path l sub r p q ->
+    P q ->
+    P p.
+Proof.
+  intros l sub r P p q Hclosed Hpath Hq.
+  exact (Hclosed p q Hq
+           (endpoint_core_path_vertical_monotone l sub r p q Hpath)).
+Qed.
+
+Definition above_sub_bbox (sub : list Segment) (p : Point) : Prop :=
+  ry1 (bbox_of sub) < snd p.
+
+Definition below_sub_bbox (sub : list Segment) (p : Point) : Prop :=
+  snd p < ry0 (bbox_of sub).
+
+Lemma above_sub_bbox_upward_closed : forall sub,
+  vertically_upward_closed (above_sub_bbox sub).
+Proof.
+  intros sub p q Hp Hpq. unfold above_sub_bbox in *. lra.
+Qed.
+
+Lemma below_sub_bbox_downward_closed : forall sub,
+  vertically_downward_closed (below_sub_bbox sub).
+Proof.
+  intros sub p q Hq Hpq. unfold below_sub_bbox in *. lra.
+Qed.
+
+(* bbox より上という単純な Up 不変量は core 区間だけなら保存される。 *)
+Lemma endpoint_core_path_preserves_above_sub_bbox :
+  forall l sub r p q,
+    endpoint_core_path l sub r p q ->
+    above_sub_bbox sub p ->
+    above_sub_bbox sub q.
+Proof.
+  intros l sub r p q Hpath Hp.
+  eapply endpoint_core_path_preserves_upward_closed; eauto.
+  apply above_sub_bbox_upward_closed.
+Qed.
+
+(* bbox より下という Down 不変量は、core 区間の終点から始点へ戻せる。 *)
+Lemma endpoint_core_path_reflects_below_sub_bbox :
+  forall l sub r p q,
+    endpoint_core_path l sub r p q ->
+    below_sub_bbox sub q ->
+    below_sub_bbox sub p.
+Proof.
+  intros l sub r p q Hpath Hq.
+  eapply endpoint_core_path_reflects_downward_closed; eauto.
+  apply below_sub_bbox_downward_closed.
+Qed.
+
+Lemma above_sub_bbox_not_on_sub : forall sub p,
+  above_sub_bbox sub p ->
+  ~ onSegmentlist sub p.
+Proof.
+  intros sub p Habove Hsub.
+  pose proof (bbox_of_bounds sub p Hsub). unfold above_sub_bbox in Habove.
+  lra.
+Qed.
+
+Lemma below_sub_bbox_not_on_sub : forall sub p,
+  below_sub_bbox sub p ->
+  ~ onSegmentlist sub p.
+Proof.
+  intros sub p Hbelow Hsub.
+  pose proof (bbox_of_bounds sub p Hsub). unfold below_sub_bbox in Hbelow.
+  lra.
+Qed.
+
+Lemma endpoint_core_path_above_bbox_not_reaches_sub :
+  forall l sub r p q,
+    above_sub_bbox sub p ->
+    endpoint_core_path l sub r p q ->
+    ~ onSegmentlist sub q.
+Proof.
+  intros l sub r p q Hp Hpath.
+  apply above_sub_bbox_not_on_sub.
+  exact (endpoint_core_path_preserves_above_sub_bbox
+           l sub r p q Hpath Hp).
+Qed.
+
+Lemma endpoint_core_path_sub_not_reaches_below_bbox :
+  forall l sub r p q,
+    onSegmentlist sub p ->
+    endpoint_core_path l sub r p q ->
+    ~ below_sub_bbox sub q.
+Proof.
+  intros l sub r p q Hsub Hpath Hq.
+  apply (below_sub_bbox_not_on_sub sub p
+           (endpoint_core_path_reflects_below_sub_bbox
+              l sub r p q Hpath Hq)).
+  exact Hsub.
+Qed.
+
+(* 任意の順序経路を「通常区間の後に、例外辺と通常区間を反復する」形で保持する。
+   各 [end] でのみ Head/Last 用の不変量を切り替えればよい。 *)
+Inductive endpoint_factored_path
+    (l sub r : list Segment) : Point -> Point -> Prop :=
+  | factored_core : forall p q,
+      endpoint_core_path l sub r p q ->
+      endpoint_factored_path l sub r p q
+  | factored_end : forall p before after q,
+      endpoint_core_path l sub r p before ->
+      endpoint_end_step l sub r before after ->
+      endpoint_factored_path l sub r after q ->
+      endpoint_factored_path l sub r p q.
+
 Lemma endpoint_order_path_iff : forall l sub r p q,
   endpoint_order l sub r p q <-> endpoint_order_path l sub r p q.
 Proof.
   intros l sub r p q.
   apply clos_rt_rt1n_iff.
+Qed.
+
+Lemma endpoint_core_path_is_order_path : forall l sub r p q,
+  endpoint_core_path l sub r p q ->
+  endpoint_order_path l sub r p q.
+Proof.
+  intros l sub r p q Hpath.
+  induction Hpath as [p | p next q Hstep Htail IH].
+  - apply Stdlib.Relations.Relation_Operators.rt1n_refl.
+  - eapply Stdlib.Relations.Relation_Operators.rt1n_trans.
+    + exact (order_core_step l sub r p next Hstep).
+    + exact IH.
+Qed.
+
+Lemma endpoint_order_path_trans : forall l sub r p q z,
+  endpoint_order_path l sub r p q ->
+  endpoint_order_path l sub r q z ->
+  endpoint_order_path l sub r p z.
+Proof.
+  intros l sub r p q z Hpq Hqz.
+  apply (proj1 (endpoint_order_path_iff l sub r p z)).
+  eapply rt_trans.
+  - now apply (proj2 (endpoint_order_path_iff l sub r p q)).
+  - now apply (proj2 (endpoint_order_path_iff l sub r q z)).
+Qed.
+
+Lemma endpoint_factored_path_is_order_path : forall l sub r p q,
+  endpoint_factored_path l sub r p q ->
+  endpoint_order_path l sub r p q.
+Proof.
+  intros l sub r p q Hpath.
+  induction Hpath as
+      [p q Hcore | p before after q Hcore Hend Htail IH].
+  - now apply endpoint_core_path_is_order_path.
+  - eapply endpoint_order_path_trans.
+    + apply endpoint_core_path_is_order_path. exact Hcore.
+    + eapply Stdlib.Relations.Relation_Operators.rt1n_trans.
+      * exact (order_end_step l sub r before after Hend).
+      * exact IH.
+Qed.
+
+Lemma endpoint_order_path_is_factored : forall l sub r p q,
+  endpoint_order_path l sub r p q ->
+  endpoint_factored_path l sub r p q.
+Proof.
+  intros l sub r p q Hpath.
+  induction Hpath as [p | p next q Hstep Htail IH].
+  - apply factored_core.
+    apply Stdlib.Relations.Relation_Operators.rt1n_refl.
+  - destruct Hstep as [p next Hcore | p next Hend].
+    + destruct IH as [next q Hpath | next before after q Hprefix Hend' Htail'].
+      * apply factored_core.
+        eapply Stdlib.Relations.Relation_Operators.rt1n_trans; eauto.
+      * eapply factored_end.
+        -- eapply Stdlib.Relations.Relation_Operators.rt1n_trans; eauto.
+        -- exact Hend'.
+        -- exact Htail'.
+    + eapply factored_end with (before := p) (after := next).
+      * apply Stdlib.Relations.Relation_Operators.rt1n_refl.
+      * exact Hend.
+      * exact IH.
+Qed.
+
+Lemma endpoint_factored_path_iff : forall l sub r p q,
+  endpoint_factored_path l sub r p q <->
+  endpoint_order_path l sub r p q.
+Proof.
+  split; [apply endpoint_factored_path_is_order_path
+         | apply endpoint_order_path_is_factored].
+Qed.
+
+(* 隣接セグメント間には新しい順序辺は要らない。両セグメント内の辺を、
+   [term s = init t] で同じ点として推移的に合成する。 *)
+Lemma endpoint_order_path_across_rising_junction :
+  forall l sub r s t,
+    In s (l ++ sub ++ r) ->
+    In t (l ++ sub ++ r) ->
+    term s = init t ->
+    snd (init s) <= snd (term s) ->
+    snd (init t) <= snd (term t) ->
+    endpoint_order_path l sub r (init s) (term t).
+Proof.
+  intros l sub r s t Hs Ht Hjoin Hsy Hty.
+  apply (proj1
+    (endpoint_order_path_iff l sub r (init s) (term t))).
+  eapply rt_trans.
+  - apply rt_step.
+    apply order_core_step.
+    exact (order_on_segment l sub r s (init s) (term s)
+             Hs (or_introl eq_refl) (or_intror eq_refl) Hsy).
+  - rewrite Hjoin.
+    apply rt_step.
+    apply order_core_step.
+    exact (order_on_segment l sub r t (init t) (term t)
+             Ht (or_introl eq_refl) (or_intror eq_refl) Hty).
 Qed.
 
 (* パスの始点が性質 [P] を持ち終点が持たないなら、[P] を初めて
@@ -1526,9 +1992,11 @@ Proof.
     apply classified_init_slope_same_region.
     apply region_at_or_above_antisym.
     + eapply endpoint_order_classified; eauto.
-      apply rt_step. eapply order_head_north_cx_reverse; eauto.
+      apply rt_step. apply order_end_step.
+      eapply order_head_north_cx_reverse; eauto.
     + eapply endpoint_order_classified; eauto.
-      apply rt_step. eapply order_on_segment with (seg := seg).
+      apply rt_step. apply order_core_step.
+      eapply order_on_segment with (seg := seg).
       * now left.
       * now left.
       * now right.
@@ -1536,7 +2004,8 @@ Proof.
   - (* north, concave: the start moves weakly down relative to the end. *)
     apply classified_init_slope_relative_lower; [exact Hh | |].
     + eapply endpoint_order_classified; eauto.
-      apply rt_step. eapply order_on_segment with (seg := seg).
+      apply rt_step. apply order_core_step.
+      eapply order_on_segment with (seg := seg).
       * now left.
       * now left.
       * now right.
@@ -1547,7 +2016,8 @@ Proof.
   - (* south, convex: the start moves weakly up relative to the end. *)
     apply classified_init_slope_relative_upper; [exact Hh | |].
     + eapply endpoint_order_classified; eauto.
-      apply rt_step. eapply order_on_segment with (seg := seg).
+      apply rt_step. apply order_core_step.
+      eapply order_on_segment with (seg := seg).
       * now left.
       * now right.
       * now left.
@@ -1559,13 +2029,15 @@ Proof.
     apply classified_init_slope_same_region.
     apply region_at_or_above_antisym.
     + eapply endpoint_order_classified; eauto.
-      apply rt_step. eapply order_on_segment with (seg := seg).
+      apply rt_step. apply order_core_step.
+      eapply order_on_segment with (seg := seg).
       * now left.
       * now right.
       * now left.
       * pose proof (s_end_relation seg hor cc Hembed). lra.
     + eapply endpoint_order_classified; eauto.
-      apply rt_step. eapply order_head_south_cc_reverse; eauto.
+      apply rt_step. apply order_end_step.
+      eapply order_head_south_cc_reverse; eauto.
 Qed.
 
 (* 末尾では始点の移動を共通平行移動として除き、四形ごとに
@@ -1600,7 +2072,8 @@ Proof.
   - (* north, convex: the end moves weakly up relative to the start. *)
     apply classified_term_slope_relative_upper; [exact Hh | |].
     + eapply endpoint_order_classified; eauto.
-      apply rt_step. eapply order_on_segment with (seg := seg).
+      apply rt_step. apply order_core_step.
+      eapply order_on_segment with (seg := seg).
       * exact HinWhole.
       * now left.
       * now right.
@@ -1612,9 +2085,11 @@ Proof.
     apply classified_term_slope_same_region.
     apply region_at_or_above_antisym.
     + eapply endpoint_order_classified; eauto.
-      apply rt_step. eapply order_last_north_cc_reverse; eauto.
+      apply rt_step. apply order_end_step.
+      eapply order_last_north_cc_reverse; eauto.
     + eapply endpoint_order_classified; eauto.
-      apply rt_step. eapply order_on_segment with (seg := seg).
+      apply rt_step. apply order_core_step.
+      eapply order_on_segment with (seg := seg).
       * exact HinWhole.
       * now left.
       * now right.
@@ -1623,17 +2098,20 @@ Proof.
     apply classified_term_slope_same_region.
     apply region_at_or_above_antisym.
     + eapply endpoint_order_classified; eauto.
-      apply rt_step. eapply order_on_segment with (seg := seg).
+      apply rt_step. apply order_core_step.
+      eapply order_on_segment with (seg := seg).
       * exact HinWhole.
       * now right.
       * now left.
       * pose proof (s_end_relation seg hor cx Hembed). lra.
     + eapply endpoint_order_classified; eauto.
-      apply rt_step. eapply order_last_south_cx_reverse; eauto.
+      apply rt_step. apply order_end_step.
+      eapply order_last_south_cx_reverse; eauto.
   - (* south, concave: the end moves weakly down relative to the start. *)
     apply classified_term_slope_relative_lower; [exact Hh | |].
     + eapply endpoint_order_classified; eauto.
-      apply rt_step. eapply order_on_segment with (seg := seg).
+      apply rt_step. apply order_core_step.
+      eapply order_on_segment with (seg := seg).
       * exact HinWhole.
       * now right.
       * now left.
@@ -1713,7 +2191,8 @@ Proof.
     + eapply endpoint_order_classified; eauto.
       * exists seg. split; [exact Hseg | now left].
       * exists seg. split; [exact Hseg | now right].
-      * apply rt_step. eapply order_on_segment with (seg := seg).
+      * apply rt_step. apply order_core_step.
+        eapply order_on_segment with (seg := seg).
         -- exact Hseg.
         -- now left.
         -- now right.
@@ -1721,7 +2200,8 @@ Proof.
     + eapply endpoint_order_classified; eauto.
       * exists seg. split; [exact Hseg | now right].
       * exists seg. split; [exact Hseg | now left].
-      * apply rt_step. eapply order_on_segment with (seg := seg).
+      * apply rt_step. apply order_core_step.
+        eapply order_on_segment with (seg := seg).
         -- exact Hseg.
         -- now right.
         -- now left.
@@ -1731,6 +2211,7 @@ Proof.
     + exists s0. split; [eapply nth_error_In; eauto | exact Hps].
     + exists t. split; [eapply nth_error_In; eauto | exact Hpt].
     + apply rt_step.
+      apply order_core_step.
       exact (order_nonadjacent l sub r i j s0 t ps pt
                Hs Ht Hij Hover Hps Hpt Hy).
   - intros seg p Hseg Hon Hrange. split; intros Hside.
@@ -1792,35 +2273,45 @@ Proof.
         exists p, z. repeat split; assumption.
   - intros ph pl Hph Hpl Hx. split; intros Hy.
     + eapply endpoint_order_classified; eauto using head_endpoint_of, last_endpoint_of.
-      apply rt_step. eapply order_head_last; eauto. lra.
+      apply rt_step. apply order_end_step.
+      eapply order_head_last; eauto. lra.
     + eapply endpoint_order_classified; eauto using head_endpoint_of, last_endpoint_of.
-      apply rt_step. eapply order_last_head; eauto. lra.
+      apply rt_step. apply order_end_step.
+      eapply order_last_head; eauto. lra.
   - intros seg e q Hseg He Hq Hx. split; intros Hy; split.
     + eapply endpoint_order_classified; eauto using head_endpoint_of.
       * exists seg. split; [exact Hseg | now left].
-      * apply rt_step. eapply order_head_below_segment; eauto; [lra | now left].
+      * apply rt_step. apply order_end_step.
+        eapply order_head_below_segment; eauto; [lra | now left].
     + eapply endpoint_order_classified; eauto using head_endpoint_of.
       * exists seg. split; [exact Hseg | now right].
-      * apply rt_step. eapply order_head_below_segment; eauto; [lra | now right].
+      * apply rt_step. apply order_end_step.
+        eapply order_head_below_segment; eauto; [lra | now right].
     + eapply endpoint_order_classified; eauto using head_endpoint_of.
       * exists seg. split; [exact Hseg | now left].
-      * apply rt_step. eapply order_segment_below_head; eauto; [lra | now left].
+      * apply rt_step. apply order_end_step.
+        eapply order_segment_below_head; eauto; [lra | now left].
     + eapply endpoint_order_classified; eauto using head_endpoint_of.
       * exists seg. split; [exact Hseg | now right].
-      * apply rt_step. eapply order_segment_below_head; eauto; [lra | now right].
+      * apply rt_step. apply order_end_step.
+        eapply order_segment_below_head; eauto; [lra | now right].
   - intros seg e q Hseg He Hq Hx. split; intros Hy; split.
     + eapply endpoint_order_classified; eauto using last_endpoint_of.
       * exists seg. split; [exact Hseg | now left].
-      * apply rt_step. eapply order_last_below_segment; eauto; [lra | now left].
+      * apply rt_step. apply order_end_step.
+        eapply order_last_below_segment; eauto; [lra | now left].
     + eapply endpoint_order_classified; eauto using last_endpoint_of.
       * exists seg. split; [exact Hseg | now right].
-      * apply rt_step. eapply order_last_below_segment; eauto; [lra | now right].
+      * apply rt_step. apply order_end_step.
+        eapply order_last_below_segment; eauto; [lra | now right].
     + eapply endpoint_order_classified; eauto using last_endpoint_of.
       * exists seg. split; [exact Hseg | now left].
-      * apply rt_step. eapply order_segment_below_last; eauto; [lra | now left].
+      * apply rt_step. apply order_end_step.
+        eapply order_segment_below_last; eauto; [lra | now left].
     + eapply endpoint_order_classified; eauto using last_endpoint_of.
       * exists seg. split; [exact Hseg | now right].
-      * apply rt_step. eapply order_segment_below_last; eauto; [lra | now right].
+      * apply rt_step. apply order_end_step.
+        eapply order_segment_below_last; eauto; [lra | now right].
   - now apply head_classification_preserves_init_slope.
   - now apply last_classification_preserves_term_slope.
 Qed.
