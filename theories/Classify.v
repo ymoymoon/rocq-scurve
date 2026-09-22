@@ -1334,14 +1334,6 @@ Definition barrier_exception
     (l sub r : list Segment) (p : Point) : Prop :=
   extension_up_seed l sub r p \/ reverse_end_target l sub r p.
 
-(* 経路全体を禁止するのではなく、特殊点から sub 以下へ出る直接の一辺
-   だけを拒む。従って最終目標の言い換えにはなっていない。 *)
-Definition locally_blocks_unsafe_up
-    (l sub r : list Segment) (p : Point) : Prop :=
-  forall q,
-    endpoint_order_step l sub r p q ->
-    ~ unsafe_up_point sub q.
-
 (* 障壁を作る逆向き end-step は四種類だけである。向きだけでなく、
    どの端点からどの端点へ下ったかも記録しておく。 *)
 Inductive barrier_reverse_step
@@ -1426,14 +1418,12 @@ Inductive left_up_certificate
   | left_certificate_extension_seed : forall side p,
       left_barrier_core side l sub r p ->
       barrier_extension_seed l sub r side p ->
-      locally_blocks_unsafe_up l sub r p ->
       on_barrier_trace side (l ++ sub ++ r) p ->
       left_up_certificate l sub r p
   | left_certificate_reverse_step : forall side p previous,
       left_barrier_core side l sub r p ->
       barrier_reverse_step l sub r side previous p ->
       left_up_certificate l sub r previous ->
-      locally_blocks_unsafe_up l sub r p ->
       on_barrier_trace side (l ++ sub ++ r) p ->
       left_up_certificate l sub r p.
 
@@ -1446,14 +1436,12 @@ Inductive right_up_certificate
   | right_certificate_extension_seed : forall side p,
       right_barrier_core side l sub r p ->
       barrier_extension_seed l sub r side p ->
-      locally_blocks_unsafe_up l sub r p ->
       on_barrier_trace side (l ++ sub ++ r) p ->
       right_up_certificate l sub r p
   | right_certificate_reverse_step : forall side p previous,
       right_barrier_core side l sub r p ->
       barrier_reverse_step l sub r side previous p ->
       right_up_certificate l sub r previous ->
-      locally_blocks_unsafe_up l sub r p ->
       on_barrier_trace side (l ++ sub ++ r) p ->
       right_up_certificate l sub r p.
 
@@ -1467,8 +1455,8 @@ Proof.
   intros l sub r p Hcertificate.
   destruct Hcertificate as
     [side p Hcore Hlevel
-    | side p Hcore Hseed Hblocks Htrace
-    | side p previous Hcore Hreverse Hprevious Hblocks Htrace];
+    | side p Hcore Hseed Htrace
+    | side p previous Hcore Hreverse Hprevious Htrace];
     unfold left_barrier_core in Hcore; cbn in Hcore; tauto.
 Qed.
 
@@ -1482,8 +1470,8 @@ Proof.
   intros l sub r p Hcertificate.
   destruct Hcertificate as
     [side p Hcore Hlevel
-    | side p Hcore Hseed Hblocks Htrace
-    | side p previous Hcore Hreverse Hprevious Hblocks Htrace];
+    | side p Hcore Hseed Htrace
+    | side p previous Hcore Hreverse Hprevious Htrace];
     unfold right_barrier_core in Hcore; cbn in Hcore; tauto.
 Qed.
 
@@ -2189,14 +2177,6 @@ Proof.
     eauto; cbn; lra.
 Qed.
 
-(* 例外端点の役割は、そこから sub 以下の危険点へ直接出る
-   order step を拒むことに限られる。 *)
-Lemma barrier_exception_locally_blocks_unsafe_up : forall l sub r p,
-  ClassificationContext l sub r ->
-  barrier_exception l sub r p ->
-  locally_blocks_unsafe_up l sub r p.
-Admitted.
-
 (* 同一セグメントの通常辺について、直接の障壁を左下領域の
    不変量証明書へ移す。右へ抜ければ交差、等号接触も上の補題に反する。 *)
 Lemma same_segment_upward_preserves_direct_left_certificate :
@@ -2264,8 +2244,20 @@ Qed.
 (*  Up 不変量を一つの順序辺に沿って移すための幾何学的補題       *)
 (* ----------------------------------------------------------------- *)
 
-(* 同一セグメントが sub の x 範囲へ入る場合、sub との上下関係は
-   交差なしに反転しない。連続性の中間値部分は後で幾何補題へ切り出す。 *)
+(* 同一セグメント上を上向きに進んで sub の x 範囲へ入る限り、
+   sub との上下関係は交差なしに反転しない。到達点は端点に限らない。 *)
+Lemma same_segment_upward_point_preserves_sub_above :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    onSegment seg q ->
+    snd p <= snd q ->
+    up_path_invariant l sub r p ->
+    in_sub_x_range sub q ->
+    strictly_above_sub_at_x sub q.
+Admitted.
+
 Lemma same_segment_upward_preserves_sub_above :
   forall l sub r seg p q,
     ClassificationContext l sub r ->
@@ -2276,7 +2268,12 @@ Lemma same_segment_upward_preserves_sub_above :
     up_path_invariant l sub r p ->
     in_sub_x_range sub q ->
     strictly_above_sub_at_x sub q.
-Admitted.
+Proof.
+  intros l sub r seg p q Hctx Hseg Hp Hq Hy Hinv Hqrange.
+  eapply (same_segment_upward_point_preserves_sub_above
+            l sub r seg p q Hctx Hseg Hp); try eassumption.
+  destruct Hq as [-> | ->]; [apply onInit | apply onTerm].
+Qed.
 
 (* 例外下端から上向きに進む場合。同じ side の open core と、下端が
    その trace 自身に属するという destruct 済みの証明書を受け取る。 *)
@@ -2760,8 +2757,54 @@ Lemma same_segment_above_sub_cannot_exit_left_below :
     fst q < fst (sub_left_anchor sub) ->
     snd q < snd (sub_left_anchor sub) ->
     False.
-(* x の中間値点で seg と sub の上下順序が反転し、開性に反する。 *)
-Admitted.
+Proof.
+  intros l sub r seg p q Hctx Hseg Hp Hq Hy HpRange Habove Hqx Hqy.
+  pose proof (x_monotone_rect_x_bounds sub
+                (context_sub_nonempty l sub r Hctx)
+                (context_sub_connected l sub r Hctx)
+                (context_sub_x_monotone l sub r Hctx)) as [Hrx0 Hrx1].
+  assert (Hleftp : fst (sub_left_anchor sub) <= fst p).
+  { unfold in_sub_x_range in HpRange. rewrite Hrx0, Hrx1 in HpRange.
+    exact (proj1 HpRange). }
+  assert (Hpq : p <> q).
+  { intros Heq. subst q. lra. }
+  assert (HleftSeg :
+      rx0 (rect_of [seg]) <= fst (sub_left_anchor sub)
+      <= rx1 (rect_of [seg])).
+  { destruct Hp as [Hp | Hp], Hq as [Hq | Hq];
+      subst p; subst q; cbn in *; unfold rect_of; cbn;
+      unfold Rmin, Rmax;
+      repeat destruct Rle_dec; lra. }
+  destruct (segment_has_point_at_x seg (fst (sub_left_anchor sub)) HleftSeg)
+    as [z [Hz Hx]].
+  assert (HzBounds : snd p <= snd z <= snd q).
+  { destruct (onSegment_y_bounds seg z Hz) as [Hzlo Hzhi].
+    destruct Hp as [Hp | Hp], Hq as [Hq | Hq];
+      subst p; subst q; unfold segment_coord_min, segment_coord_max in *;
+      unfold Rmin, Rmax in *; repeat destruct Rle_dec; lra. }
+  assert (Hinv : up_path_invariant l sub r p).
+  { split.
+    - intros _. exact Habove.
+    - split.
+      + intros Hpx _. unfold in_sub_x_range in HpRange.
+        rewrite Hrx0, Hrx1 in HpRange. lra.
+      + intros Hpx _. unfold in_sub_x_range in HpRange.
+        rewrite Hrx0, Hrx1 in HpRange.
+        unfold sub_right_anchor in Hpx. lra. }
+  assert (HzRange : in_sub_x_range sub z).
+  { unfold in_sub_x_range in HpRange |- *.
+    rewrite Hrx0, Hrx1 in HpRange |- *.
+    rewrite Hx. unfold sub_left_anchor, sub_right_anchor in *. lra. }
+  pose proof (same_segment_upward_point_preserves_sub_above
+                l sub r seg p z Hctx Hseg Hp Hz
+                (proj1 HzBounds) Hinv HzRange) as HzAbove.
+  specialize (HzAbove (sub_left_anchor sub)).
+  assert (HleftOn : onSegmentlist sub (sub_left_anchor sub)).
+  { unfold sub_left_anchor. apply onSegmentlist_init_hd.
+    exact (context_sub_nonempty l sub r Hctx). }
+  specialize (HzAbove HleftOn Hx).
+  lra.
+Qed.
 
 (* 右下の証明書を持つ点から同一セグメントで左下へ抜けると、右障壁を
    横切る。通常下端と例外下端は同じ open core で処理できる。 *)
@@ -2776,7 +2819,59 @@ Lemma right_certificate_blocks_same_segment_left_entry :
     fst q < fst (sub_left_anchor sub) ->
     snd q < snd (sub_left_anchor sub) ->
     False.
-Admitted.
+Proof.
+  intros l sub r seg p q Hctx Hseg Hp Hq Hy Hcertificate Hqx Hqy.
+  destruct (right_up_certificate_position l sub r p Hcertificate)
+    as [Hpx Hpy].
+  pose proof (connected_x_monotone_endpoints sub
+                (context_sub_nonempty l sub r Hctx)
+                (context_sub_connected l sub r Hctx)
+                (context_sub_x_monotone l sub r Hctx)) as Hanchors.
+  assert (Hleftp : fst (sub_left_anchor sub) <= fst p).
+  { unfold sub_left_anchor, sub_right_anchor in *. lra. }
+  assert (HleftSeg :
+      rx0 (rect_of [seg]) <= fst (sub_left_anchor sub)
+      <= rx1 (rect_of [seg])).
+  { destruct Hp as [Hp | Hp], Hq as [Hq | Hq];
+      subst p; subst q; cbn in *; unfold rect_of; cbn;
+      unfold Rmin, Rmax;
+      repeat destruct Rle_dec; lra. }
+  destruct (segment_has_point_at_x seg (fst (sub_left_anchor sub)) HleftSeg)
+    as [z [Hz Hx]].
+  assert (HzBounds : snd p <= snd z <= snd q).
+  { destruct (onSegment_y_bounds seg z Hz) as [Hzlo Hzhi].
+    destruct Hp as [Hp | Hp], Hq as [Hq | Hq];
+      subst p; subst q; unfold segment_coord_min, segment_coord_max in *;
+      unfold Rmin, Rmax in *; repeat destruct Rle_dec; lra. }
+  assert (Hinv : up_path_invariant l sub r p).
+  { split.
+    - intros HpRange. unfold in_sub_x_range in HpRange.
+      pose proof (x_monotone_rect_x_bounds sub
+                    (context_sub_nonempty l sub r Hctx)
+                    (context_sub_connected l sub r Hctx)
+                    (context_sub_x_monotone l sub r Hctx)) as [Hrx0 Hrx1].
+      rewrite Hrx0, Hrx1 in HpRange.
+      unfold sub_right_anchor in Hpx. lra.
+    - split.
+      + intros Hleft _. lra.
+      + intros _ _. exact Hcertificate. }
+  assert (HzRange : in_sub_x_range sub z).
+  { pose proof (x_monotone_rect_x_bounds sub
+                  (context_sub_nonempty l sub r Hctx)
+                  (context_sub_connected l sub r Hctx)
+                  (context_sub_x_monotone l sub r Hctx)) as [Hrx0 Hrx1].
+    unfold in_sub_x_range. rewrite Hrx0, Hrx1, Hx.
+    unfold sub_left_anchor, sub_right_anchor in *. lra. }
+  pose proof (same_segment_upward_point_preserves_sub_above
+                l sub r seg p z Hctx Hseg Hp Hz
+                (proj1 HzBounds) Hinv HzRange) as HzAbove.
+  specialize (HzAbove (sub_left_anchor sub)).
+  assert (HleftOn : onSegmentlist sub (sub_left_anchor sub)).
+  { unfold sub_left_anchor. apply onSegmentlist_init_hd.
+    exact (context_sub_nonempty l sub r Hctx). }
+  specialize (HzAbove HleftOn Hx).
+  lra.
+Qed.
 
 (* sub の右外かつ右 anchor 以上から、左外かつ左 anchor 未満へ進む
    セグメントは、連結な x 単調 sub と交差する。 *)
@@ -2786,13 +2881,63 @@ Lemma same_segment_cannot_cross_sub_from_upper_right_to_lower_left :
     In seg (l ++ sub ++ r) ->
     endpoint_of_seg seg p ->
     endpoint_of_seg seg q ->
+    snd p <= snd q ->
     fst (sub_right_anchor sub) < fst p ->
     snd (sub_right_anchor sub) <= snd p ->
     fst q < fst (sub_left_anchor sub) ->
     snd q < snd (sub_left_anchor sub) ->
     False.
-(* 両 anchor の x で seg 上の点を取り、x_cross_h に還元する。 *)
-Admitted.
+Proof.
+  intros l sub r seg p q Hctx Hseg Hp Hq Hy Hpx Hpy Hqx Hqy.
+  pose proof (connected_x_monotone_endpoints sub
+                (context_sub_nonempty l sub r Hctx)
+                (context_sub_connected l sub r Hctx)
+                (context_sub_x_monotone l sub r Hctx)) as Hanchors.
+  assert (Hleftp : fst (sub_left_anchor sub) <= fst p).
+  { unfold sub_left_anchor, sub_right_anchor in *. lra. }
+  assert (HleftSeg :
+      rx0 (rect_of [seg]) <= fst (sub_left_anchor sub)
+      <= rx1 (rect_of [seg])).
+  { destruct Hp as [Hp | Hp], Hq as [Hq | Hq];
+      subst p; subst q; cbn in *; unfold rect_of; cbn;
+      unfold Rmin, Rmax;
+      repeat destruct Rle_dec; lra. }
+  destruct (segment_has_point_at_x seg (fst (sub_left_anchor sub)) HleftSeg)
+    as [z [Hz Hx]].
+  assert (HzBounds : snd p <= snd z <= snd q).
+  { destruct (onSegment_y_bounds seg z Hz) as [Hzlo Hzhi].
+    destruct Hp as [Hp | Hp], Hq as [Hq | Hq];
+      subst p; subst q; unfold segment_coord_min, segment_coord_max in *;
+      unfold Rmin, Rmax in *; repeat destruct Rle_dec; lra. }
+  assert (Hinv : up_path_invariant l sub r p).
+  { split.
+    - intros HpRange. unfold in_sub_x_range in HpRange.
+      pose proof (x_monotone_rect_x_bounds sub
+                    (context_sub_nonempty l sub r Hctx)
+                    (context_sub_connected l sub r Hctx)
+                    (context_sub_x_monotone l sub r Hctx)) as [Hrx0 Hrx1].
+      rewrite Hrx0, Hrx1 in HpRange.
+      unfold sub_right_anchor in Hpx. lra.
+    - split.
+      + intros Hleft _. lra.
+      + intros _ Hbelow. lra. }
+  assert (HzRange : in_sub_x_range sub z).
+  { pose proof (x_monotone_rect_x_bounds sub
+                  (context_sub_nonempty l sub r Hctx)
+                  (context_sub_connected l sub r Hctx)
+                  (context_sub_x_monotone l sub r Hctx)) as [Hrx0 Hrx1].
+    unfold in_sub_x_range. rewrite Hrx0, Hrx1, Hx.
+    unfold sub_left_anchor, sub_right_anchor in *. lra. }
+  pose proof (same_segment_upward_point_preserves_sub_above
+                l sub r seg p z Hctx Hseg Hp Hz
+                (proj1 HzBounds) Hinv HzRange) as HzAbove.
+  specialize (HzAbove (sub_left_anchor sub)).
+  assert (HleftOn : onSegmentlist sub (sub_left_anchor sub)).
+  { unfold sub_left_anchor. apply onSegmentlist_init_hd.
+    exact (context_sub_nonempty l sub r Hctx). }
+  specialize (HzAbove HleftOn Hx).
+  lra.
+Qed.
 
 (* 始点がまだ左側にない場合に、同一セグメントが左下へ入る遷移を扱う。 *)
 Lemma same_segment_upward_enters_left_certificate :
@@ -2833,7 +2978,7 @@ Proof.
       * exact Hqx.
       * exact Hqy.
     + eapply (same_segment_cannot_cross_sub_from_upper_right_to_lower_left
-                l sub r seg p q Hctx Hseg Hp Hq Hpr'); eauto; lra.
+                l sub r seg p q Hctx Hseg Hp Hq Hy Hpr'); eauto; lra.
 Qed.
 
 Lemma same_segment_upward_preserves_left_certificate :
@@ -2854,8 +2999,8 @@ Proof.
     - assert (Hpy : snd p < snd (sub_left_anchor sub)) by lra.
       destruct (Hleft Hpx Hpy) as
         [side p Hcore Hlevel
-        | side p Hcore Hseed Hblocks Htrace
-        | side p previous Hcore Hreverse Hprevious Hblocks Htrace].
+        | side p Hcore Hseed Htrace
+        | side p previous Hcore Hreverse Hprevious Htrace].
       + apply (same_segment_upward_preserves_direct_left_certificate
                  l sub r seg p q Hctx Hseg Hp Hq Hy); try assumption.
         exists side. now split.
@@ -2864,7 +3009,7 @@ Proof.
                  (or_introl (barrier_extension_seed_is_extension_up_seed
                                 l sub r side p Hseed)) Htrace
                  (left_certificate_extension_seed
-                    l sub r side p Hcore Hseed Hblocks Htrace)
+                    l sub r side p Hcore Hseed Htrace)
                  (or_introl Hseed) Hqx Hqy).
       + exact (same_segment_upward_preserves_nondirect_left_certificate
                  l sub r seg p q side Hctx Hseg Hp Hq Hy Hcore
@@ -2872,7 +3017,7 @@ Proof.
                                 l sub r side previous p Hreverse))
                  Htrace
                  (left_certificate_reverse_step
-                    l sub r side p previous Hcore Hreverse Hprevious Hblocks Htrace)
+                    l sub r side p previous Hcore Hreverse Hprevious Htrace)
                  (or_intror (ex_intro _ previous (conj Hreverse Hprevious)))
                  Hqx Hqy).
   - exfalso.
@@ -3163,7 +3308,44 @@ Lemma same_segment_upward_enters_right_certificate :
     fst (sub_right_anchor sub) < fst q ->
     snd q < snd (sub_right_anchor sub) ->
     False.
-Admitted.
+Proof.
+  intros l sub r seg p q Hctx Hseg Hp Hq Hy Hinv Hpx Hqx Hqy.
+  assert (HrightSeg :
+      rx0 (rect_of [seg]) <= fst (sub_right_anchor sub)
+      <= rx1 (rect_of [seg])).
+  { destruct Hp as [Hp | Hp], Hq as [Hq | Hq];
+      subst p; subst q; cbn in *; unfold rect_of; cbn;
+      unfold Rmin, Rmax;
+      repeat destruct Rle_dec; lra. }
+  destruct (segment_has_point_at_x seg (fst (sub_right_anchor sub)) HrightSeg)
+    as [z [Hz Hx]].
+  assert (HzBounds : snd p <= snd z <= snd q).
+  { destruct (onSegment_y_bounds seg z Hz) as [Hzlo Hzhi].
+    destruct Hp as [Hp | Hp], Hq as [Hq | Hq];
+      subst p; subst q; unfold segment_coord_min, segment_coord_max in *;
+      unfold Rmin, Rmax in *; repeat destruct Rle_dec; lra. }
+  assert (HzRange : in_sub_x_range sub z).
+  { pose proof (x_monotone_rect_x_bounds sub
+                  (context_sub_nonempty l sub r Hctx)
+                  (context_sub_connected l sub r Hctx)
+                  (context_sub_x_monotone l sub r Hctx)) as [Hrx0 Hrx1].
+    unfold in_sub_x_range. rewrite Hrx0, Hrx1, Hx.
+    unfold sub_left_anchor, sub_right_anchor in *.
+    pose proof (connected_x_monotone_endpoints sub
+                  (context_sub_nonempty l sub r Hctx)
+                  (context_sub_connected l sub r Hctx)
+                  (context_sub_x_monotone l sub r Hctx)).
+    lra. }
+  pose proof (same_segment_upward_point_preserves_sub_above
+                l sub r seg p z Hctx Hseg Hp Hz
+                (proj1 HzBounds) Hinv HzRange) as HzAbove.
+  specialize (HzAbove (sub_right_anchor sub)).
+  assert (HrightOn : onSegmentlist sub (sub_right_anchor sub)).
+  { unfold sub_right_anchor. apply onSegmentlist_term_last.
+    exact (context_sub_nonempty l sub r Hctx). }
+  specialize (HzAbove HrightOn Hx).
+  lra.
+Qed.
 
 Lemma same_segment_upward_preserves_right_certificate :
   forall l sub r seg p q,
@@ -3183,8 +3365,8 @@ Proof.
     - assert (Hpy : snd p < snd (sub_right_anchor sub)) by lra.
       destruct (Hright Hpx Hpy) as
         [side p Hcore Hlevel
-        | side p Hcore Hseed Hblocks Htrace
-        | side p previous Hcore Hreverse Hprevious Hblocks Htrace].
+        | side p Hcore Hseed Htrace
+        | side p previous Hcore Hreverse Hprevious Htrace].
       + apply (same_segment_upward_preserves_direct_right_certificate
                  l sub r seg p q Hctx Hseg Hp Hq Hy); try assumption.
         exists side. now split.
@@ -3192,13 +3374,13 @@ Proof.
                  l sub r seg p q side Hctx Hseg Hp Hq Hy Hcore
                  Htrace
                  (right_certificate_extension_seed
-                    l sub r side p Hcore Hseed Hblocks Htrace)
+                    l sub r side p Hcore Hseed Htrace)
                  (or_introl Hseed) Hqx Hqy).
       + exact (same_segment_upward_preserves_nondirect_right_certificate
                  l sub r seg p q side Hctx Hseg Hp Hq Hy Hcore
                  Htrace
                  (right_certificate_reverse_step
-                    l sub r side p previous Hcore Hreverse Hprevious Hblocks Htrace)
+                    l sub r side p previous Hcore Hreverse Hprevious Htrace)
                  (or_intror (ex_intro _ previous (conj Hreverse Hprevious)))
                  Hqx Hqy).
   - exfalso.
@@ -3814,20 +3996,6 @@ Lemma body_up_seed_cannot_be_left_below : forall l sub r p,
   False.
 Admitted.
 
-(* 左下に残り得る延長線 seed からは、次の一辺で sub 以下の
-   危険点へ出られない。 *)
-Lemma extension_up_seed_locally_blocks_unsafe_up : forall l sub r p,
-  ClassificationContext l sub r ->
-  extension_up_seed l sub r p ->
-  fst p < fst (sub_left_anchor sub) ->
-  snd p < snd (sub_left_anchor sub) ->
-  locally_blocks_unsafe_up l sub r p.
-Proof.
-  intros l sub r p Hctx Hseed _ _.
-  apply barrier_exception_locally_blocks_unsafe_up; [exact Hctx |].
-  now left.
-Qed.
-
 (* 左下の Up seed は body seed ではあり得ず、必ず延長線 seed である。 *)
 Lemma endpoint_up_seed_left_low_is_extension_seed : forall l sub r p,
   ClassificationContext l sub r ->
@@ -3870,9 +4038,8 @@ Proof.
     destruct (extension_up_seed_has_left_barrier_core
                 l sub r p Hctx Hextension Hx Hy)
       as [side [Hcore [HbarrierSeed Htrace]]].
-    apply (left_certificate_extension_seed l sub r side p Hcore HbarrierSeed).
-    - now eapply extension_up_seed_locally_blocks_unsafe_up.
-    - exact Htrace.
+    exact (left_certificate_extension_seed
+             l sub r side p Hcore HbarrierSeed Htrace).
 Qed.
 
 (* 右側も双対で、body seed は障壁を作り、延長線 seed だけを

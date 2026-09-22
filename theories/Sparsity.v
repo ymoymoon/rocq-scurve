@@ -7,9 +7,96 @@ Require Import Segment.
 Require Import SegmentsTranslation.
 Require Import ListExt.
 Require Import Stdlib.Logic.ClassicalDescription.
+Require Import Stdlib.Reals.Rsqrt_def.
 Import ListNotations.
 From Stdlib Require Import Lra.
 From Stdlib Require Import Lia.
+
+(* 連続な実数値関数が区間上で 0 を取らなければ、その符号は変わらない。 *)
+Lemma continuous_nonzero_sign_constant :
+  forall (f : R -> R) a b,
+    continuity f ->
+    (forall t, Rmin a b <= t <= Rmax a b -> f t <> 0) ->
+    (f a < 0 -> f b < 0)
+    /\ (0 < f a -> 0 < f b).
+Proof.
+  intros f a b Hcontinuous Hnonzero. split.
+  - intros Ha.
+    destruct (total_order_T (f b) 0) as [[Hb | Hb] | Hb];
+      [exact Hb | exfalso | exfalso].
+    + apply (Hnonzero b); [split; [apply Rmin_r | apply Rmax_r] | exact Hb].
+    + destruct (total_order_T a b) as [[Hab | Hab] | Hab].
+      * destruct (IVT f a b Hcontinuous Hab Ha Hb) as [z [Hz Hzero]].
+        exact (Hnonzero z ltac:(rewrite Rmin_left, Rmax_right; lra) Hzero).
+      * subst b. lra.
+      * assert (Hopp : continuity (- f)) by now apply continuity_opp.
+        assert (Hnb : opp_fct f b < 0) by (unfold opp_fct; lra).
+        assert (Hna : 0 < opp_fct f a) by (unfold opp_fct; lra).
+        destruct (IVT (opp_fct f) b a Hopp Hab Hnb Hna)
+          as [z [Hz Hzero]].
+        apply (Hnonzero z ltac:(rewrite Rmin_right, Rmax_left; lra)).
+        unfold opp_fct in Hzero. lra.
+  - intros Ha.
+    destruct (total_order_T 0 (f b)) as [[Hb | Hb] | Hb];
+      [exact Hb | exfalso | exfalso].
+    + apply (Hnonzero b); [split; [apply Rmin_r | apply Rmax_r] | lra].
+    + destruct (total_order_T a b) as [[Hab | Hab] | Hab].
+      * assert (Hopp : continuity (- f)) by now apply continuity_opp.
+        assert (Hna : opp_fct f a < 0) by (unfold opp_fct; lra).
+        assert (Hnb : 0 < opp_fct f b) by (unfold opp_fct; lra).
+        destruct (IVT (opp_fct f) a b Hopp Hab Hna Hnb)
+          as [z [Hz Hzero]].
+        apply (Hnonzero z ltac:(rewrite Rmin_left, Rmax_right; lra)).
+        unfold opp_fct in Hzero. lra.
+      * subst b. lra.
+      * destruct (IVT f b a Hcontinuous Hab Hb Ha) as [z [Hz Hzero]].
+        exact (Hnonzero z ltac:(rewrite Rmin_right, Rmax_left; lra) Hzero).
+Qed.
+
+(* 連続曲線と連続な高さ関数が交わらなければ、曲線の上下側は変わらない。
+   曲線を x の関数と仮定しないため、垂直な部分にも適用できる。 *)
+Lemma continuous_curve_vertical_order_constant :
+  forall (curve : R -> Point) (height : R -> R) a b,
+    continuity (fun t => fst (curve t)) ->
+    continuity (fun t => snd (curve t)) ->
+    continuity height ->
+    (forall t,
+      Rmin a b <= t <= Rmax a b ->
+      snd (curve t) <> height (fst (curve t))) ->
+    (height (fst (curve a)) < snd (curve a) ->
+       height (fst (curve b)) < snd (curve b))
+    /\
+    (snd (curve a) < height (fst (curve a)) ->
+       snd (curve b) < height (fst (curve b))).
+Proof.
+  intros curve height a b Hx Hy Hheight Hdisjoint.
+  set (gap := fun t => snd (curve t) - height (fst (curve t))).
+  assert (HgapContinuous : continuity gap).
+  { unfold gap.
+    change (continuity
+      ((fun t => snd (curve t)) -
+       (comp height (fun t => fst (curve t))))).
+    apply continuity_minus; [exact Hy |].
+    now apply continuity_comp. }
+  assert (HgapNonzero : forall t,
+      Rmin a b <= t <= Rmax a b -> gap t <> 0).
+  { intros t Ht Hzero. apply (Hdisjoint t Ht).
+    unfold gap in Hzero. lra. }
+  destruct (continuous_nonzero_sign_constant
+              gap a b HgapContinuous HgapNonzero) as [Hnegative Hpositive].
+  split; intros Horder.
+  - specialize (Hpositive ltac:(unfold gap; lra)).
+    unfold gap in Hpositive. lra.
+  - specialize (Hnegative ltac:(unfold gap; lra)).
+    unfold gap in Hnegative. lra.
+Qed.
+
+(* セグメントと延長線の任意の部分曲線は、端点の x 範囲を飛び出さない。
+   本体では x 単調性から従い、延長部分についても同じ幾何仕様を要求する。 *)
+Axiom segment_x_between_parameters : forall seg t0 t1 t,
+  t0 <= t <= t1 ->
+  Rmin (fst (point seg t0)) (fst (point seg t1)) <= fst (point seg t)
+  <= Rmax (fst (point seg t0)) (fst (point seg t1)).
 
 
 
@@ -86,12 +173,74 @@ Definition onSegmentTrace
   | TraceLast => onLast seg p
   end.
 
+Definition trace_parameter_range (part : SegmentTracePart) (t : R) : Prop :=
+  match part with
+  | TraceBody => 0 <= t <= 1
+  | TraceHead => t <= 0
+  | TraceLast => 1 <= t
+  end.
+
+Lemma onSegmentTrace_parameter : forall part seg p,
+  onSegmentTrace part seg p ->
+  exists t, trace_parameter_range part t /\ point seg t = p.
+Proof.
+  intros [] seg p H; exact H.
+Qed.
+
+Lemma trace_parameter_range_between : forall part t0 t1 t,
+  trace_parameter_range part t0 ->
+  trace_parameter_range part t1 ->
+  Rmin t0 t1 <= t <= Rmax t0 t1 ->
+  trace_parameter_range part t.
+Proof.
+  intros [] t0 t1 t Ht0 Ht1 Hbetween; cbn in *;
+    unfold Rmin, Rmax in Hbetween; repeat destruct Rle_dec; lra.
+Qed.
+
+Lemma point_onSegmentTrace : forall part seg t,
+  trace_parameter_range part t ->
+  onSegmentTrace part seg (point seg t).
+Proof.
+  intros [] seg t Ht; cbn in *; exists t; now split.
+Qed.
+
 Definition trace_disjoint_from_segmentlist
     (part : SegmentTracePart) (seg : Segment) (ls : list Segment) : Prop :=
   forall p, onSegmentTrace part seg p -> ~ onSegmentlist ls p.
 
-(* 二つの連続な非交差 x-グラフの上下関係は、共通 x 区間上で反転しない。
-   Segment の連続性・単調性と sub の連結な x 単調性をまとめた幾何補題。 *)
+(* 連結な x 単調セグメント列を、その x 座標における高さ関数として取る。
+   区間外では任意の連続延長を許し、以下では列上の x だけを使用する。 *)
+Parameter segmentlist_height : list Segment -> R -> R.
+
+Axiom connected_x_monotone_height_on_between :
+  forall sub p q x,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    onSegmentlist sub p ->
+    onSegmentlist sub q ->
+    Rmin (fst p) (fst q) <= x <= Rmax (fst p) (fst q) ->
+    onSegmentlist sub (x, segmentlist_height sub x).
+
+Axiom connected_x_monotone_height_unique :
+  forall sub p q,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    onSegmentlist sub p ->
+    onSegmentlist sub q ->
+    fst p = fst q ->
+    snd p = snd q.
+
+Axiom connected_x_monotone_height_continuous :
+  forall sub,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    continuity (segmentlist_height sub).
+
+(* 連続な非交差 trace と連結な x 単調 sub の上下関係は反転しない。
+   一般の連続曲線に対する符号保存へ還元するため、垂直部分も許される。 *)
 Lemma disjoint_trace_sub_vertical_order_constant :
   forall part seg sub,
     sub <> [] ->
@@ -107,7 +256,91 @@ Lemma disjoint_trace_sub_vertical_order_constant :
       fst p = fst q ->
       (snd q0 < snd p0 -> snd q < snd p)
       /\ (snd p0 < snd q0 -> snd p < snd q).
-Admitted.
+Proof.
+  intros part seg sub Hsub Hconnected Hmonotone Hdisjoint
+    p0 q0 p q Hp0 Hq0 Hx0 Hp Hq Hx.
+  destruct (onSegmentTrace_parameter part seg p0 Hp0)
+    as [t0 [Ht0 Hp0eq]].
+  destruct (onSegmentTrace_parameter part seg p Hp)
+    as [t [Ht Hpeq]].
+  subst p0; subst p.
+  assert (HtraceBetween : forall u,
+      Rmin t0 t <= u <= Rmax t0 t ->
+      onSegmentTrace part seg (point seg u)).
+  { intros u Hu. apply point_onSegmentTrace.
+    exact (trace_parameter_range_between part t0 t u Ht0 Ht Hu). }
+  assert (HverticalDisjoint : forall u,
+      Rmin t0 t <= u <= Rmax t0 t ->
+      snd (point seg u) <> segmentlist_height sub (fst (point seg u))).
+  {
+    intros u Hu Hequal.
+    assert (Hxu :
+        Rmin (fst q0) (fst q) <= fst (point seg u)
+        <= Rmax (fst q0) (fst q)).
+    { destruct (Rle_dec t0 t) as [Horder | Horder].
+      - assert (Ht0ut : t0 <= u <= t) by
+          (rewrite Rmin_left, Rmax_right in Hu; assumption).
+        pose proof
+          (segment_x_between_parameters seg t0 t u Ht0ut) as Hbetween.
+        rewrite Hx0, Hx in Hbetween. exact Hbetween.
+      - assert (Htt0 : t <= t0) by lra.
+        assert (Htut0 : t <= u <= t0) by
+          (rewrite Rmin_right, Rmax_left in Hu; lra).
+        pose proof
+          (segment_x_between_parameters seg t t0 u Htut0) as Hbetween.
+        rewrite Hx0, Hx in Hbetween.
+        rewrite Rmin_comm, Rmax_comm in Hbetween.
+        exact Hbetween. }
+    pose proof (connected_x_monotone_height_on_between
+                  sub q0 q (fst (point seg u))
+                  Hsub Hconnected Hmonotone Hq0 Hq Hxu) as HheightOn.
+    apply (Hdisjoint (point seg u)).
+    - now apply HtraceBetween.
+    - replace (point seg u)
+        with (fst (point seg u), segmentlist_height sub (fst (point seg u))).
+      + exact HheightOn.
+      + apply injective_projections; [reflexivity |].
+        cbn. exact (eq_sym Hequal).
+  }
+  assert (Hheight0 :
+      segmentlist_height sub (fst q0) = snd q0).
+  {
+    assert (Hon : onSegmentlist sub
+        (fst q0, segmentlist_height sub (fst q0))).
+    { apply (connected_x_monotone_height_on_between sub q0 q0 (fst q0));
+        try assumption.
+      unfold Rmin, Rmax. repeat destruct Rle_dec; lra. }
+    pose proof (connected_x_monotone_height_unique
+                  sub (fst q0, segmentlist_height sub (fst q0)) q0
+                  Hsub Hconnected Hmonotone Hon Hq0 eq_refl) as Heq.
+    cbn in Heq. exact Heq.
+  }
+  assert (Hheight :
+      segmentlist_height sub (fst q) = snd q).
+  {
+    assert (Hon : onSegmentlist sub
+        (fst q, segmentlist_height sub (fst q))).
+    { apply (connected_x_monotone_height_on_between sub q q (fst q));
+        try assumption.
+      unfold Rmin, Rmax. repeat destruct Rle_dec; lra. }
+    pose proof (connected_x_monotone_height_unique
+                  sub (fst q, segmentlist_height sub (fst q)) q
+                  Hsub Hconnected Hmonotone Hon Hq eq_refl) as Heq.
+    cbn in Heq. exact Heq.
+  }
+  destruct (continuous_curve_vertical_order_constant
+              (point seg) (segmentlist_height sub) t0 t
+              (proj1 (seg_continuous seg))
+              (proj2 (seg_continuous seg))
+              (connected_x_monotone_height_continuous
+                 sub Hsub Hconnected Hmonotone)
+              HverticalDisjoint) as [Habove Hbelow].
+  split; intros Horder.
+  - cbn in Habove. rewrite Hx0, Hheight0, Hx, Hheight in Habove.
+    now apply Habove.
+  - cbn in Hbelow. rewrite Hx0, Hheight0, Hx, Hheight in Hbelow.
+    now apply Hbelow.
+Qed.
 
 (* TODO: extend に関する公理を完成させた後， onExtendSegment と整合することを確認
 		特に空リストの扱い *)
