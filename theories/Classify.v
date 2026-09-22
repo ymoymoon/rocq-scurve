@@ -464,6 +464,10 @@ Qed.
 
 (* 仕様の結論で分類する点は sub 上の点または端点だけである。
    [p], [q], [e] は上下関係を示す幾何学的な証人であり分類しない。 *)
+(* ----------------------------------------------------------------- *)
+(*  分類器に要求する外部仕様                                       *)
+(* ----------------------------------------------------------------- *)
+
 Record ClassificationSpec
     (l sub r : list Segment) {classifier : EndpointClassifier} : Prop := {
   (* sub は全点を固定する。特に左右との接続端点も動かない。 *)
@@ -605,7 +609,7 @@ Record ClassificationSpec
 }.
 
 (* ----------------------------------------------------------------- *)
-(*  端点制約                                                         *)
+(*  端点間の順序制約と有限パス                                     *)
 (* ----------------------------------------------------------------- *)
 
 (* 通常の端点順序。セグメント本体と非隣接セグメント間の比較だけを含み、
@@ -977,37 +981,96 @@ Definition right_falling_barrier
     on_barrier_trace side whole q ->
     (fst p < fst q <-> snd q < snd p).
 
-(* 左側の点と init sub の間を、選んだ先頭または末尾 trace が
-   閉じた高さ区間全体で塞ぐ。障壁は右上がりとし、
-   x は常に開区間内に置いて直接接続するセグメント自身を除く。 *)
-Definition left_vertical_guard_to_init
-    (l sub r : list Segment) (p : Point) : Prop :=
+(* 点より真に上で init sub まで続く左側境界。下端を開けることで、
+   通常点と境界自身に属する例外端点を同じ形で扱う。 *)
+Definition left_barrier_core
+    (side : BarrierEnd) (l sub r : list Segment) (p : Point) : Prop :=
   let whole := l ++ sub ++ r in
   let left := sub_left_anchor sub in
+  whole <> []
+  /\ right_rising_barrier side whole
+  /\ fst p < fst left
+  /\ snd p < snd left
+  /\ (forall y,
+        snd p < y <= snd left ->
+        exists x,
+          fst p < x < fst left
+          /\ on_barrier_trace side whole (x, y)).
+
+Definition right_barrier_core
+    (side : BarrierEnd) (l sub r : list Segment) (p : Point) : Prop :=
+  let whole := l ++ sub ++ r in
+  let right := sub_right_anchor sub in
+  whole <> []
+  /\ right_falling_barrier side whole
+  /\ fst right < fst p
+  /\ snd p < snd right
+  /\ (forall y,
+        snd p < y <= snd right ->
+        exists x,
+          fst right < x < fst p
+          /\ on_barrier_trace side whole (x, y)).
+
+(* 通常点では、点と同じ高さにも境界がその内側に実在する。 *)
+Definition left_barrier_at_level
+    (side : BarrierEnd) (l sub r : list Segment) (p : Point) : Prop :=
+  exists x,
+    fst p < x < fst (sub_left_anchor sub)
+    /\ on_barrier_trace side (l ++ sub ++ r) (x, snd p).
+
+Definition right_barrier_at_level
+    (side : BarrierEnd) (l sub r : list Segment) (p : Point) : Prop :=
+  exists x,
+    fst (sub_right_anchor sub) < x < fst p
+    /\ on_barrier_trace side (l ++ sub ++ r) (x, snd p).
+
+(* 従来の通常境界は、開いた core と下端高さの証人の組である。 *)
+Definition left_vertical_guard_to_init
+    (l sub r : list Segment) (p : Point) : Prop :=
   exists side,
-    whole <> []
-    /\ right_rising_barrier side whole
-    /\ snd p < snd left
-    /\ (forall y,
-          snd p <= y <= snd left ->
-          exists x,
-            fst p < x < fst left
-            /\ on_barrier_trace side whole (x, y)).
+    left_barrier_core side l sub r p
+    /\ left_barrier_at_level side l sub r p.
 
 (* 右側では term sub まで同じ障壁を張る。 *)
 Definition right_vertical_guard_to_term
     (l sub r : list Segment) (p : Point) : Prop :=
-  let whole := l ++ sub ++ r in
-  let right := sub_right_anchor sub in
   exists side,
-    whole <> []
-    /\ right_falling_barrier side whole
-    /\ snd p < snd right
-    /\ (forall y,
-          snd p <= y <= snd right ->
-          exists x,
-            fst right < x < fst p
-            /\ on_barrier_trace side whole (x, y)).
+    right_barrier_core side l sub r p
+    /\ right_barrier_at_level side l sub r p.
+
+Lemma left_barrier_closed_span : forall side l sub r p,
+  left_barrier_core side l sub r p ->
+  left_barrier_at_level side l sub r p ->
+  forall y,
+    snd p <= y <= snd (sub_left_anchor sub) ->
+    exists x,
+      fst p < x < fst (sub_left_anchor sub)
+      /\ on_barrier_trace side (l ++ sub ++ r) (x, y).
+Proof.
+  intros side l sub r p Hcore Hlevel y Hy.
+  unfold left_barrier_core in Hcore. cbn in Hcore.
+  destruct Hcore as [_ [_ [_ [_ Hopen]]]].
+  destruct (Req_dec y (snd p)) as [-> | Hneq].
+  - exact Hlevel.
+  - apply Hopen. lra.
+Qed.
+
+Lemma right_barrier_closed_span : forall side l sub r p,
+  right_barrier_core side l sub r p ->
+  right_barrier_at_level side l sub r p ->
+  forall y,
+    snd p <= y <= snd (sub_right_anchor sub) ->
+    exists x,
+      fst (sub_right_anchor sub) < x < fst p
+      /\ on_barrier_trace side (l ++ sub ++ r) (x, y).
+Proof.
+  intros side l sub r p Hcore Hlevel y Hy.
+  unfold right_barrier_core in Hcore. cbn in Hcore.
+  destruct Hcore as [_ [_ [_ [_ Hopen]]]].
+  destruct (Req_dec y (snd p)) as [-> | Hneq].
+  - exact Hlevel.
+  - apply Hopen. lra.
+Qed.
 
 (* [p] の strict guard を構成するまさに同じ障壁に [q] が接触する。
    障壁の識別を失うと、無関係な別の障壁を選べてしまう。 *)
@@ -1059,8 +1122,12 @@ Proof.
   intros l sub r seg [xp yp] [xq yq]
     Hctx Hseg Hp Hq Hy Hguard Hqx Hqy.
   unfold left_vertical_guard_to_init in Hguard |- *.
+  destruct Hguard as [side [Hcore Hlevel]].
+  pose proof (left_barrier_closed_span side l sub r (xp, yp)
+                Hcore Hlevel) as Hspan.
+  unfold left_barrier_core in Hcore. cbn in Hcore.
+  destruct Hcore as [HbarWhole [Hrising [HpxLeft [HpTop Hopen]]]].
   cbn in *.
-  destruct Hguard as [side [HbarWhole [Hrising [HpTop Hspan]]]].
   destruct (Hspan yp ltac:(lra)) as [xbp [[Hpxbp HbpLeft] Hbp]].
   destruct (Hspan yq ltac:(lra)) as [xbq [[Hpxbq HbqLeft] Hbq]].
   assert (Hwhole : l ++ sub ++ r <> []).
@@ -1072,18 +1139,23 @@ Proof.
   { apply OnSegMid; [exact Hwhole | exact Hseg |].
     destruct Hq as [-> | ->]; [apply onInit | apply onTerm]. }
   destruct (total_order_T xq xbq) as [[HqLeft | HqOn] | HqRight].
-  - left. exists side. split; [exact HbarWhole |].
-    split; [exact Hrising |].
-    split; [exact Hqy |].
-    intros y HyRange.
-    destruct (Hspan y ltac:(lra)) as [xb [[Hpxb HbLeft] Hb]].
-    assert (Hbqxb : xbq <= xb).
-    { destruct (Rle_dec xbq xb) as [Hle | Hnle]; [exact Hle |].
-      assert (Hxb : xb < xbq) by lra.
-      pose proof
-        (proj1 (Hrising (xb, y) (xbq, yq) Hb Hbq) Hxb) as Hyy.
-      cbn in Hyy. lra. }
-    exists xb. split; [lra | exact Hb].
+  - left. exists side. split.
+    + unfold left_barrier_core. cbn.
+      split; [exact HbarWhole |].
+      split; [exact Hrising |].
+      split; [exact Hqx |].
+      split; [exact Hqy |].
+      intros y HyRange.
+      destruct (Hspan y ltac:(lra)) as [xb [[Hpxb HbLeft] Hb]].
+      assert (Hbqxb : xbq <= xb).
+      { destruct (Rle_dec xbq xb) as [Hle | Hnle]; [exact Hle |].
+        assert (Hxb : xb < xbq) by lra.
+        pose proof
+          (proj1 (Hrising (xb, y) (xbq, yq) Hb Hbq) Hxb) as Hyy.
+        cbn in Hyy. lra. }
+      exists xb. split; [lra | exact Hb].
+    + unfold left_barrier_at_level. cbn.
+      exists xbq. split; [lra | exact Hbq].
   - right. unfold left_strict_guard_contact. cbn.
     exists side. split; [exact HbarWhole |].
     split; [exact Hrising |].
@@ -1127,8 +1199,12 @@ Proof.
   intros l sub r seg [xp yp] [xq yq]
     Hctx Hseg Hp Hq Hy Hguard Hqx Hqy.
   unfold right_vertical_guard_to_term in Hguard |- *.
+  destruct Hguard as [side [Hcore Hlevel]].
+  pose proof (right_barrier_closed_span side l sub r (xp, yp)
+                Hcore Hlevel) as Hspan.
+  unfold right_barrier_core in Hcore. cbn in Hcore.
+  destruct Hcore as [HbarWhole [Hfalling [HrightPx [HpTop Hopen]]]].
   cbn in *.
-  destruct Hguard as [side [HbarWhole [Hfalling [HpTop Hspan]]]].
   destruct (Hspan yp ltac:(lra)) as [xbp [[HbpRight HbpLeft] Hbp]].
   destruct (Hspan yq ltac:(lra)) as [xbq [[HbqRight HbqLeft] Hbq]].
   assert (Hwhole : l ++ sub ++ r <> []).
@@ -1140,18 +1216,23 @@ Proof.
   { apply OnSegMid; [exact Hwhole | exact Hseg |].
     destruct Hq as [-> | ->]; [apply onInit | apply onTerm]. }
   destruct (total_order_T xbq xq) as [[HqRight | HqOn] | HqLeft].
-  - left. exists side. split; [exact HbarWhole |].
-    split; [exact Hfalling |].
-    split; [exact Hqy |].
-    intros y HyRange.
-    destruct (Hspan y ltac:(lra)) as [xb [[HbRight HbLeft] Hb]].
-    assert (Hxbq : xb <= xbq).
-    { destruct (Rle_dec xb xbq) as [Hle | Hnle]; [exact Hle |].
-      assert (Hlt : xbq < xb) by lra.
-      pose proof
-        (proj1 (Hfalling (xbq, yq) (xb, y) Hbq Hb) Hlt) as Hyy.
-      cbn in Hyy. lra. }
-    exists xb. split; [lra | exact Hb].
+  - left. exists side. split.
+    + unfold right_barrier_core. cbn.
+      split; [exact HbarWhole |].
+      split; [exact Hfalling |].
+      split; [exact Hqx |].
+      split; [exact Hqy |].
+      intros y HyRange.
+      destruct (Hspan y ltac:(lra)) as [xb [[HbRight HbLeft] Hb]].
+      assert (Hxbq : xb <= xbq).
+      { destruct (Rle_dec xb xbq) as [Hle | Hnle]; [exact Hle |].
+        assert (Hlt : xbq < xb) by lra.
+        pose proof
+          (proj1 (Hfalling (xbq, yq) (xb, y) Hbq Hb) Hlt) as Hyy.
+        cbn in Hyy. lra. }
+      exists xb. split; [lra | exact Hb].
+    + unfold right_barrier_at_level. cbn.
+      exists xbq. split; [lra | exact Hbq].
   - right. unfold right_strict_guard_contact. cbn.
     exists side. split; [exact HbarWhole |].
     split; [exact Hfalling |].
@@ -1177,8 +1258,8 @@ Proof.
     nra.
 Qed.
 
-(* 障壁なしで認める seed は、非隣接セグメント本体由来ではなく、
-   sub より上を通る先頭・末尾延長線の基点だけである。 *)
+(* 下端自身が境界上にある seed は、sub より上を通る先頭・末尾
+   延長線の基点である。境界の上側部分は certificate で別に保持する。 *)
 Definition extension_up_seed
     (l sub r : list Segment) (p : Point) : Prop :=
   (l <> []
@@ -1196,6 +1277,35 @@ Definition extension_up_seed
         /\ onSegmentlist sub z
         /\ fst q = fst z
         /\ snd z < snd q).
+
+(* 延長線 seed が先頭・末尾のどちらを障壁として使うかも記録する。 *)
+Definition barrier_extension_seed
+    (l sub r : list Segment) (side : BarrierEnd) (p : Point) : Prop :=
+  match side with
+  | BarrierHead =>
+      l <> []
+      /\ p = init (hd_segment (l ++ sub ++ r))
+      /\ exists q z,
+           onHead_extend_strict (l ++ sub ++ r) q
+           /\ onSegmentlist sub z
+           /\ fst q = fst z
+           /\ snd z < snd q
+  | BarrierLast =>
+      r <> []
+      /\ p = term (last_segment (l ++ sub ++ r))
+      /\ exists q z,
+           onLast_extend_strict (l ++ sub ++ r) q
+           /\ onSegmentlist sub z
+           /\ fst q = fst z
+           /\ snd z < snd q
+  end.
+
+Lemma barrier_extension_seed_is_extension_up_seed : forall l sub r side p,
+  barrier_extension_seed l sub r side p ->
+  extension_up_seed l sub r p.
+Proof.
+  intros l sub r [] p Hseed; [left | right]; exact Hseed.
+Qed.
 
 (* 傾き保存用の逆向き end-step が、Up を低い端点へ移す四つの場合。
    単に先頭・末尾の端点であるだけでは例外にしない。 *)
@@ -1218,8 +1328,8 @@ Definition reverse_end_target
       /\ embed (s, hor, cx) (last_segment r)
       /\ p = term (last_segment r)).
 
-(* 左下で障壁を持たない可能性は、延長線 seed と、
-   傾き保存用の逆向き end-step の到達点に限定する。 *)
+(* 延長線 seed と逆向き end-step の到達点をまとめる幾何補助述語。
+   証明書本体ではこれだけに頼らず、下の帰納型に生成履歴を保存する。 *)
 Definition barrier_exception
     (l sub r : list Segment) (p : Point) : Prop :=
   extension_up_seed l sub r p \/ reverse_end_target l sub r p.
@@ -1232,20 +1342,123 @@ Definition locally_blocks_unsafe_up
     endpoint_order_step l sub r p q ->
     ~ unsafe_up_point sub q.
 
-Definition left_up_certificate
-    (l sub r : list Segment) (p : Point) : Prop :=
-  left_vertical_guard_to_init l sub r p
-  \/ (barrier_exception l sub r p
-      /\ locally_blocks_unsafe_up l sub r p).
+(* 障壁を作る逆向き end-step は四種類だけである。向きだけでなく、
+   どの端点からどの端点へ下ったかも記録しておく。 *)
+Inductive barrier_reverse_step
+    (l sub r : list Segment) : BarrierEnd -> Point -> Point -> Prop :=
+  | barrier_reverse_head_north_cx : forall hor,
+      l <> [] ->
+      embed (n, hor, cx) (hd_segment l) ->
+      barrier_reverse_step l sub r BarrierHead
+        (term (hd_segment l)) (init (hd_segment l))
+  | barrier_reverse_head_south_cc : forall hor,
+      l <> [] ->
+      embed (s, hor, cc) (hd_segment l) ->
+      barrier_reverse_step l sub r BarrierHead
+        (init (hd_segment l)) (term (hd_segment l))
+  | barrier_reverse_last_north_cc : forall hor,
+      r <> [] ->
+      embed (n, hor, cc) (last_segment r) ->
+      barrier_reverse_step l sub r BarrierLast
+        (term (last_segment r)) (init (last_segment r))
+  | barrier_reverse_last_south_cx : forall hor,
+      r <> [] ->
+      embed (s, hor, cx) (last_segment r) ->
+      barrier_reverse_step l sub r BarrierLast
+        (init (last_segment r)) (term (last_segment r)).
 
-Definition right_up_certificate
-    (l sub r : list Segment) (p : Point) : Prop :=
-  right_vertical_guard_to_term l sub r p
-  \/ (barrier_exception l sub r p
-      /\ locally_blocks_unsafe_up l sub r p).
+Lemma barrier_reverse_step_has_reverse_target : forall l sub r side previous p,
+  barrier_reverse_step l sub r side previous p ->
+  reverse_end_target l sub r p.
+Proof.
+  intros l sub r side previous p Hstep. destruct Hstep.
+  - left. exists hor. repeat split; assumption.
+  - right. left. exists hor. repeat split; assumption.
+  - right. right. left. exists hor. repeat split; assumption.
+  - do 3 right. exists hor. repeat split; assumption.
+Qed.
 
-(* 中央では欲しい結論そのものを保つ。左右の下側では通常点に
-   障壁を必須とし、上の二種類の例外だけ局所的な進出禁止で扱う。 *)
+(* 逆向き step の到達点と異なる同じ障壁セグメントの端点は、
+   step 前に証明書を持っていた端点そのものである。 *)
+Lemma barrier_reverse_step_other_endpoint : forall l sub r side previous p seg q,
+  barrier_reverse_step l sub r side previous p ->
+  seg = barrier_segment side (l ++ sub ++ r) ->
+  endpoint_of_seg seg p ->
+  endpoint_of_seg seg q ->
+  p <> q ->
+  q = previous.
+Proof.
+  intros l sub r side previous p seg q Hstep Hseg _ Hq Hneq.
+    destruct Hstep as
+      [hor Hl Hembed | hor Hl Hembed | hor Hr Hembed | hor Hr Hembed].
+    - destruct l as [|a l']; [contradiction |]. cbn in Hseg |- *.
+      subst seg. destruct Hq as [Hq | Hq].
+      + exfalso. apply Hneq. exact (eq_sym Hq).
+      + exact Hq.
+  - destruct l as [|a l']; [contradiction |]. cbn in Hseg |- *.
+    subst seg. destruct Hq as [Hq | Hq].
+      + exact Hq.
+    + exfalso. apply Hneq. exact (eq_sym Hq).
+    - assert (Hlast : last_segment (l ++ sub ++ r) = last_segment r).
+      { rewrite (last_app_nonnil l (sub ++ r)).
+        - apply last_app_nonnil. exact Hr.
+        - intros Hnil. apply app_eq_nil in Hnil. tauto. }
+      cbn in Hseg. rewrite Hlast in Hseg. subst seg. destruct Hq as [Hq | Hq].
+      + exfalso. apply Hneq. exact (eq_sym Hq).
+      + exact Hq.
+    - assert (Hlast : last_segment (l ++ sub ++ r) = last_segment r).
+      { rewrite (last_app_nonnil l (sub ++ r)).
+        - apply last_app_nonnil. exact Hr.
+        - intros Hnil. apply app_eq_nil in Hnil. tauto. }
+      cbn in Hseg. rewrite Hlast in Hseg. subst seg. destruct Hq as [Hq | Hq].
+      + exact Hq.
+    + exfalso. apply Hneq. exact (eq_sym Hq).
+Qed.
+
+(* 左右の証明書は、通常の同高さ障壁、延長線 seed、逆向き step の
+   いずれから作られたかを保持する。逆向きの場合は移動前の証明書も保存する。 *)
+Inductive left_up_certificate
+    (l sub r : list Segment) : Point -> Prop :=
+  | left_certificate_at_level : forall side p,
+      left_barrier_core side l sub r p ->
+      left_barrier_at_level side l sub r p ->
+      left_up_certificate l sub r p
+  | left_certificate_extension_seed : forall side p,
+      left_barrier_core side l sub r p ->
+      barrier_extension_seed l sub r side p ->
+      locally_blocks_unsafe_up l sub r p ->
+      on_barrier_trace side (l ++ sub ++ r) p ->
+      left_up_certificate l sub r p
+  | left_certificate_reverse_step : forall side p previous,
+      left_barrier_core side l sub r p ->
+      barrier_reverse_step l sub r side previous p ->
+      left_up_certificate l sub r previous ->
+      locally_blocks_unsafe_up l sub r p ->
+      on_barrier_trace side (l ++ sub ++ r) p ->
+      left_up_certificate l sub r p.
+
+Inductive right_up_certificate
+    (l sub r : list Segment) : Point -> Prop :=
+  | right_certificate_at_level : forall side p,
+      right_barrier_core side l sub r p ->
+      right_barrier_at_level side l sub r p ->
+      right_up_certificate l sub r p
+  | right_certificate_extension_seed : forall side p,
+      right_barrier_core side l sub r p ->
+      barrier_extension_seed l sub r side p ->
+      locally_blocks_unsafe_up l sub r p ->
+      on_barrier_trace side (l ++ sub ++ r) p ->
+      right_up_certificate l sub r p
+  | right_certificate_reverse_step : forall side p previous,
+      right_barrier_core side l sub r p ->
+      barrier_reverse_step l sub r side previous p ->
+      right_up_certificate l sub r previous ->
+      locally_blocks_unsafe_up l sub r p ->
+      on_barrier_trace side (l ++ sub ++ r) p ->
+      right_up_certificate l sub r p.
+
+(* 中央では欲しい結論そのものを保つ。左右では同じ open core を持ち、
+   下端だけを通常境界点または将来の境界となる例外端点に分ける。 *)
 Definition up_path_invariant
     (l sub r : list Segment) (p : Point) : Prop :=
   (in_sub_x_range sub p -> strictly_above_sub_at_x sub p)
@@ -1255,6 +1468,10 @@ Definition up_path_invariant
   /\ (fst (sub_right_anchor sub) < fst p ->
       snd p < snd (sub_right_anchor sub) ->
       right_up_certificate l sub r p).
+
+(* ----------------------------------------------------------------- *)
+(*  障壁 trace とセグメントの基礎幾何                              *)
+(* ----------------------------------------------------------------- *)
 
 Lemma right_rising_barrier_same_height_unique : forall side whole p q,
   right_rising_barrier side whole ->
@@ -1328,6 +1545,42 @@ Proof.
     + pose proof (south_head_extension_bounds seg h c (point seg t)
                     Hembed Hhead) as Hext.
       pose proof (s_end_relation seg h c Hembed) as Hend. lra.
+Qed.
+
+Lemma embedded_head_trace_horizontal_bound : forall seg v h c p,
+  embed (v, h, c) seg ->
+  onHeadSegment seg p ->
+  match h with
+  | e => fst p <= fst (term seg)
+  | w => fst (term seg) <= fst p
+  end.
+Proof.
+  intros seg v h c [x y] Hembed [t [Ht <-]].
+  destruct (Rle_dec 0 t) as [Ht0 | Ht0].
+  - assert (Hon : onSegment seg (point seg t)).
+    { exists t. split; [lra | reflexivity]. }
+    destruct h.
+    + assert (Hon' : onSegment seg
+          (fst (point seg t), snd (point seg t))).
+      { replace (fst (point seg t), snd (point seg t)) with (point seg t)
+          by apply surjective_pairing. exact Hon. }
+      exact (proj2 (e_onseg_relation seg v c
+                      (fst (point seg t)) (snd (point seg t)) Hembed Hon')).
+    + assert (Hon' : onSegment seg
+          (fst (point seg t), snd (point seg t))).
+      { replace (fst (point seg t), snd (point seg t)) with (point seg t)
+          by apply surjective_pairing. exact Hon. }
+      exact (proj1 (w_onseg_relation seg v c
+                      (fst (point seg t)) (snd (point seg t)) Hembed Hon')).
+  - assert (Hhead : onHead seg (point seg t)).
+    { exists t. split; [lra | reflexivity]. }
+    destruct h.
+    + pose proof (east_head_extension_bounds seg v c (point seg t)
+                    Hembed Hhead).
+      pose proof (e_end_relation seg v c Hembed). lra.
+    + pose proof (west_head_extension_bounds seg v c (point seg t)
+                    Hembed Hhead).
+      pose proof (w_end_relation seg v c Hembed). lra.
 Qed.
 
 (* 南向き先頭 trace で終点と同じ高さを取る点は終点自身だけである。 *)
@@ -1508,6 +1761,42 @@ Proof.
     + pose proof (south_last_extension_bounds seg h c (point seg t)
                     Hembed Hlast) as Hext.
       pose proof (s_end_relation seg h c Hembed) as Hend. lra.
+Qed.
+
+Lemma embedded_last_trace_horizontal_bound : forall seg v h c p,
+  embed (v, h, c) seg ->
+  onLastSegment seg p ->
+  match h with
+  | e => fst (init seg) <= fst p
+  | w => fst p <= fst (init seg)
+  end.
+Proof.
+  intros seg v h c [x y] Hembed [t [Ht <-]].
+  destruct (Rle_dec t 1) as [Ht1 | Ht1].
+  - assert (Hon : onSegment seg (point seg t)).
+    { exists t. split; [lra | reflexivity]. }
+    destruct h.
+    + assert (Hon' : onSegment seg
+          (fst (point seg t), snd (point seg t))).
+      { replace (fst (point seg t), snd (point seg t)) with (point seg t)
+          by apply surjective_pairing. exact Hon. }
+      exact (proj1 (e_onseg_relation seg v c
+                      (fst (point seg t)) (snd (point seg t)) Hembed Hon')).
+    + assert (Hon' : onSegment seg
+          (fst (point seg t), snd (point seg t))).
+      { replace (fst (point seg t), snd (point seg t)) with (point seg t)
+          by apply surjective_pairing. exact Hon. }
+      exact (proj2 (w_onseg_relation seg v c
+                      (fst (point seg t)) (snd (point seg t)) Hembed Hon')).
+  - assert (Hlast : onLast seg (point seg t)).
+    { exists t. split; [lra | reflexivity]. }
+    destruct h.
+    + pose proof (east_last_extension_bounds seg v c (point seg t)
+                    Hembed Hlast).
+      pose proof (e_end_relation seg v c Hembed). lra.
+    + pose proof (west_last_extension_bounds seg v c (point seg t)
+                    Hembed Hlast).
+      pose proof (w_end_relation seg v c Hembed). lra.
 Qed.
 
 Lemma on_segment_init_from_y : forall seg p,
@@ -1895,8 +2184,9 @@ Proof.
   intros l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy.
   destruct (left_guard_preserved_by_same_segment_or_contact
               l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy)
-    as [Hguard' | Hcontact].
-  - now left.
+      as [Hguard' | Hcontact].
+    - destruct Hguard' as [side [Hcore Hlevel]].
+      exact (left_certificate_at_level l sub r side q Hcore Hlevel).
   - exfalso.
     exact (same_segment_left_strict_guard_contact_impossible
              l sub r seg p q Hctx Hseg Hp Hq Hy Hqx Hqy Hcontact).
@@ -1917,8 +2207,9 @@ Proof.
   intros l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy.
   destruct (right_guard_preserved_by_same_segment_or_contact
               l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy)
-    as [Hguard' | Hcontact].
-  - now left.
+      as [Hguard' | Hcontact].
+    - destruct Hguard' as [side [Hcore Hlevel]].
+      exact (right_certificate_at_level l sub r side q Hcore Hlevel).
   - exfalso.
     exact (same_segment_right_strict_guard_contact_impossible
              l sub r seg p q Hctx Hseg Hp Hq Hy Hqx Hqy Hcontact).
@@ -1957,9 +2248,472 @@ Lemma same_segment_upward_preserves_sub_above :
     strictly_above_sub_at_x sub q.
 Admitted.
 
-(* 直接障壁を持たない場合だけを暫定的に隔離する。ここに
-   trace の継続と Head/Last 端点例外の最終的な条件が入る。 *)
+(* 例外下端から上向きに進む場合。同じ side の open core と、下端が
+   その trace 自身に属するという destruct 済みの証明書を受け取る。 *)
+Lemma ordered_distinct_segment_endpoints_strict_y :
+  forall seg p q,
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    p <> q ->
+    snd p <= snd q ->
+    snd p < snd q.
+Proof.
+  intros seg p q Hp Hq Hneq Hle.
+  destruct (Rle_lt_or_eq_dec (snd p) (snd q) Hle) as [Hlt | Heq];
+    [exact Hlt |].
+  destruct Hp as [Hp | Hp], Hq as [Hq | Hq].
+  - exfalso. apply Hneq. now rewrite Hp, Hq.
+  - exfalso. apply (neq_init_term_y seg). unfold init_y, term_y.
+    rewrite <- (f_equal snd Hp), <- (f_equal snd Hq). exact Heq.
+  - exfalso. apply (neq_init_term_y seg). unfold init_y, term_y.
+    rewrite <- (f_equal snd Hq), <- (f_equal snd Hp). exact (eq_sym Heq).
+  - exfalso. apply Hneq. now rewrite Hp, Hq.
+Qed.
+
+Lemma dc_after_rising_head_moves_left :
+  forall ps_bar ps_seg bar seg above,
+    dc ps_bar ps_seg ->
+    embed ps_bar bar ->
+    embed ps_seg seg ->
+    snd (init seg) < snd (term seg) ->
+    onHeadSegment bar above ->
+    snd (term bar) < snd above ->
+    fst (term bar) < fst above ->
+    fst (term seg) < fst (init seg).
+Proof.
+  intros ps_bar ps_seg bar seg above Hdc Hbar Hseg HsegY Habove HaboveY HaboveX.
+  destruct Hdc as [v h c | h | h | h | h].
+  - destruct v.
+    + pose proof (embedded_head_trace_vertical_bound bar n h c above Hbar Habove).
+      lra.
+    + pose proof (s_end_relation seg h (i_c c) Hseg). lra.
+  - pose proof (s_end_relation seg h cx Hseg). lra.
+  - destruct h.
+    + pose proof (embedded_head_trace_horizontal_bound bar s e cc above Hbar Habove).
+      lra.
+    + exact (w_end_relation seg n cc Hseg).
+  - pose proof (embedded_head_trace_vertical_bound bar n h cc above Hbar Habove).
+    lra.
+  - pose proof (s_end_relation seg (i_h h) cc Hseg). lra.
+Qed.
+
+Lemma dc_before_rising_last_moves_left :
+  forall ps_seg ps_bar seg bar above,
+    dc ps_seg ps_bar ->
+    embed ps_seg seg ->
+    embed ps_bar bar ->
+    snd (term seg) < snd (init seg) ->
+    onLastSegment bar above ->
+    snd (init bar) < snd above ->
+    fst (init bar) < fst above ->
+    fst (init seg) < fst (term seg).
+Proof.
+  intros ps_seg ps_bar seg bar above Hdc Hseg Hbar HsegY Habove HaboveY HaboveX.
+  destruct Hdc as [v h c | h | h | h | h].
+  - destruct v.
+    + pose proof (n_end_relation seg h c Hseg). lra.
+    + pose proof (embedded_last_trace_vertical_bound bar s h (i_c c)
+                    above Hbar Habove). lra.
+  - pose proof (n_end_relation seg h cx Hseg). lra.
+  - destruct h.
+    + exact (e_end_relation seg s cc Hseg).
+    + pose proof (embedded_last_trace_horizontal_bound bar n w cc
+                    above Hbar Habove). lra.
+  - pose proof (n_end_relation seg h cc Hseg). lra.
+  - pose proof (embedded_last_trace_vertical_bound bar s (i_h h) cc
+                  above Hbar Habove). lra.
+Qed.
+
+(* 障壁とは異なるセグメントがその下端に接続する場合、非隣接なら sparse、
+   隣接なら dc により、上側端点は左外向きにしか進めない。 *)
+Lemma distinct_segment_from_rising_barrier_moves_left :
+  forall l sub r seg p q side,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    p <> q ->
+    snd p <= snd q ->
+    right_rising_barrier side (l ++ sub ++ r) ->
+    on_barrier_trace side (l ++ sub ++ r) p ->
+    (exists above,
+        on_barrier_trace side (l ++ sub ++ r) above
+        /\ snd p < snd above
+        /\ fst p < fst above) ->
+    seg <> barrier_segment side (l ++ sub ++ r) ->
+    fst q < fst p.
+Proof.
+  intros l sub r seg p q side Hctx Hseg Hp Hq Hneq Hy Hrising Htrace
+    [above [Habove [Hpy Hpx]]] Hne.
+  assert (Hylt : snd p < snd q).
+  { exact (ordered_distinct_segment_endpoints_strict_y seg p q Hp Hq Hneq Hy). }
+  set (whole := l ++ sub ++ r) in *.
+  assert (Hwhole : whole <> []).
+  { unfold whole. now apply whole_nonempty, context_sub_nonempty
+      with (l := l) (r := r). }
+  destruct (context_whole_embedded l sub r Hctx) as [ds [sc [_ Hembed]]].
+  change (embed_scurve sc whole) in Hembed.
+  destruct side.
+  - cbn in Htrace, Habove, Hne, Hrising.
+    assert (HheadNth : nth_error whole 0 = Some (hd_segment whole)).
+    { destruct whole as [|head tail]; [contradiction | reflexivity]. }
+    destruct (embed_scurve_nth_embed sc whole Hembed 0
+                (hd_segment whole) HheadNth)
+      as [psHead [_ HembHead]].
+    destruct (In_nth_error whole seg Hseg) as [i Hi].
+    destruct Htrace as [t [Ht Htp]].
+    destruct (Rlt_dec t 0) as [HtStrict | HtBody].
+    + destruct (@nth_error_split Segment whole i seg Hi)
+        as [before [after [Hsplit Hlen]]].
+      destruct (context_sparse l sub r Hctx before seg after Hsplit)
+        as [Hext _].
+      exfalso.
+      apply (Hext p).
+      * left. split.
+          -- intros Hnil. subst before. simpl in Hlen. subst i.
+             rewrite HheadNth in Hi. injection Hi as Heq.
+             apply Hne. exact (eq_sym Heq).
+        -- unfold onHead_extend_strict. exists t. split; [exact HtStrict |].
+           change (point (hd_segment (before ++ seg :: after)) t = p).
+           rewrite <- Hsplit. exact Htp.
+      * destruct Hp as [-> | ->];
+          apply segment_in_rect_or_endpoints; [apply onInit | apply onTerm].
+    + assert (HpHead : onSegment (hd_segment whole) p).
+      { exists t. split; [lra | exact Htp]. }
+      destruct i as [|i].
+        * exfalso. apply Hne.
+          rewrite HheadNth in Hi. now injection Hi as Heq.
+      * destruct Hp as [HpInit | HpTerm].
+        -- destruct i as [|i].
+           ++ destruct (embed_scurve_adjacent_data
+                         sc whole 0 (hd_segment whole) seg
+                         Hembed HheadNth Hi)
+                as [psSegHead [psSeg [HembHead' [HembSeg [Hdc Hjoin]]]]].
+              assert (HpJoin : p = term (hd_segment whole)).
+              { eapply adjacent_not_intersect_except_junction; eauto.
+                rewrite HpInit. apply onInit. }
+              destruct Hq as [HqInit | HqTerm].
+              ** exfalso. apply Hneq. now rewrite HpInit, HqInit.
+              ** pose proof (dc_after_rising_head_moves_left
+                               psSegHead psSeg (hd_segment whole) seg above
+                               Hdc HembHead' HembSeg ltac:(rewrite <- HpInit, <- HqTerm; exact Hylt)
+                               Habove ltac:(rewrite <- HpJoin; exact Hpy)
+                               ltac:(rewrite <- HpJoin; exact Hpx)) as Hleft.
+                 now rewrite HpInit, HqTerm.
+           ++ destruct (nth_error_far_in_nonadjacent_sides
+                         whole (S (S i)) 0 seg (hd_segment whole)
+                         Hi HheadNth ltac:(right; lia))
+                as [before [after [Hsplit HinHead]]].
+              destruct (context_sparse l sub r Hctx before seg after Hsplit)
+                as [_ Hrect].
+              exfalso.
+              apply (Hrect (hd_segment whole) p HinHead).
+              ** exact (segment_in_rect_or_endpoints _ _ HpHead).
+              ** rewrite HpInit. apply segment_in_rect_or_endpoints, onInit.
+        -- exfalso. eapply (later_body_point_not_on_earlier_segment
+                     sc whole 0 (S i) (hd_segment whole) seg 1
+                     Hembed (context_sparse l sub r Hctx)
+                     HheadNth Hi ltac:(lia) ltac:(lra)).
+             replace (point seg 1) with p by exact HpTerm.
+           exact HpHead.
+  - cbn in Htrace, Habove, Hne, Hrising.
+    set (last_i := (length whole - 1)%nat).
+    assert (HlastNth : nth_error whole last_i = Some (last_segment whole)).
+    { unfold last_i. now apply nth_error_last. }
+    destruct (embed_scurve_nth_embed sc whole Hembed last_i
+                (last_segment whole) HlastNth)
+      as [psLast [_ HembLast]].
+    destruct (In_nth_error whole seg Hseg) as [i Hi].
+    assert (HiBound : (i <= last_i)%nat).
+    { apply nth_error_lt in Hi. unfold last_i. lia. }
+    destruct Htrace as [t [Ht Htp]].
+    destruct (Rlt_dec 1 t) as [HtStrict | HtBody].
+    + destruct (@nth_error_split Segment whole i seg Hi)
+        as [before [after [Hsplit Hlen]]].
+      destruct (context_sparse l sub r Hctx before seg after Hsplit)
+        as [Hext _].
+      exfalso.
+        apply (Hext p).
+        * right. split.
+          -- intros Hnil. subst after. apply Hne. rewrite Hsplit.
+             rewrite last_app_nonnil by discriminate. reflexivity.
+        -- unfold onLast_extend_strict. exists t. split; [exact HtStrict |].
+           change (point (last_segment (before ++ seg :: after)) t = p).
+           rewrite <- Hsplit. exact Htp.
+      * destruct Hp as [-> | ->];
+          apply segment_in_rect_or_endpoints; [apply onInit | apply onTerm].
+    + assert (HpLast : onSegment (last_segment whole) p).
+      { exists t. split; [lra | exact Htp]. }
+      destruct (Nat.eq_dec i last_i) as [Heq | Hlt].
+        * exfalso. apply Hne.
+          subst i. rewrite HlastNth in Hi. now injection Hi as Hsame.
+      * assert (HiLt : (i < last_i)%nat) by lia.
+        destruct Hp as [HpInit | HpTerm].
+        -- exfalso. eapply (earlier_body_point_not_on_later_segment
+                     sc whole i last_i seg (last_segment whole) 0
+                     Hembed (context_sparse l sub r Hctx)
+                     Hi HlastNth HiLt ltac:(lra)).
+             replace (point seg 0) with p by exact HpInit.
+           exact HpLast.
+        -- destruct (Nat.eq_dec last_i (S i)) as [Hadj | Hfar].
+           ++ destruct (embed_scurve_adjacent_data
+                         sc whole i seg (last_segment whole)
+                         Hembed Hi ltac:(now rewrite <- Hadj))
+                as [psSeg [psLast' [HembSeg [HembLast' [Hdc Hjoin]]]]].
+              assert (HpJoin : p = init (last_segment whole)).
+              { rewrite <- Hjoin. exact HpTerm. }
+              destruct Hq as [HqInit | HqTerm].
+              ** pose proof (dc_before_rising_last_moves_left
+                               psSeg psLast' seg (last_segment whole) above
+                               Hdc HembSeg HembLast'
+                               ltac:(rewrite <- HpTerm, <- HqInit; exact Hylt)
+                               Habove ltac:(rewrite <- HpJoin; exact Hpy)
+                               ltac:(rewrite <- HpJoin; exact Hpx)) as Hleft.
+                 now rewrite HpTerm, HqInit.
+              ** exfalso. apply Hneq. now rewrite HpTerm, HqTerm.
+           ++ assert (Hfar' : (S i < last_i)%nat) by lia.
+              destruct (nth_error_far_in_nonadjacent_sides
+                         whole i last_i seg (last_segment whole)
+                         Hi HlastNth ltac:(left; exact Hfar'))
+                as [before [after [Hsplit HinLast]]].
+              destruct (context_sparse l sub r Hctx before seg after Hsplit)
+                as [_ Hrect].
+              exfalso.
+              apply (Hrect (last_segment whole) p HinLast).
+              ** exact (segment_in_rect_or_endpoints _ _ HpLast).
+              ** rewrite HpTerm. apply segment_in_rect_or_endpoints, onTerm.
+Qed.
+
+Lemma same_segment_left_exception_moves_outward_or_is_barrier :
+  forall l sub r seg p q side,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    p <> q ->
+    snd p <= snd q ->
+    left_barrier_core side l sub r p ->
+    barrier_exception l sub r p ->
+    on_barrier_trace side (l ++ sub ++ r) p ->
+    fst q < fst (sub_left_anchor sub) ->
+    snd q < snd (sub_left_anchor sub) ->
+    fst q < fst p
+    \/ seg = barrier_segment side (l ++ sub ++ r).
+(* 障壁自身でなければ、先頭・末尾との隣接関係を場合分けし、内向きなら
+   dc に反する。障壁自身の上を進む場合だけを右の選言へ分離する。 *)
+Proof.
+  intros l sub r seg p q side Hctx Hseg Hp Hq Hneq Hy Hcore
+    Hexception Htrace Hqx Hqy.
+  destruct (classic (seg = barrier_segment side (l ++ sub ++ r))) as [Heq | Hne].
+  - now right.
+  - left.
+    pose proof Hcore as Hcore'.
+    unfold left_barrier_core in Hcore'. cbn in Hcore'.
+    destruct Hcore' as [Hwhole [Hrising [Hpx [Hpy Hopen]]]].
+    destruct (Hopen (snd (sub_left_anchor sub)) ltac:(lra))
+      as [x [[Hpxx Hxleft] Htracex]].
+    apply (distinct_segment_from_rising_barrier_moves_left
+             l sub r seg p q side Hctx Hseg Hp Hq Hneq Hy Hrising Htrace).
+    + exists (x, snd (sub_left_anchor sub)). repeat split; try assumption; cbn; lra.
+    + exact Hne.
+Qed.
+
+(* 延長線 seed の end trace は反対側端点で本体端に達するため、その端点
+   より高い点を同じ trace 上に持たない。左右の core から共通して使う。 *)
+Lemma extension_seed_barrier_trace_bounded_by_other_endpoint :
+  forall l sub r seg p q above side,
+    ClassificationContext l sub r ->
+    endpoint_of_seg seg q ->
+    p <> q ->
+    snd p <= snd q ->
+    barrier_extension_seed l sub r side p ->
+    on_barrier_trace side (l ++ sub ++ r) above ->
+    snd q < snd above ->
+    seg = barrier_segment side (l ++ sub ++ r) ->
+    False.
+Proof.
+    intros l sub r seg p q above side Hctx Hq Hneq Hy Hseed Habove Hqy Hsame.
+    assert (Hwhole : l ++ sub ++ r <> []).
+    { now apply whole_nonempty, context_sub_nonempty with (l := l) (r := r). }
+    destruct (context_whole_embedded l sub r Hctx) as [ds [sc [_ Hembed]]].
+  change (embed_scurve sc (l ++ sub ++ r)) in Hembed.
+  destruct side.
+  - cbn in Hseed, Hsame, Habove.
+    destruct Hseed as [Hl [HpHead _]].
+    subst p seg.
+    destruct Hq as [Hq | Hq].
+    + exfalso. apply Hneq. exact (eq_sym Hq).
+    + assert (HheadNth :
+          nth_error (l ++ sub ++ r) 0 = Some (hd_segment (l ++ sub ++ r))).
+      { destruct (l ++ sub ++ r) as [|head tail]; [contradiction | reflexivity]. }
+      destruct (embed_scurve_nth_embed sc (l ++ sub ++ r) Hembed 0
+                  (hd_segment (l ++ sub ++ r)) HheadNth)
+        as [[[v h] c] [_ HheadEmbed]].
+      destruct v.
+      * pose proof (embedded_head_trace_vertical_bound
+                      (hd_segment (l ++ sub ++ r)) n h c
+                      above HheadEmbed Habove) as Htop.
+        rewrite Hq in Hqy. lra.
+      * pose proof (s_end_relation
+                      (hd_segment (l ++ sub ++ r)) h c HheadEmbed) as Hend.
+        rewrite Hq in Hy. lra.
+  - cbn in Hseed, Hsame, Habove.
+    destruct Hseed as [Hr [HpLast _]].
+    subst p seg.
+    destruct Hq as [Hq | Hq].
+    + set (last_i := (length (l ++ sub ++ r) - 1)%nat).
+      assert (HlastNth :
+          nth_error (l ++ sub ++ r) last_i =
+            Some (last_segment (l ++ sub ++ r))).
+      { unfold last_i. now apply nth_error_last. }
+      destruct (embed_scurve_nth_embed sc (l ++ sub ++ r) Hembed last_i
+                  (last_segment (l ++ sub ++ r)) HlastNth)
+        as [[[v h] c] [_ HlastEmbed]].
+      destruct v.
+      * pose proof (n_end_relation
+                      (last_segment (l ++ sub ++ r)) h c HlastEmbed) as Hend.
+          rewrite Hq in Hy. lra.
+      * pose proof (embedded_last_trace_vertical_bound
+                      (last_segment (l ++ sub ++ r)) s h c
+                      above HlastEmbed Habove) as Htop.
+        rewrite Hq in Hqy. lra.
+    + exfalso. apply Hneq. exact (eq_sym Hq).
+Qed.
+
+Lemma same_barrier_segment_upward_preserves_left_certificate :
+  forall l sub r seg p q side,
+    ClassificationContext l sub r ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    p <> q ->
+    snd p <= snd q ->
+    left_barrier_core side l sub r p ->
+    snd q < snd (sub_left_anchor sub) ->
+    seg = barrier_segment side (l ++ sub ++ r) ->
+    (barrier_extension_seed l sub r side p
+     \/ exists previous,
+          barrier_reverse_step l sub r side previous p
+          /\ left_up_certificate l sub r previous) ->
+    left_up_certificate l sub r q.
+(* 逆向き step 由来なら保存されている q の証明書を返す。延長線 seed
+   由来なら、有限な end trace が q より上まで core を持つことに矛盾する。 *)
+Proof.
+    intros l sub r seg p q side Hctx Hp Hq Hneq Hy Hcore Hqy Hsame
+      [Hseed | [previous [Hreverse Hprevious]]].
+    - exfalso.
+      pose proof Hcore as Hcore'.
+      unfold left_barrier_core in Hcore'. cbn in Hcore'.
+      destruct Hcore' as [_ [_ [_ [_ Hopen]]]].
+      destruct (Hopen (snd (sub_left_anchor sub)) ltac:(lra))
+        as [x [_ Habove]].
+      eapply (extension_seed_barrier_trace_bounded_by_other_endpoint
+                l sub r seg p q (x, snd (sub_left_anchor sub)) side);
+        eauto; cbn; lra.
+  - assert (Hqprevious : q = previous).
+    { eapply barrier_reverse_step_other_endpoint; eauto. }
+    now subst q.
+Qed.
+
 Lemma same_segment_upward_preserves_nondirect_left_certificate :
+  forall l sub r seg p q side,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    left_barrier_core side l sub r p ->
+    barrier_exception l sub r p ->
+    on_barrier_trace side (l ++ sub ++ r) p ->
+    left_up_certificate l sub r p ->
+    (barrier_extension_seed l sub r side p
+     \/ exists previous,
+          barrier_reverse_step l sub r side previous p
+          /\ left_up_certificate l sub r previous) ->
+    fst q < fst (sub_left_anchor sub) ->
+    snd q < snd (sub_left_anchor sub) ->
+    left_up_certificate l sub r q.
+Proof.
+    intros l sub r seg p q side Hctx Hseg Hp Hq Hy Hcore
+      Hexception Htrace Hcertificate Horigin Hqx Hqy.
+  destruct (classic (p = q)) as [-> | Hneq].
+  - exact Hcertificate.
+  - pose proof (same_segment_left_exception_moves_outward_or_is_barrier
+                  l sub r seg p q side Hctx Hseg Hp Hq Hneq Hy Hcore
+                    Hexception Htrace Hqx Hqy) as [Hqxp | Hsame].
+      + assert (Hylt : snd p < snd q).
+        { exact (ordered_distinct_segment_endpoints_strict_y
+                   seg p q Hp Hq Hneq Hy). }
+        unfold left_barrier_core in Hcore. cbn in Hcore.
+      destruct Hcore as [Hwhole [Hrising [Hpx [Hpy Hopen]]]].
+      assert (Hlevel : left_barrier_at_level side l sub r q).
+      { unfold left_barrier_at_level. cbn.
+        destruct (Hopen (snd q) ltac:(lra)) as [x [[Hpxx Hxleft] Htraceq]].
+        exists x. split; [lra | exact Htraceq]. }
+        apply (left_certificate_at_level l sub r side q).
+      unfold left_barrier_core. cbn.
+      refine (conj Hwhole
+                (conj Hrising (conj Hqx (conj Hqy _)))).
+        intros y HyRange.
+        destruct (Hopen y ltac:(lra)) as [x [[Hpxx Hxleft] Htracex]].
+        exists x. split; [lra | exact Htracex].
+        exact Hlevel.
+      + exact (same_barrier_segment_upward_preserves_left_certificate
+                 l sub r seg p q side Hctx Hp Hq Hneq Hy Hcore
+                 Hqy Hsame Horigin).
+Qed.
+
+(* sub の x 範囲内で上側にいた端点から、同一セグメントが左 anchor の
+   下へ抜けると、sub との上下関係が反転して交差する。 *)
+Lemma same_segment_above_sub_cannot_exit_left_below :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    in_sub_x_range sub p ->
+    strictly_above_sub_at_x sub p ->
+    fst q < fst (sub_left_anchor sub) ->
+    snd q < snd (sub_left_anchor sub) ->
+    False.
+(* x の中間値点で seg と sub の上下順序が反転し、開性に反する。 *)
+Admitted.
+
+(* 右下の証明書を持つ点から同一セグメントで左下へ抜けると、右障壁を
+   横切る。通常下端と例外下端は同じ open core で処理できる。 *)
+Lemma right_certificate_blocks_same_segment_left_entry :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    fst (sub_right_anchor sub) < fst p ->
+    snd p < snd (sub_right_anchor sub) ->
+    right_up_certificate l sub r p ->
+    fst q < fst (sub_left_anchor sub) ->
+    snd q < snd (sub_left_anchor sub) ->
+    False.
+Admitted.
+
+(* sub の右外かつ右 anchor 以上から、左外かつ左 anchor 未満へ進む
+   セグメントは、連結な x 単調 sub と交差する。 *)
+Lemma same_segment_cannot_cross_sub_from_upper_right_to_lower_left :
+  forall l sub r seg p q,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    fst (sub_right_anchor sub) < fst p ->
+    snd (sub_right_anchor sub) <= snd p ->
+    fst q < fst (sub_left_anchor sub) ->
+    snd q < snd (sub_left_anchor sub) ->
+    False.
+(* 両 anchor の x で seg 上の点を取り、x_cross_h に還元する。 *)
+Admitted.
+
+(* 始点がまだ左側にない場合に、同一セグメントが左下へ入る遷移を扱う。 *)
+Lemma same_segment_upward_enters_left_certificate :
   forall l sub r seg p q,
     ClassificationContext l sub r ->
     In seg (l ++ sub ++ r) ->
@@ -1967,11 +2721,38 @@ Lemma same_segment_upward_preserves_nondirect_left_certificate :
     endpoint_of_seg seg q ->
     snd p <= snd q ->
     up_path_invariant l sub r p ->
-    ~ left_vertical_guard_to_init l sub r p ->
+    fst (sub_left_anchor sub) <= fst p ->
     fst q < fst (sub_left_anchor sub) ->
     snd q < snd (sub_left_anchor sub) ->
-    left_up_certificate l sub r q.
-Admitted.
+    False.
+Proof.
+  intros l sub r seg p q Hctx Hseg Hp Hq Hy Hinv Hpx Hqx Hqy.
+  destruct Hinv as [Hcenter [Hleft Hright]].
+  pose proof (x_monotone_rect_x_bounds sub
+                (context_sub_nonempty l sub r Hctx)
+                (context_sub_connected l sub r Hctx)
+                (context_sub_x_monotone l sub r Hctx)) as [Hrx0 Hrx1].
+  destruct (Rle_dec (fst p) (fst (sub_right_anchor sub))) as [Hpr | Hpr].
+  - eapply (same_segment_above_sub_cannot_exit_left_below
+              l sub r seg p q Hctx Hseg Hp Hq Hy).
+    + unfold in_sub_x_range. rewrite Hrx0, Hrx1.
+      change (fst (sub_left_anchor sub) <= fst p <=
+              fst (sub_right_anchor sub)). exact (conj Hpx Hpr).
+    + apply Hcenter. unfold in_sub_x_range. rewrite Hrx0, Hrx1.
+      change (fst (sub_left_anchor sub) <= fst p <=
+              fst (sub_right_anchor sub)). exact (conj Hpx Hpr).
+    + exact Hqx.
+    + exact Hqy.
+  - assert (Hpr' : fst (sub_right_anchor sub) < fst p) by lra.
+    destruct (Rlt_dec (snd p) (snd (sub_right_anchor sub))) as [Hpy | Hpy].
+    + eapply (right_certificate_blocks_same_segment_left_entry
+                l sub r seg p q Hctx Hseg Hp Hq Hy Hpr' Hpy).
+      * exact (Hright Hpr' Hpy).
+      * exact Hqx.
+      * exact Hqy.
+    + eapply (same_segment_cannot_cross_sub_from_upper_right_to_lower_left
+                l sub r seg p q Hctx Hseg Hp Hq Hpr'); eauto; lra.
+Qed.
 
 Lemma same_segment_upward_preserves_left_certificate :
   forall l sub r seg p q,
@@ -1986,15 +2767,137 @@ Lemma same_segment_upward_preserves_left_certificate :
     left_up_certificate l sub r q.
 Proof.
   intros l sub r seg p q Hctx Hseg Hp Hq Hy Hinv Hqx Hqy.
-  destruct (classic (left_vertical_guard_to_init l sub r p))
-    as [Hguard | Hguard].
-  - exact (same_segment_upward_preserves_direct_left_certificate
-             l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy).
-  - exact (same_segment_upward_preserves_nondirect_left_certificate
-             l sub r seg p q Hctx Hseg Hp Hq Hy Hinv Hguard Hqx Hqy).
+    destruct Hinv as [Hcenter [Hleft Hright]].
+    destruct (Rlt_dec (fst p) (fst (sub_left_anchor sub))) as [Hpx | Hpx].
+    - assert (Hpy : snd p < snd (sub_left_anchor sub)) by lra.
+      destruct (Hleft Hpx Hpy) as
+        [side p Hcore Hlevel
+        | side p Hcore Hseed Hblocks Htrace
+        | side p previous Hcore Hreverse Hprevious Hblocks Htrace].
+      + apply (same_segment_upward_preserves_direct_left_certificate
+                 l sub r seg p q Hctx Hseg Hp Hq Hy); try assumption.
+        exists side. now split.
+      + exact (same_segment_upward_preserves_nondirect_left_certificate
+                 l sub r seg p q side Hctx Hseg Hp Hq Hy Hcore
+                 (or_introl (barrier_extension_seed_is_extension_up_seed
+                                l sub r side p Hseed)) Htrace
+                 (left_certificate_extension_seed
+                    l sub r side p Hcore Hseed Hblocks Htrace)
+                 (or_introl Hseed) Hqx Hqy).
+      + exact (same_segment_upward_preserves_nondirect_left_certificate
+                 l sub r seg p q side Hctx Hseg Hp Hq Hy Hcore
+                 (or_intror (barrier_reverse_step_has_reverse_target
+                                l sub r side previous p Hreverse))
+                 Htrace
+                 (left_certificate_reverse_step
+                    l sub r side p previous Hcore Hreverse Hprevious Hblocks Htrace)
+                 (or_intror (ex_intro _ previous (conj Hreverse Hprevious)))
+                 Hqx Hqy).
+  - exfalso.
+    apply (same_segment_upward_enters_left_certificate
+             l sub r seg p q Hctx Hseg Hp Hq Hy); try assumption.
+    + repeat split; assumption.
+    + lra.
+Qed.
+
+Lemma same_segment_right_exception_moves_outward_or_is_barrier :
+  forall l sub r seg p q side,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    right_barrier_core side l sub r p ->
+    on_barrier_trace side (l ++ sub ++ r) p ->
+    fst (sub_right_anchor sub) < fst q ->
+    snd q < snd (sub_right_anchor sub) ->
+    fst p < fst q
+    \/ seg = barrier_segment side (l ++ sub ++ r).
+(* 左側の双対。障壁自身でなければ、内向きの進行は隣接 dc に反する。 *)
+Admitted.
+
+Lemma same_barrier_segment_upward_preserves_right_certificate :
+  forall l sub r seg p q side,
+    ClassificationContext l sub r ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    p <> q ->
+    snd p <= snd q ->
+    right_barrier_core side l sub r p ->
+    snd q < snd (sub_right_anchor sub) ->
+    seg = barrier_segment side (l ++ sub ++ r) ->
+    (barrier_extension_seed l sub r side p
+     \/ exists previous,
+          barrier_reverse_step l sub r side previous p
+          /\ right_up_certificate l sub r previous) ->
+    right_up_certificate l sub r q.
+(* 左側の双対。逆向き起源なら保存された証明書へ戻り、延長線 seed
+   起源なら有限な end trace と core の継続が矛盾する。 *)
+Proof.
+    intros l sub r seg p q side Hctx Hp Hq Hneq Hy Hcore Hqy Hsame
+      [Hseed | [previous [Hreverse Hprevious]]].
+    - exfalso.
+      pose proof Hcore as Hcore'.
+      unfold right_barrier_core in Hcore'. cbn in Hcore'.
+      destruct Hcore' as [_ [_ [_ [_ Hopen]]]].
+      destruct (Hopen (snd (sub_right_anchor sub)) ltac:(lra))
+        as [x [_ Habove]].
+      eapply (extension_seed_barrier_trace_bounded_by_other_endpoint
+                l sub r seg p q (x, snd (sub_right_anchor sub)) side);
+        eauto; cbn; lra.
+  - assert (Hqprevious : q = previous).
+    { eapply barrier_reverse_step_other_endpoint; eauto. }
+    now subst q.
 Qed.
 
 Lemma same_segment_upward_preserves_nondirect_right_certificate :
+  forall l sub r seg p q side,
+    ClassificationContext l sub r ->
+    In seg (l ++ sub ++ r) ->
+    endpoint_of_seg seg p ->
+    endpoint_of_seg seg q ->
+    snd p <= snd q ->
+    right_barrier_core side l sub r p ->
+    on_barrier_trace side (l ++ sub ++ r) p ->
+    right_up_certificate l sub r p ->
+    (barrier_extension_seed l sub r side p
+     \/ exists previous,
+          barrier_reverse_step l sub r side previous p
+          /\ right_up_certificate l sub r previous) ->
+    fst (sub_right_anchor sub) < fst q ->
+    snd q < snd (sub_right_anchor sub) ->
+    right_up_certificate l sub r q.
+Proof.
+    intros l sub r seg p q side Hctx Hseg Hp Hq Hy Hcore
+      Htrace Hcertificate Horigin Hqx Hqy.
+    destruct (classic (p = q)) as [-> | Hneq].
+    - exact Hcertificate.
+    - pose proof (same_segment_right_exception_moves_outward_or_is_barrier
+                  l sub r seg p q side Hctx Hseg Hp Hq Hy Hcore
+                  Htrace Hqx Hqy) as [Hpxq | Hsame].
+      + assert (Hylt : snd p < snd q).
+        { exact (ordered_distinct_segment_endpoints_strict_y
+                   seg p q Hp Hq Hneq Hy). }
+        unfold right_barrier_core in Hcore. cbn in Hcore.
+    destruct Hcore as [Hwhole [Hfalling [Hpx [Hpy Hopen]]]].
+    assert (Hlevel : right_barrier_at_level side l sub r q).
+    { unfold right_barrier_at_level. cbn.
+      destruct (Hopen (snd q) ltac:(lra)) as [x [[Hxright Hxxp] Htraceq]].
+      exists x. split; [lra | exact Htraceq]. }
+      apply (right_certificate_at_level l sub r side q).
+    unfold right_barrier_core. cbn.
+    refine (conj Hwhole
+              (conj Hfalling (conj Hqx (conj Hqy _)))).
+      intros y HyRange.
+      destruct (Hopen y ltac:(lra)) as [x [[Hxright Hxxp] Htracex]].
+      exists x. split; [lra | exact Htracex].
+      exact Hlevel.
+      + exact (same_barrier_segment_upward_preserves_right_certificate
+               l sub r seg p q side Hctx Hp Hq Hneq Hy Hcore
+               Hqy Hsame Horigin).
+Qed.
+
+Lemma same_segment_upward_enters_right_certificate :
   forall l sub r seg p q,
     ClassificationContext l sub r ->
     In seg (l ++ sub ++ r) ->
@@ -2002,10 +2905,10 @@ Lemma same_segment_upward_preserves_nondirect_right_certificate :
     endpoint_of_seg seg q ->
     snd p <= snd q ->
     up_path_invariant l sub r p ->
-    ~ right_vertical_guard_to_term l sub r p ->
+    fst p <= fst (sub_right_anchor sub) ->
     fst (sub_right_anchor sub) < fst q ->
     snd q < snd (sub_right_anchor sub) ->
-    right_up_certificate l sub r q.
+    False.
 Admitted.
 
 Lemma same_segment_upward_preserves_right_certificate :
@@ -2021,12 +2924,34 @@ Lemma same_segment_upward_preserves_right_certificate :
     right_up_certificate l sub r q.
 Proof.
   intros l sub r seg p q Hctx Hseg Hp Hq Hy Hinv Hqx Hqy.
-  destruct (classic (right_vertical_guard_to_term l sub r p))
-    as [Hguard | Hguard].
-  - exact (same_segment_upward_preserves_direct_right_certificate
-             l sub r seg p q Hctx Hseg Hp Hq Hy Hguard Hqx Hqy).
-  - exact (same_segment_upward_preserves_nondirect_right_certificate
-             l sub r seg p q Hctx Hseg Hp Hq Hy Hinv Hguard Hqx Hqy).
+    destruct Hinv as [Hcenter [Hleft Hright]].
+    destruct (Rlt_dec (fst (sub_right_anchor sub)) (fst p)) as [Hpx | Hpx].
+    - assert (Hpy : snd p < snd (sub_right_anchor sub)) by lra.
+      destruct (Hright Hpx Hpy) as
+        [side p Hcore Hlevel
+        | side p Hcore Hseed Hblocks Htrace
+        | side p previous Hcore Hreverse Hprevious Hblocks Htrace].
+      + apply (same_segment_upward_preserves_direct_right_certificate
+                 l sub r seg p q Hctx Hseg Hp Hq Hy); try assumption.
+        exists side. now split.
+      + exact (same_segment_upward_preserves_nondirect_right_certificate
+                 l sub r seg p q side Hctx Hseg Hp Hq Hy Hcore
+                 Htrace
+                 (right_certificate_extension_seed
+                    l sub r side p Hcore Hseed Hblocks Htrace)
+                 (or_introl Hseed) Hqx Hqy).
+      + exact (same_segment_upward_preserves_nondirect_right_certificate
+                 l sub r seg p q side Hctx Hseg Hp Hq Hy Hcore
+                 Htrace
+                 (right_certificate_reverse_step
+                    l sub r side p previous Hcore Hreverse Hprevious Hblocks Htrace)
+                 (or_intror (ex_intro _ previous (conj Hreverse Hprevious)))
+                 Hqx Hqy).
+  - exfalso.
+    apply (same_segment_upward_enters_right_certificate
+             l sub r seg p q Hctx Hseg Hp Hq Hy); try assumption.
+    + repeat split; assumption.
+    + lra.
 Qed.
 
 (* 同一セグメント上で低い端点から高い端点へ進む通常辺。 *)
@@ -2066,41 +2991,13 @@ Lemma nonadjacent_upward_preserves_up_path_invariant :
     up_path_invariant l sub r pt.
 Admitted.
 
-(* 以下の四補題は、先頭・末尾の傾き保存のために加えた逆向き辺だけを扱う。 *)
-Lemma head_north_cx_reverse_preserves_up_path_invariant :
-  forall l sub r hor,
+(* 傾き保存のために加えた四種類の逆向き辺を、一つの生成関係で扱う。 *)
+Lemma barrier_reverse_step_preserves_up_path_invariant :
+  forall l sub r side previous p,
     ClassificationContext l sub r ->
-    l <> [] ->
-    embed (n, hor, cx) (hd_segment l) ->
-    up_path_invariant l sub r (term (hd_segment l)) ->
-    up_path_invariant l sub r (init (hd_segment l)).
-Admitted.
-
-Lemma head_south_cc_reverse_preserves_up_path_invariant :
-  forall l sub r hor,
-    ClassificationContext l sub r ->
-    l <> [] ->
-    embed (s, hor, cc) (hd_segment l) ->
-    up_path_invariant l sub r (init (hd_segment l)) ->
-    up_path_invariant l sub r (term (hd_segment l)).
-Admitted.
-
-Lemma last_north_cc_reverse_preserves_up_path_invariant :
-  forall l sub r hor,
-    ClassificationContext l sub r ->
-    r <> [] ->
-    embed (n, hor, cc) (last_segment r) ->
-    up_path_invariant l sub r (term (last_segment r)) ->
-    up_path_invariant l sub r (init (last_segment r)).
-Admitted.
-
-Lemma last_south_cx_reverse_preserves_up_path_invariant :
-  forall l sub r hor,
-    ClassificationContext l sub r ->
-    r <> [] ->
-    embed (s, hor, cx) (last_segment r) ->
-    up_path_invariant l sub r (init (last_segment r)) ->
-    up_path_invariant l sub r (term (last_segment r)).
+    barrier_reverse_step l sub r side previous p ->
+    up_path_invariant l sub r previous ->
+    up_path_invariant l sub r p.
 Admitted.
 
 (* 同じ x にある先頭・末尾延長線の上下比較を、その基点間へ移す二場合。 *)
@@ -2210,6 +3107,10 @@ Definition end_steps_preserve_up_invariant
     up_path_invariant l sub r p ->
     up_path_invariant l sub r q.
 
+(* ----------------------------------------------------------------- *)
+(*  一辺の保存則から有限パス全体への持ち上げ                       *)
+(* ----------------------------------------------------------------- *)
+
 (* 通常辺の二つの幾何補題を、core 一辺の保存則へまとめる。 *)
 Lemma classification_context_core_steps_preserve_up_invariant :
   forall l sub r,
@@ -2247,10 +3148,14 @@ Lemma classification_context_end_steps_preserve_up_invariant :
 Proof.
   intros l sub r Hctx p q Hstep Hp.
   destruct Hstep.
-  - eapply head_north_cx_reverse_preserves_up_path_invariant; eauto.
-  - eapply head_south_cc_reverse_preserves_up_path_invariant; eauto.
-  - eapply last_north_cc_reverse_preserves_up_path_invariant; eauto.
-  - eapply last_south_cx_reverse_preserves_up_path_invariant; eauto.
+  - eapply barrier_reverse_step_preserves_up_path_invariant; eauto.
+    now apply barrier_reverse_head_north_cx with (hor := hor).
+  - eapply barrier_reverse_step_preserves_up_path_invariant; eauto.
+    now apply barrier_reverse_head_south_cc with (hor := hor).
+  - eapply barrier_reverse_step_preserves_up_path_invariant; eauto.
+    now apply barrier_reverse_last_north_cc with (hor := hor).
+  - eapply barrier_reverse_step_preserves_up_path_invariant; eauto.
+    now apply barrier_reverse_last_south_cx with (hor := hor).
   - eapply head_below_last_preserves_up_path_invariant; eauto.
   - eapply last_below_head_preserves_up_path_invariant; eauto.
   - eapply head_below_segment_preserves_up_path_invariant; eauto.
@@ -2302,6 +3207,10 @@ Proof.
 Qed.
 
 (* 非隣接セグメントの端点は、閉長方形 sparse 性により sub 上にはない。 *)
+(* ----------------------------------------------------------------- *)
+(*  Up seed の非交差性と初期不変量                                 *)
+(* ----------------------------------------------------------------- *)
+
 Lemma nonadjacent_endpoint_not_on_sub : forall l sub r seg p,
   sparse_embedding (l ++ sub ++ r) ->
   In seg (nonadjacent_sides l r) ->
@@ -2681,6 +3590,19 @@ Proof.
   - right. exact Hlast.
 Qed.
 
+(* 左下の extension seed を通る同じ end trace は、seed より上で
+   init sub まで続く open core を与える。 *)
+Lemma extension_up_seed_has_left_barrier_core : forall l sub r p,
+  ClassificationContext l sub r ->
+  extension_up_seed l sub r p ->
+  fst p < fst (sub_left_anchor sub) ->
+  snd p < snd (sub_left_anchor sub) ->
+  exists side,
+    left_barrier_core side l sub r p
+    /\ barrier_extension_seed l sub r side p
+    /\ on_barrier_trace side (l ++ sub ++ r) p.
+Admitted.
+
 Lemma endpoint_up_seed_has_left_certificate : forall l sub r p,
   ClassificationContext l sub r ->
   endpoint_up_seed l sub r p ->
@@ -2691,9 +3613,12 @@ Proof.
   intros l sub r p Hctx Hseed Hx Hy.
   assert (Hextension : extension_up_seed l sub r p).
   { now eapply endpoint_up_seed_left_low_is_extension_seed. }
-  right. split.
-  - now left.
-  - now eapply extension_up_seed_locally_blocks_unsafe_up.
+    destruct (extension_up_seed_has_left_barrier_core
+                l sub r p Hctx Hextension Hx Hy)
+      as [side [Hcore [HbarrierSeed Htrace]]].
+    apply (left_certificate_extension_seed l sub r side p Hcore HbarrierSeed).
+    - now eapply extension_up_seed_locally_blocks_unsafe_up.
+    - exact Htrace.
 Qed.
 
 (* 右側も双対で、body seed は障壁を作り、延長線 seed だけを
@@ -2725,6 +3650,10 @@ Proof.
 Qed.
 
 (* Up は順序の上向き、Down は順序の下向きへ閉じる。 *)
+(* ----------------------------------------------------------------- *)
+(*  順序閉包からの具体的な端点分類器                               *)
+(* ----------------------------------------------------------------- *)
+
 Definition endpoint_forced_up
     (l sub r : list Segment) (p : Point) : Prop :=
   exists seed,
@@ -3015,6 +3944,10 @@ Proof.
 Qed.
 
 (* 元のセグメント自身が、元の両端点・向き・両傾きによる再接続を与える。 *)
+(* ----------------------------------------------------------------- *)
+(*  分類された先頭・末尾の傾き保存                                 *)
+(* ----------------------------------------------------------------- *)
+
 Lemma segment_reconnect_slope : forall seg,
   reconnect_slope
     (init seg) (term seg) (orn_seg seg) (slope_init seg) (slope_term seg).
@@ -3461,6 +4394,10 @@ Proof.
       * intros p Hx Hy. eapply southeast_cc_lower_term_slope; eauto.
       * intros p Hx Hy. eapply southwest_cc_lower_term_slope; eauto.
 Qed.
+
+(* ----------------------------------------------------------------- *)
+(*  構成した分類器が ClassificationSpec を満たすこと                *)
+(* ----------------------------------------------------------------- *)
 
 Lemma strict_extension_above_or_below_sub : forall l sub r p,
   ClassificationContext l sub r ->
