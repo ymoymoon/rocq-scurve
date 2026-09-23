@@ -728,6 +728,14 @@ Proof.
   intros g Rc [x y]. destruct g; unfold in_rect, rot_rect; simpl; split; intros; lra.
 Qed.
 
+Lemma in_closed_rect_rot :
+  forall g Rc p,
+    in_closed_rect (rot_rect g Rc) (rot_pt g p) <-> in_closed_rect Rc p.
+Proof.
+  intros g Rc [x y]. destruct g; unfold in_closed_rect, rot_rect; simpl;
+    split; intros; lra.
+Qed.
+
 Lemma rect_of_rot :
   forall g sub, sub <> [] -> rect_of (rot_segs g sub) = rot_rect g (rect_of sub).
 Proof.
@@ -738,14 +746,148 @@ Proof.
     rewrite ?Rmin_opp, ?Rmax_opp; reflexivity.
 Qed.
 
+Lemma in_rect_or_endpoints_at_rot :
+  forall g sub p,
+    sub <> [] ->
+    in_rect_or_endpoints_at (rot_segs g sub) (rot_pt g p) <->
+    in_rect_or_endpoints_at sub p.
+Proof.
+  intros g sub p Hsub.
+  unfold in_rect_or_endpoints_at.
+  rewrite rect_of_rot by exact Hsub.
+  apply in_closed_rect_rot.
+Qed.
+
+Lemma onHead_extend_rot :
+  forall g ls p,
+    ls <> [] ->
+    onHead_extend ls p ->
+    onHead_extend (rot_segs g ls) (rot_pt g p).
+Proof.
+  intros g ls p Hls Hp.
+  unfold onHead_extend in *.
+  unfold rot_segs.
+  rewrite hd_map_nonnil by exact Hls.
+  now apply onHead_rot.
+Qed.
+
+Lemma onLast_extend_rot :
+  forall g ls p,
+    ls <> [] ->
+    onLast_extend ls p ->
+    onLast_extend (rot_segs g ls) (rot_pt g p).
+Proof.
+  intros g ls p Hls Hp.
+  unfold onLast_extend in *.
+  unfold rot_segs.
+  rewrite last_map_nonnil by exact Hls.
+  now apply onLast_rot.
+Qed.
+
+Lemma onHead_extend_strict_rot :
+  forall g ls p,
+    ls <> [] ->
+    onHead_extend_strict ls p ->
+    onHead_extend_strict (rot_segs g ls) (rot_pt g p).
+Proof.
+  intros g ls p Hls [t [Ht Hp]].
+  exists t. split; [exact Ht |].
+  unfold rot_segs.
+  rewrite hd_map_nonnil by exact Hls.
+  rewrite rot_seg_point, Hp. reflexivity.
+Qed.
+
+Lemma onLast_extend_strict_rot :
+  forall g ls p,
+    ls <> [] ->
+    onLast_extend_strict ls p ->
+    onLast_extend_strict (rot_segs g ls) (rot_pt g p).
+Proof.
+  intros g ls p Hls [t [Ht Hp]].
+  exists t. split; [exact Ht |].
+  unfold rot_segs.
+  rewrite last_map_nonnil by exact Hls.
+  rewrite rot_seg_point, Hp. reflexivity.
+Qed.
+
 Lemma rot_sparse_embedding :
   forall g ls,
     sparse_embedding ls ->
     sparse_embedding (rot_segs g ls).
-Admitted.
+Proof.
+  intros g ls Hsparse l s r Hdecomp.
+  assert (Hwhole : l ++ [s] ++ r <> []).
+  { destruct l; simpl; discriminate. }
+  assert (Hback :
+      ls = rot_segs (rot_inv g) l ++
+           [rot_seg (rot_inv g) s] ++
+           rot_segs (rot_inv g) r).
+  { pose proof (f_equal (rot_segs (rot_inv g)) Hdecomp) as H.
+    rewrite rot_inv_segs in H.
+    rewrite !rot_segs_app in H. simpl in H.
+    exact H. }
+  pose proof
+    (Hsparse
+       (rot_segs (rot_inv g) l)
+       (rot_seg (rot_inv g) s)
+       (rot_segs (rot_inv g) r)
+       Hback) as Haround.
+  destruct Haround as [Hextensions Hrectangles].
+  split.
+  - intros p [[Hl Hhead] | [Hr Hlast]] Hin.
+    + apply (Hextensions (rot_pt (rot_inv g) p)).
+      * left. split.
+        -- now apply rot_segs_nonnil.
+        -- pose proof
+             (onHead_extend_strict_rot
+                (rot_inv g) (l ++ [s] ++ r) p Hwhole Hhead) as Hhead'.
+           rewrite !rot_segs_app in Hhead'. simpl in Hhead'. exact Hhead'.
+      * assert (Hin' :=
+            proj2 (in_rect_or_endpoints_at_rot
+                     (rot_inv g) [s] p ltac:(discriminate)) Hin).
+        simpl in Hin'. exact Hin'.
+    + apply (Hextensions (rot_pt (rot_inv g) p)).
+      * right. split.
+        -- now apply rot_segs_nonnil.
+        -- pose proof
+             (onLast_extend_strict_rot
+                (rot_inv g) (l ++ [s] ++ r) p Hwhole Hlast) as Hlast'.
+           rewrite !rot_segs_app in Hlast'. simpl in Hlast'. exact Hlast'.
+      * assert (Hin' :=
+            proj2 (in_rect_or_endpoints_at_rot
+                     (rot_inv g) [s] p ltac:(discriminate)) Hin).
+        simpl in Hin'. exact Hin'.
+  - intros t p Ht Hbox Hin.
+    apply (Hrectangles
+             (rot_seg (rot_inv g) t) (rot_pt (rot_inv g) p)).
+    + unfold rot_segs. rewrite nonadjacent_sides_map. now apply in_map.
+    + change (in_rect_or_endpoints_at [t] p) in Hbox.
+      assert (Hbox' :=
+          proj2 (in_rect_or_endpoints_at_rot
+                   (rot_inv g) [t] p ltac:(discriminate)) Hbox).
+      simpl in Hbox'. exact Hbox'.
+    + assert (Hin' :=
+          proj2 (in_rect_or_endpoints_at_rot
+                   (rot_inv g) [s] p ltac:(discriminate)) Hin).
+      simpl in Hin'. exact Hin'.
+Qed.
 
 Lemma rot_extensions_disjoint :
   forall g ls,
     extensions_disjoint ls ->
     extensions_disjoint (rot_segs g ls).
-Admitted.
+Proof.
+  intros g ls Hdisjoint p Hhead Hlast.
+  destruct ls as [|s ls].
+  - exact (Hdisjoint p Hhead Hlast).
+  - assert (Hne : rot_segs g (s :: ls) <> []).
+    { apply rot_segs_nonnil. discriminate. }
+    pose proof
+      (onHead_extend_rot
+         (rot_inv g) (rot_segs g (s :: ls)) p Hne Hhead) as Hhead'.
+    pose proof
+      (onLast_extend_rot
+         (rot_inv g) (rot_segs g (s :: ls)) p Hne Hlast) as Hlast'.
+    rewrite rot_inv_segs in Hhead', Hlast'.
+    exact (Hdisjoint (rot_pt (rot_inv g) p) Hhead' Hlast').
+Qed.
