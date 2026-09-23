@@ -763,7 +763,8 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
       (snd (term s) < snd (init s) ->
         region_at_or_above (classify l sub r (init s)) (classify l sub r (term s)));
 
-  (* x 範囲が重なる非隣接セグメントについては，下側の長方形が Up なら上側の長方形も Up など *)
+  (* x 範囲が重なる非隣接セグメントについては、sub 上にある端点を
+     除き、下側の長方形が Up なら上側の長方形も Up など。 *)
   classified_nonadjacent_endpoint_order :
     forall i j s t ps pt,
       nth_error (l ++ sub ++ r) i = Some s ->
@@ -772,6 +773,8 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
       segment_x_ranges_overlap s t ->
       endpoint_of_seg s ps ->
       endpoint_of_seg t pt ->
+      ~ onSegmentlist sub ps ->
+      ~ onSegmentlist sub pt ->
       snd ps <= snd pt ->
       region_at_or_above
         (classify l sub r pt) (classify l sub r ps);
@@ -1828,6 +1831,8 @@ Lemma classified_nonadjacent_endpoint_order_from_construction :
       segment_x_ranges_overlap s t ->
       endpoint_of_seg s ps ->
       endpoint_of_seg t pt ->
+      ~ onSegmentlist sub ps ->
+      ~ onSegmentlist sub pt ->
       snd ps <= snd pt ->
       region_at_or_above (classify l sub r pt) (classify l sub r ps).
 Admitted.

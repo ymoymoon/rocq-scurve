@@ -1630,7 +1630,11 @@ Proof.
   destruct Haxis as [Haxis | [Haxis | [Haxis | Haxis]]]; lra.
 Qed.
 
-(* 端点間の分類順序により、旧長方形の軸方向の分離は移動後も保たれる。 *)
+(*
+   廃止した全域 sparse 保存経路。nonadjacent の順序仕様は sub 上の端点を
+   比較対象から除くため、この経路の「全端点長方形を分離する」結論は用いない。
+
+   端点間の分類順序により、旧長方形の軸方向の分離は移動後も保たれる。
 Lemma operated_endpoint_rectangles_axis_separated :
   forall l sub r h i j s t s' t',
     sub <> [] ->
@@ -1811,6 +1815,8 @@ Proof.
        exact HoldAxis]. }
   exact (axis_separated_boxes_avoid s' t' HnewAxis p Hp).
 Qed.
+
+*)
 
 (* 延長線点と同じ x の旧セグメント点が与える分類順序から，
    延長線点は移動後の端点長方形にも入らない。 *)
@@ -2052,33 +2058,6 @@ Proof.
     exact (Rlt_le _ _ (proj1 Hh)).
   - intros Hr. eapply reconnect_last_term_slope_after with (ds := ds); eauto.
     exact (Rlt_le _ _ (proj1 Hh)).
-Qed.
-
-(* 再接続後の非隣接長方形と strict 延長線の分離から、
-   新しい全域疎性を組み立てる。 *)
-Lemma reconnect_preserves_sparse :
-  forall ds l sub r h,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    h_large h sub ->
-    all_reconnectable l sub r h (l ++ sub ++ r) ->
-    sparse_embedding (l ++ sub ++ r) ->
-    embed_listDir ds (l ++ sub ++ r) ->
-    sparse_embedding (reconnect_split l sub r h).
-Proof.
-  intros ds l sub r h Hne Hconn Hmono Hh Hrec Hsparse Hembed.
-  assert (Hwhole : connected (l ++ sub ++ r)).
-  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
-  assert (Hrect :
-      segment_rectangles_separated (reconnect_split l sub r h)).
-  { now apply reconnect_preserves_segment_rectangles_separated. }
-  assert (HextRect :
-      extensions_avoid_segment_rectangles (reconnect_split l sub r h)).
-  { now apply reconnect_preserves_extensions_avoid_rectangles with (ds := ds). }
-  apply geometric_sparse_embedding.
-  - exact Hrect.
-  - exact HextRect.
 Qed.
 
 Definition both_left_of_sub (sub : list Segment) (p q : Point) : Prop :=
@@ -2729,6 +2708,9 @@ Proof.
              Hsparse Hconn Hrec Hs Hp).
 Qed.
 
+(* 蓋を選び直すと、再接続後の全域 [sparse_embedding] は一般には保たない。
+   必要なのは sub 周りの疎性だけであり、それと延長線の非交差から開性を
+   保つ。蓋の局所回避を列全体へ合成する補題である。 *)
 Lemma reconnect_preserves_open :
   forall ds l sub r h,
     h_large h sub ->
@@ -2738,45 +2720,13 @@ Lemma reconnect_preserves_open :
     embed_listDir ds (l ++ sub ++ r) ->
     sparse_embedding (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
-    ~ close (reconnect_split l sub r h).
-Proof.
-  intros ds l sub r h Hh Hne Hmono Hrec Hembed Hsparse Hext.
-  assert (HconnSub : connected sub).
-  { apply connected_middle with (l := l) (r := r).
-    now apply embed_listDir_connected with (ds := ds). }
-  apply sparse_extensions_open with (ds := ds).
-  - unfold reconnect_split. intro Hnil.
-    apply app_eq_nil in Hnil as [_ Htail].
-    apply app_eq_nil in Htail as [Hsubnil _].
-    contradiction.
-  - now apply reconnect_split_preserves_embed.
-  - now apply reconnect_preserves_sparse with (ds := ds).
-  - now apply reconnect_preserves_extensions_disjoint with (ds := ds).
-Qed.
-
-(* 全域疎性の保存と sub 周りの局所疎性を一つの sparse にまとめる。 *)
-Lemma reconnect_gives_sparse :
-  forall ds l sub r h,
-    connected (l ++ sub ++ r) ->
-    well_split l sub r ->
-    h_large h sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    embed_listDir ds (l ++ sub ++ r) ->
-    sparse
+    sparse_around
       (reconnect_segs l sub r h l)
       sub
-      (reconnect_segs l sub r h r).
-Proof.
-  intros ds l sub r h Hconn Hws Hh Hsparse Hembed.
-  pose proof Hws as [Hsubne [Hmono _]].
-  assert (HconnSub : connected sub).
-  { eapply connected_middle. exact Hconn. }
-  pose proof (operate_endpoints_reconnectable
-                l sub r h Hsubne HconnSub Hmono Hh Hsparse Hconn) as Hrec.
-  unfold sparse, reconnect_split. split.
-  - now apply reconnect_preserves_sparse with (ds := ds).
-  - now apply reconnect_gives_sparse_around with (ds := ds).
-Qed.
+      (reconnect_segs l sub r h r) ->
+    ~ close (l ++ sub ++ r) ->
+    ~ close (reconnect_split l sub r h).
+Admitted.
 
 
 (* ================================================================= *)
@@ -2805,7 +2755,7 @@ Lemma embed_sparsely_xmono :
    /\ embed_listDir ds2 r'
    /\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l' ++ sub' ++ r')
    /\ ~ close (l' ++ sub' ++ r')
-   /\ sparse l' sub' r'
+   /\ sparse_around l' sub' r'
    /\ sub' <> [].
 Proof.
   intros ds1 sub_ds ds2 l sub r Hl Hsub Hr Hall Hws.
@@ -2895,6 +2845,12 @@ Proof.
     apply reconnect_split_preserves_embed; assumption.
   - split.
     + change (~ close (reconnect_split l1 sub1 r1 h)).
+      assert (Hlocal : sparse_around
+          (reconnect_segs l1 sub1 r1 h l1)
+          sub1
+          (reconnect_segs l1 sub1 r1 h r1)).
+      { apply reconnect_gives_sparse_around with
+          (ds := ds1 ++ sub_ds ++ ds2); assumption. }
       apply reconnect_preserves_open
         with (ds := ds1 ++ sub_ds ++ ds2).
       * exact Hh.
@@ -2904,8 +2860,10 @@ Proof.
       * exact Hall1.
       * exact Hsparse1.
       * exact Hext1.
+      * exact Hlocal.
+      * exact Hopen1.
     + split.
-      * apply reconnect_gives_sparse with
+      * apply reconnect_gives_sparse_around with
           (ds := ds1 ++ sub_ds ++ ds2); assumption.
       * exact Hsub1ne.
 Qed.
@@ -2920,7 +2878,7 @@ Proposition embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
     /\ embed_listDir ds2 r
     /\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r)
     /\ ~ close (l ++ sub_ls ++ r)
-    /\ sparse l sub_ls r.
+    /\ sparse_around l sub_ls r.
 Proof.
   intros Hadm Hone.
   destruct (admissible_gives_open_embed _ Hadm) as [ls0 [Hemb0 Hopen0]].

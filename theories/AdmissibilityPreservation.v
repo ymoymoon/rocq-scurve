@@ -410,7 +410,7 @@ Lemma embed_sparsely_listDir_PMP (ds1 ds2 : list Direction) :
 		/\ embed_listDir ds2 r
 		/\ embed_listDir (ds1 ++ [Plus; Minus; Plus] ++ ds2) (l ++ [seg1; seg2; seg3] ++ r)
 		/\ ~ close (l ++ [seg1; seg2; seg3] ++ r)
-		/\ sparse l [seg1; seg2; seg3] r.
+		/\ sparse_around l [seg1; seg2; seg3] r.
 Proof. Admitted.
 
 (* embed_sparsely_listDir_PMP の Minus 版． *)
@@ -424,7 +424,7 @@ Lemma embed_sparsely_listDir_MPM (ds1 ds2 : list Direction) :
 		/\ embed_listDir ds2 r
 		/\ embed_listDir (ds1 ++ [Minus; Plus; Minus] ++ ds2) (l ++ [seg1; seg2; seg3] ++ r)
 		/\ ~ close (l ++ [seg1; seg2; seg3] ++ r)
-		/\ sparse l [seg1; seg2; seg3] r.
+		/\ sparse_around l [seg1; seg2; seg3] r.
 Proof. Admitted.
 
 Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
@@ -437,7 +437,7 @@ Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
 		/\ embed_listDir ds2 r
 		/\ embed_listDir (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) (l ++ [seg1; seg2; seg3; seg4] ++ r)
 		/\ ~ close (l ++ [seg1; seg2; seg3; seg4] ++ r)
-		/\ sparse l [seg1; seg2; seg3; seg4] r.
+		/\ sparse_around l [seg1; seg2; seg3; seg4] r.
 Proof. Admitted.
 
 (* embed_sparsely_listDir_PPMM の Minus 版． *)
@@ -451,7 +451,7 @@ Lemma embed_sparsely_listDir_MMPP (ds1 ds2 : list Direction) :
 		/\ embed_listDir ds2 r
 		/\ embed_listDir (ds1 ++ [Minus; Minus; Plus; Plus] ++ ds2) (l ++ [seg1; seg2; seg3; seg4] ++ r)
 		/\ ~ close (l ++ [seg1; seg2; seg3; seg4] ++ r)
-		/\ sparse l [seg1; seg2; seg3; seg4] r.
+		/\ sparse_around l [seg1; seg2; seg3; seg4] r.
 Proof. Admitted.
 
 (* Plus (の向きを持つ Primitive Segment) の埋め込みを，端点とそこでの傾きを保存したまま
@@ -588,7 +588,7 @@ Lemma seg_in_rectangle_keep_openness : forall (ls rs sub_ls sub_ls' : list Segme
 	-> sub_ls' <> [] 
 	-> ~ close sub_ls'
 	-> ~ close (ls ++ sub_ls ++ rs)
-	-> sparse ls sub_ls rs
+	-> sparse_around ls sub_ls rs
 	-> in_rect_or_endpoints sub_ls sub_ls'
 	-> same_init_and_term sub_ls sub_ls'
 	-> same_slope_init_and_term sub_ls sub_ls'
