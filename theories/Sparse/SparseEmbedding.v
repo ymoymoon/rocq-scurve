@@ -18,13 +18,216 @@ From Stdlib Require Import Lia.
 Require Export Sparse.ReconnectSplitProof.
 (* AdmissibleDirs について成り立ってほしい性質と、それに必要な補題。 *)
 
+(* PrimitiveSegment の90度回転。Direction と dc を保つ四つの対応を、
+   scurve の抽象的な回転とは独立に有限場合分けで扱う。 *)
+Local Definition quarter_turn_primitive (p : PrimitiveSegment) : PrimitiveSegment :=
+  match p with
+  | (n, e, cx) => (n, w, cc)
+  | (n, e, cc) => (n, w, cx)
+  | (n, w, cx) => (s, w, cx)
+  | (n, w, cc) => (s, w, cc)
+  | (s, e, cx) => (n, e, cx)
+  | (s, e, cc) => (n, e, cc)
+  | (s, w, cx) => (s, e, cc)
+  | (s, w, cc) => (s, e, cx)
+  end.
+
+Local Definition rotate_primitive (g : Rot) (p : PrimitiveSegment) : PrimitiveSegment :=
+  match g with
+  | R0 => p
+  | R90 => quarter_turn_primitive p
+  | R180 => quarter_turn_primitive (quarter_turn_primitive p)
+  | R270 =>
+      quarter_turn_primitive
+        (quarter_turn_primitive (quarter_turn_primitive p))
+  end.
+
+Local Definition quarter_turn_dir (d : Dir) : Dir :=
+  match d with
+  | Hor e => Ver n
+  | Hor w => Ver s
+  | Ver n => Hor w
+  | Ver s => Hor e
+  end.
+
+Local Definition rotate_dir (g : Rot) (d : Dir) : Dir :=
+  match g with
+  | R0 => d
+  | R90 => quarter_turn_dir d
+  | R180 => quarter_turn_dir (quarter_turn_dir d)
+  | R270 => quarter_turn_dir (quarter_turn_dir (quarter_turn_dir d))
+  end.
+
+Local Definition follows_dir (d : Dir) (p : PrimitiveSegment) : Prop :=
+  match d with
+  | Ver v => V_of p = v
+  | Hor h => H_of p = h
+  end.
+
+Local Lemma rotate_primitive_orn : forall g p,
+  orn (rotate_primitive g p) = orn p.
+Proof.
+  intros g [[v h] c]. destruct g, v, h, c; reflexivity.
+Qed.
+
+Local Lemma rotate_primitive_dc : forall g p q,
+  dc p q -> dc (rotate_primitive g p) (rotate_primitive g q).
+Proof.
+  intros g [[v1 h1] c1] [[v2 h2] c2] Hdc.
+  destruct v1, h1, c1, v2, h2, c2;
+    inversion Hdc; subst; destruct g; simpl; constructor.
+Qed.
+
+Local Lemma dc_successor_of_direction_unique : forall p q1 q2,
+  dc p q1 -> dc p q2 -> orn q1 = orn q2 -> q1 = q2.
+Proof.
+  intros [[v h] c] [[v1 h1] c1] [[v2 h2] c2] H1 H2 Hdir.
+  destruct v, h, c, v1, h1, c1, v2, h2, c2;
+    inversion H1; inversion H2; subst; simpl in Hdir;
+    try discriminate; reflexivity.
+Qed.
+
+Local Lemma same_orn_has_primitive_rotation : forall p q,
+  orn p = orn q -> exists g, q = rotate_primitive g p.
+Proof.
+  intros [[v1 h1] c1] [[v2 h2] c2].
+  destruct v1, h1, c1, v2, h2, c2; simpl; intros H;
+    try discriminate;
+    first [exists R0; reflexivity
+          | exists R90; reflexivity
+          | exists R180; reflexivity
+          | exists R270; reflexivity].
+Qed.
+
+Local Lemma is_scurve_tail : forall p ps,
+  is_scurve (p :: ps) -> is_scurve ps.
+Proof.
+  intros p ps H. inversion H; assumption.
+Qed.
+
+Local Lemma same_direction_scurve_lists_rotate : forall g p q ps qs,
+  is_scurve (p :: ps) ->
+  is_scurve (q :: qs) ->
+  map orn (p :: ps) = map orn (q :: qs) ->
+  q = rotate_primitive g p ->
+  q :: qs = map (rotate_primitive g) (p :: ps).
+Proof.
+  intros g p q ps. revert g p q.
+  induction ps as [|p' ps IH]; intros g p q qs Hps Hqs Hdir Hhead.
+  - destruct qs as [|q' qs].
+    + simpl. now rewrite Hhead.
+    + simpl in Hdir. injection Hdir as _ Htail. discriminate Htail.
+  - destruct qs as [|q' qs].
+    + simpl in Hdir. injection Hdir as _ Htail. discriminate Htail.
+    + assert (HtailDir : map orn (p' :: ps) = map orn (q' :: qs)).
+      { exact (f_equal (@tl Direction) Hdir). }
+      assert (HnextDir : orn p' = orn q').
+      { pose proof (f_equal (hd Plus) HtailDir) as H.
+        simpl in H. exact H. }
+      assert (Hdc1 : dc p p').
+      { eapply is_scurve_adjacent_dc with (ps := p :: p' :: ps) (i := 0%nat);
+          eauto; reflexivity. }
+      assert (Hdc2 : dc q q').
+      { eapply is_scurve_adjacent_dc with (ps := q :: q' :: qs) (i := 0%nat);
+          eauto; reflexivity. }
+      assert (Hnext : q' = rotate_primitive g p').
+      { apply (dc_successor_of_direction_unique
+                 q q' (rotate_primitive g p')); [exact Hdc2 | |].
+        - rewrite Hhead. now apply rotate_primitive_dc.
+        - rewrite rotate_primitive_orn. symmetry. exact HnextDir. }
+      assert (HtailCurve1 : is_scurve (p' :: ps)).
+      { now apply is_scurve_tail in Hps. }
+      assert (HtailCurve2 : is_scurve (q' :: qs)).
+      { now apply is_scurve_tail in Hqs. }
+      assert (HtailEq :
+          q' :: qs = map (rotate_primitive g) (p' :: ps)).
+      { eapply IH; eauto. }
+      simpl. rewrite Hhead. now f_equal.
+Qed.
+
+Local Lemma follows_dir_rotate : forall g d p,
+  follows_dir d p -> follows_dir (rotate_dir g d) (rotate_primitive g p).
+Proof.
+  intros g d [[v h] c] H.
+  destruct g; destruct d as [vd | hd];
+    try destruct vd; try destruct hd;
+    destruct v; destruct h; destruct c; simpl in *;
+    try discriminate; reflexivity.
+Qed.
+
+Local Lemma Forall_follows_dir_rotate : forall g d ps,
+  Forall (follows_dir d) ps ->
+  Forall (follows_dir (rotate_dir g d))
+    (map (rotate_primitive g) ps).
+Proof.
+  intros g d ps H. induction H; simpl; constructor; auto.
+  now apply follows_dir_rotate.
+Qed.
+
+Local Lemma is_one_way_scurve_dir_form : forall sc,
+  is_one_way_scurve sc <->
+  proj1_sig sc <> [] /\
+  exists d, Forall (follows_dir d) (proj1_sig sc).
+Proof.
+  intros [ps Hcurve]. unfold is_one_way_scurve. simpl. split.
+  - intros [Hne Hways]. split; [exact Hne |].
+    clear Hcurve Hne.
+    destruct Hways as [He | [Hw | [Hn | Hs]]].
+    + exists (Hor e). induction He as [|p ps Hp Hps IH].
+      * constructor.
+      * constructor; [|exact IH]. destruct Hp as [v [c ->]]. reflexivity.
+    + exists (Hor w). induction Hw as [|p ps Hp Hps IH].
+      * constructor.
+      * constructor; [|exact IH]. destruct Hp as [v [c ->]]. reflexivity.
+    + exists (Ver n). induction Hn as [|p ps Hp Hps IH].
+      * constructor.
+      * constructor; [|exact IH]. destruct Hp as [h [c ->]]. reflexivity.
+    + exists (Ver s). induction Hs as [|p ps Hp Hps IH].
+      * constructor.
+      * constructor; [|exact IH]. destruct Hp as [h [c ->]]. reflexivity.
+  - intros [Hne [d Hd]]. split; [exact Hne |].
+    destruct d as [v | h]; [destruct v | destruct h].
+    + right; right; left. apply Forall_forall. intros [[v' h] c] Hp.
+      apply Forall_forall with (x := ((v', h), c)) in Hd; [|exact Hp].
+      unfold follows_dir, V_of in Hd. simpl in Hd.
+      exists h, c. now rewrite Hd.
+    + do 3 right. apply Forall_forall. intros [[v' h] c] Hp.
+      apply Forall_forall with (x := ((v', h), c)) in Hd; [|exact Hp].
+      unfold follows_dir, V_of in Hd. simpl in Hd.
+      exists h, c. now rewrite Hd.
+    + left. apply Forall_forall. intros [[v h'] c] Hp.
+      apply Forall_forall with (x := ((v, h'), c)) in Hd; [|exact Hp].
+      unfold follows_dir, H_of in Hd. simpl in Hd.
+      exists v, c. now rewrite Hd.
+    + right; left. apply Forall_forall. intros [[v h'] c] Hp.
+      apply Forall_forall with (x := ((v, h'), c)) in Hd; [|exact Hp].
+      unfold follows_dir, H_of in Hd. simpl in Hd.
+      exists v, c. now rewrite Hd.
+Qed.
+
 (* 単方向曲線と向き列が同じなら単方向曲線 *) 
 Lemma is_one_way_same_direction : forall sc1 sc2,
 	scurve_to_direction sc1 = scurve_to_direction sc2
 	-> is_one_way_scurve sc1 
 	-> is_one_way_scurve sc2.
-Proof.	
-Admitted.
+Proof.
+  intros [ps Hps] [qs Hqs] Hdir Hone.
+  apply is_one_way_scurve_dir_form in Hone.
+  destruct Hone as [HpsNe [d Hone]]. simpl in *.
+  destruct ps as [|p ps]; [contradiction |].
+  destruct qs as [|q qs].
+  { unfold scurve_to_direction in Hdir. simpl in Hdir. discriminate. }
+  unfold scurve_to_direction in Hdir. simpl in Hdir.
+  assert (HheadDir : orn p = orn q) by now injection Hdir.
+  destruct (same_orn_has_primitive_rotation p q HheadDir) as [g Hg].
+  assert (Hlists :
+      q :: qs = map (rotate_primitive g) (p :: ps)).
+  { eapply same_direction_scurve_lists_rotate; eauto. }
+  apply is_one_way_scurve_dir_form. simpl.
+  split; [discriminate |].
+  exists (rotate_dir g d). rewrite Hlists.
+  now apply Forall_follows_dir_rotate.
+Qed.
 
 Lemma Direction_to_PrimitiveSegment : forall d p, exists p', orn p' = d /\ dc p p'.
 Proof.
