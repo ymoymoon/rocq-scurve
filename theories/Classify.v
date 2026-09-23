@@ -48,6 +48,15 @@ Lemma RegDown_at_or_above_inv : forall g,
   region_at_or_above RegDown g -> g = RegDown.
 Proof. intros g [H | H]; [now symmetry | inversion H]. Qed.
 
+Lemma RegFix_at_or_above_not_up : forall g,
+  g <> RegUp -> region_at_or_above RegFix g.
+Proof.
+  intros g Hnot. destruct g.
+  - now left.
+  - contradiction.
+  - right. constructor.
+Qed.
+
 Definition endpoint_of_seg (s : Segment) (p : Point) : Prop :=
   p = init s \/ p = term s.
 
@@ -497,6 +506,24 @@ Record ClassificationSpec
       ~ onSegmentlist sub pt ->
       snd ps <= snd pt ->
       region_at_or_above (classifier pt) (classifier ps);
+
+  (* l 末尾の端点長方形より完全に下にある端点は、固定接続点へ
+     向かって上昇させない。隣接端点も含めて要求する。 *)
+  classified_below_terminal_not_up :
+    l <> [] ->
+    forall p,
+      endpoint_of (l ++ sub ++ r) p ->
+      snd p < ry0 (rect_of [last_segment l]) ->
+      classifier p <> RegUp;
+
+  (* r 先頭についても、その長方形より完全に下にある全端点を
+     上昇させない。 *)
+  classified_below_initial_not_up :
+    r <> [] ->
+    forall p,
+      endpoint_of (l ++ sub ++ r) p ->
+      snd p < ry0 (rect_of [hd_segment r]) ->
+      classifier p <> RegUp;
 
   (* sub の x 範囲でその上側・下側を通る非隣接セグメントは、
      両端を同じ外側へ動かす。 *)
@@ -4980,6 +5007,30 @@ Qed.
 (*  構成した分類器が ClassificationSpec を満たすこと                *)
 (* ----------------------------------------------------------------- *)
 
+(* sub に隣接する左端セグメントの上下外側では、順序閉包はその
+   長方形へ向かう分類を生成しない。隣接性による例外は設けない。 *)
+Lemma classify_below_terminal_not_up :
+  forall l sub r,
+    ClassificationContext l sub r ->
+    l <> [] ->
+    forall p,
+      endpoint_of (l ++ sub ++ r) p ->
+      snd p < ry0 (rect_of [last_segment l]) ->
+      classify l sub r p <> RegUp.
+Admitted.
+
+(* 右端についての双対。sub と共有する端点を持つ隣接セグメントも
+   通常の端点と同じ制約に含める。 *)
+Lemma classify_below_initial_not_up :
+  forall l sub r,
+    ClassificationContext l sub r ->
+    r <> [] ->
+    forall p,
+      endpoint_of (l ++ sub ++ r) p ->
+      snd p < ry0 (rect_of [hd_segment r]) ->
+      classify l sub r p <> RegUp.
+Admitted.
+
 Lemma strict_extension_above_or_below_sub : forall l sub r p,
   ClassificationContext l sub r ->
   ((l <> [] /\ onHead_extend_strict (l ++ sub ++ r) p)
@@ -5046,6 +5097,8 @@ Proof.
       apply order_core_step.
       exact (order_nonadjacent l sub r i j s0 t ps pt
                Hs Ht Hij Hover Hps Hpt HptNotSub Hy).
+  - exact (classify_below_terminal_not_up l sub r Hctx).
+  - exact (classify_below_initial_not_up l sub r Hctx).
   - intros seg p Hseg Hon Hrange. split; intros Hside.
     + split; apply (classify_forced_up l sub r _ Hctx).
       * exists seg. split; [now apply nonadjacent_sides_in_whole | now left].
@@ -5164,6 +5217,18 @@ Proof.
   - destruct Habove; simpl in Hy |- *; lra.
 Qed.
 
+(* Up 以外の分類は点を上昇させない。sub 隣接セグメントの固定端点と
+   下側長方形との分離を保存する際に用いる。 *)
+Lemma shift_not_up_nonincreasing :
+  forall h g p,
+    0 <= h ->
+    g <> RegUp ->
+    snd (shift h g p) <= snd p.
+Proof.
+  intros h g [x y] Hh Hnot.
+  destruct g; simpl; try lra; contradiction.
+Qed.
+
 Definition operate_point
     (l sub r : list Segment) (h : R) (p : Point) : Point :=
   shift h (classify l sub r p) p.
@@ -5219,64 +5284,6 @@ Definition reconnects_list_after
     (old new : list Segment) : Prop :=
   Forall2 (reconnects_after l sub r h) old new.
 
-(* 一セグメントの閉長方形の右辺・上辺。蓋の再接続で障害物を
-   上右側へ回避できるかを、リストの疎性から独立に表す。 *)
-Definition on_right_edge_of_segment (s : Segment) (p : Point) : Prop :=
-  fst p = rx1 (rect_of [s])
-  /\ ry0 (rect_of [s]) <= snd p <= ry1 (rect_of [s]).
-
-Definition on_top_edge_of_segment (s : Segment) (p : Point) : Prop :=
-  ry1 (rect_of [s]) = snd p
-  /\ rx0 (rect_of [s]) <= fst p <= rx1 (rect_of [s]).
-
-Definition on_left_edge_of_segment (s : Segment) (p : Point) : Prop :=
-  fst p = rx0 (rect_of [s])
-  /\ ry0 (rect_of [s]) <= snd p <= ry1 (rect_of [s]).
-
-Definition on_bottom_edge_of_segment (s : Segment) (p : Point) : Prop :=
-  ry0 (rect_of [s]) = snd p
-  /\ rx0 (rect_of [s]) <= fst p <= rx1 (rect_of [s]).
-
-(* [blockers] の各閉端点長方形が [s] の右辺・上辺を避ける。 *)
-Definition boxes_avoid_top_right_edges
-    (s : Segment) (blockers : list Segment) : Prop :=
-  forall t p,
-    In t blockers ->
-    in_segment_rect_or_endpoints t p ->
-    ~ on_right_edge_of_segment s p
-    /\ ~ on_top_edge_of_segment s p.
-
-Definition boxes_avoid_top_left_edges
-    (s : Segment) (blockers : list Segment) : Prop :=
-  forall t p,
-    In t blockers ->
-    in_segment_rect_or_endpoints t p ->
-    ~ on_left_edge_of_segment s p
-    /\ ~ on_top_edge_of_segment s p.
-
-Definition boxes_avoid_bottom_right_edges
-    (s : Segment) (blockers : list Segment) : Prop :=
-  forall t p,
-    In t blockers ->
-    in_segment_rect_or_endpoints t p ->
-    ~ on_right_edge_of_segment s p
-    /\ ~ on_bottom_edge_of_segment s p.
-
-Definition boxes_avoid_bottom_left_edges
-    (s : Segment) (blockers : list Segment) : Prop :=
-  forall t p,
-    In t blockers ->
-    in_segment_rect_or_endpoints t p ->
-    ~ on_left_edge_of_segment s p
-    /\ ~ on_bottom_edge_of_segment s p.
-
-(* 再接続する二端点自身が障害長方形に入らないこと。 *)
-Definition point_outside_segment_boxes
-    (p : Point) (blockers : list Segment) : Prop :=
-  forall t,
-    In t blockers ->
-    ~ in_segment_rect_or_endpoints t p.
-
 (* 同じ向きの再接続セグメントが、指定した全障害長方形を避けること。 *)
 Definition segment_avoids_boxes
     (s : Segment) (blockers : list Segment) : Prop :=
@@ -5284,221 +5291,3 @@ Definition segment_avoids_boxes
     In t blockers ->
     in_segment_rect_or_endpoints t p ->
     ~ onSegment s p.
-
-(* 左上向き・上に凸な蓋は、障害長方形が元の蓋の右辺・上辺へ届かず、
-   新端点も障害物の外なら、同じ形・末尾傾きで障害物を避けて再接続できる。 *)
-Axiom northwest_cx_reconnect_avoids_boxes :
-  forall seg p q blockers,
-    embed (n, w, cx) seg ->
-    reconnectable p q (orn_seg seg) ->
-    point_outside_segment_boxes p blockers ->
-    point_outside_segment_boxes q blockers ->
-    boxes_avoid_top_right_edges seg blockers ->
-    exists s',
-      init s' = p
-      /\ term s' = q
-      /\ orn_seg s' = orn_seg seg
-      /\ embed (n, w, cx) s'
-      /\ slope_term s' = slope_term seg
-      /\ segment_avoids_boxes s' blockers.
-
-(* 右側の水平反転蓋の残る三形。各々、蓋が外へ抜ける二辺に
-   障害長方形が届かなければ、末尾傾きを保って選び直せる。 *)
-Axiom northeast_cx_reconnect_avoids_boxes :
-  forall seg p q blockers,
-    embed (n, e, cx) seg ->
-    reconnectable p q (orn_seg seg) ->
-    point_outside_segment_boxes p blockers ->
-    point_outside_segment_boxes q blockers ->
-    boxes_avoid_top_left_edges seg blockers ->
-    exists s',
-      init s' = p
-      /\ term s' = q
-      /\ orn_seg s' = orn_seg seg
-      /\ embed (n, e, cx) s'
-      /\ slope_term s' = slope_term seg
-      /\ segment_avoids_boxes s' blockers.
-
-Axiom southwest_cc_reconnect_avoids_boxes :
-  forall seg p q blockers,
-    embed (s, w, cc) seg ->
-    reconnectable p q (orn_seg seg) ->
-    point_outside_segment_boxes p blockers ->
-    point_outside_segment_boxes q blockers ->
-    boxes_avoid_bottom_right_edges seg blockers ->
-    exists s',
-      init s' = p
-      /\ term s' = q
-      /\ orn_seg s' = orn_seg seg
-      /\ embed (s, w, cc) s'
-      /\ slope_term s' = slope_term seg
-      /\ segment_avoids_boxes s' blockers.
-
-Axiom southeast_cc_reconnect_avoids_boxes :
-  forall seg p q blockers,
-    embed (s, e, cc) seg ->
-    reconnectable p q (orn_seg seg) ->
-    point_outside_segment_boxes p blockers ->
-    point_outside_segment_boxes q blockers ->
-    boxes_avoid_bottom_left_edges seg blockers ->
-    exists s',
-      init s' = p
-      /\ term s' = q
-      /\ orn_seg s' = orn_seg seg
-      /\ embed (s, e, cc) s'
-      /\ slope_term s' = slope_term seg
-      /\ segment_avoids_boxes s' blockers.
-
-(* 左側の蓋では自由に外へ逃げる辺が左右反転する。先頭延長線だけに
-   必要なのは始点傾きなので、以下は [slope_init] を保存する版である。 *)
-Axiom northwest_cx_reconnect_avoids_boxes_from_left :
-  forall seg p q blockers,
-    embed (n, w, cx) seg ->
-    reconnectable p q (orn_seg seg) ->
-    point_outside_segment_boxes p blockers ->
-    point_outside_segment_boxes q blockers ->
-    boxes_avoid_top_left_edges seg blockers ->
-    exists s',
-      init s' = p
-      /\ term s' = q
-      /\ orn_seg s' = orn_seg seg
-      /\ embed (n, w, cx) s'
-      /\ slope_init s' = slope_init seg
-      /\ segment_avoids_boxes s' blockers.
-
-Axiom northeast_cx_reconnect_avoids_boxes_from_left :
-  forall seg p q blockers,
-    embed (n, e, cx) seg ->
-    reconnectable p q (orn_seg seg) ->
-    point_outside_segment_boxes p blockers ->
-    point_outside_segment_boxes q blockers ->
-    boxes_avoid_top_right_edges seg blockers ->
-    exists s',
-      init s' = p
-      /\ term s' = q
-      /\ orn_seg s' = orn_seg seg
-      /\ embed (n, e, cx) s'
-      /\ slope_init s' = slope_init seg
-      /\ segment_avoids_boxes s' blockers.
-
-Axiom southwest_cc_reconnect_avoids_boxes_from_left :
-  forall seg p q blockers,
-    embed (s, w, cc) seg ->
-    reconnectable p q (orn_seg seg) ->
-    point_outside_segment_boxes p blockers ->
-    point_outside_segment_boxes q blockers ->
-    boxes_avoid_bottom_left_edges seg blockers ->
-    exists s',
-      init s' = p
-      /\ term s' = q
-      /\ orn_seg s' = orn_seg seg
-      /\ embed (s, w, cc) s'
-      /\ slope_init s' = slope_init seg
-      /\ segment_avoids_boxes s' blockers.
-
-Axiom southeast_cc_reconnect_avoids_boxes_from_left :
-  forall seg p q blockers,
-    embed (s, e, cc) seg ->
-    reconnectable p q (orn_seg seg) ->
-    point_outside_segment_boxes p blockers ->
-    point_outside_segment_boxes q blockers ->
-    boxes_avoid_bottom_right_edges seg blockers ->
-    exists s',
-      init s' = p
-      /\ term s' = q
-      /\ orn_seg s' = orn_seg seg
-      /\ embed (s, e, cc) s'
-      /\ slope_init s' = slope_init seg
-      /\ segment_avoids_boxes s' blockers.
-
-(* 水平反転で生じる右蓋と、その外側二辺の空き方をまとめた条件。 *)
-Definition terminal_lid_clearance (seg : Segment) (blockers : list Segment) : Prop :=
-  (embed (n, w, cx) seg /\ boxes_avoid_top_right_edges seg blockers)
-  \/ (embed (n, e, cx) seg /\ boxes_avoid_top_left_edges seg blockers)
-  \/ (embed (s, w, cc) seg /\ boxes_avoid_bottom_right_edges seg blockers)
-  \/ (embed (s, e, cc) seg /\ boxes_avoid_bottom_left_edges seg blockers).
-
-(* 左蓋については左右を交換し、始点傾きを保存する。 *)
-Definition initial_lid_clearance (seg : Segment) (blockers : list Segment) : Prop :=
-  (embed (n, w, cx) seg /\ boxes_avoid_top_left_edges seg blockers)
-  \/ (embed (n, e, cx) seg /\ boxes_avoid_top_right_edges seg blockers)
-  \/ (embed (s, w, cc) seg /\ boxes_avoid_bottom_left_edges seg blockers)
-  \/ (embed (s, e, cc) seg /\ boxes_avoid_bottom_right_edges seg blockers).
-
-(* 右蓋は局所的な空き条件から、末尾傾きまで保つ安全な再接続を選べる。 *)
-Lemma terminal_lid_clearance_reconnects :
-  forall seg p q blockers,
-    reconnectable p q (orn_seg seg) ->
-    point_outside_segment_boxes p blockers ->
-    point_outside_segment_boxes q blockers ->
-    terminal_lid_clearance seg blockers ->
-    exists s',
-      init s' = p
-      /\ term s' = q
-      /\ orn_seg s' = orn_seg seg
-      /\ slope_term s' = slope_term seg
-      /\ segment_avoids_boxes s' blockers.
-Proof.
-  intros seg p q blockers Hrec Hp Hq Hclear.
-  unfold terminal_lid_clearance in Hclear.
-  destruct Hclear as [[Hshape Hedge] | [[Hshape Hedge] | [[Hshape Hedge] | [Hshape Hedge]]]].
-  - destruct (northwest_cx_reconnect_avoids_boxes seg p q blockers Hshape Hrec Hp Hq Hedge)
-      as [s' [Hi [Ht [Ho [_ [Hslope Havoid]]]]]].
-    exists s'. repeat split; assumption.
-  - destruct (northeast_cx_reconnect_avoids_boxes seg p q blockers Hshape Hrec Hp Hq Hedge)
-      as [s' [Hi [Ht [Ho [_ [Hslope Havoid]]]]]].
-    exists s'. repeat split; assumption.
-  - destruct (southwest_cc_reconnect_avoids_boxes seg p q blockers Hshape Hrec Hp Hq Hedge)
-      as [s' [Hi [Ht [Ho [_ [Hslope Havoid]]]]]].
-    exists s'. repeat split; assumption.
-  - destruct (southeast_cc_reconnect_avoids_boxes seg p q blockers Hshape Hrec Hp Hq Hedge)
-      as [s' [Hi [Ht [Ho [_ [Hslope Havoid]]]]]].
-    exists s'. repeat split; assumption.
-Qed.
-
-(* 左蓋は局所的な空き条件から、始点傾きまで保つ安全な再接続を選べる。 *)
-Lemma initial_lid_clearance_reconnects :
-  forall seg p q blockers,
-    reconnectable p q (orn_seg seg) ->
-    point_outside_segment_boxes p blockers ->
-    point_outside_segment_boxes q blockers ->
-    initial_lid_clearance seg blockers ->
-    exists s',
-      init s' = p
-      /\ term s' = q
-      /\ orn_seg s' = orn_seg seg
-      /\ slope_init s' = slope_init seg
-      /\ segment_avoids_boxes s' blockers.
-Proof.
-  intros seg p q blockers Hrec Hp Hq Hclear.
-  unfold initial_lid_clearance in Hclear.
-  destruct Hclear as [[Hshape Hedge] | [[Hshape Hedge] | [[Hshape Hedge] | [Hshape Hedge]]]].
-  - destruct (northwest_cx_reconnect_avoids_boxes_from_left seg p q blockers Hshape Hrec Hp Hq Hedge)
-      as [s' [Hi [Ht [Ho [_ [Hslope Havoid]]]]]].
-    exists s'. repeat split; assumption.
-  - destruct (northeast_cx_reconnect_avoids_boxes_from_left seg p q blockers Hshape Hrec Hp Hq Hedge)
-      as [s' [Hi [Ht [Ho [_ [Hslope Havoid]]]]]].
-    exists s'. repeat split; assumption.
-  - destruct (southwest_cc_reconnect_avoids_boxes_from_left seg p q blockers Hshape Hrec Hp Hq Hedge)
-      as [s' [Hi [Ht [Ho [_ [Hslope Havoid]]]]]].
-    exists s'. repeat split; assumption.
-  - destruct (southeast_cc_reconnect_avoids_boxes_from_left seg p q blockers Hshape Hrec Hp Hq Hedge)
-      as [s' [Hi [Ht [Ho [_ [Hslope Havoid]]]]]].
-    exists s'. repeat split; assumption.
-Qed.
-
-(* 一時的な列全体の合成命題。今後は、通常セグメントの交差排除、
-   四つの水平反転蓋の安全な選択、延長線の非交差へ分解し、上の
-   一セグメント公理から Qed に置き換える。 *)
-Lemma classified_reconnect_preserves_open :
-  forall l sub r h l' r',
-    h_large h sub ->
-    sub <> [] ->
-    x_monotone_segs sub ->
-    reconnects_list_after l sub r h l l' ->
-    reconnects_list_after l sub r h r r' ->
-    extensions_disjoint (l' ++ sub ++ r') ->
-    sparse_around l' sub r' ->
-    ~ close (l ++ sub ++ r) ->
-    ~ close (l' ++ sub ++ r').
-Admitted.

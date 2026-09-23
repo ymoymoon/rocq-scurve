@@ -1059,6 +1059,25 @@ Proof.
   split; [lra|]. now rewrite <- Hs, <- Hrepr.
 Qed.
 
+Lemma extend_last_strict_from_repr : forall ls t s,
+  ls <> [] ->
+  nth_error ls (extend_index ls t) = Some s ->
+  extend ls t = point s (extend_param ls t) ->
+  S (extend_index ls t) = length ls ->
+  1 < extend_param ls t ->
+  onLast_extend_strict ls (extend ls t).
+Proof.
+  intros ls t s Hne Hnth Hrepr Hindex Hparam.
+  assert (Hs : s = last_segment ls).
+  { unfold last_segment.
+    assert (K : extend_index ls t = (length ls - 1)%nat) by lia.
+    rewrite K in Hnth.
+    pose proof (@nth_error_last Segment ls default_segment Hne) as Hlast.
+    rewrite Hnth in Hlast. now injection Hlast. }
+  unfold onLast_extend_strict. exists (extend_param ls t).
+  split; [exact Hparam |]. now rewrite <- Hs, <- Hrepr.
+Qed.
+
 Lemma same_extend_piece_no_collision : forall ls t1 t2 s1 s2,
   ls <> [] ->
   nth_error ls (extend_index ls t1) = Some s1 ->
@@ -1440,6 +1459,80 @@ Proof.
       exact (extend_head_from_repr ls t2 s2 Hne Hnth2 Hrepr2 Hi2 Hp2).
     + rewrite <- Heq. destruct Hlast1 as [Hi1 Hp1].
       exact (extend_last_from_repr ls t1 s1 Hne Hnth1 Hrepr1 Hi1 Hp1).
+  - apply Hneq. eapply same_extend_piece_no_collision; eauto; lia.
+Qed.
+
+(* 二つの異なるセグメント出現の正パラメータ部分が交わらない。
+   隣接点は後続セグメント側のパラメータ 0 なので、この条件には含まれない。 *)
+Definition positive_bodies_disjoint (ls : list Segment) : Prop :=
+  forall i j s t u v,
+    nth_error ls i = Some s ->
+    nth_error ls j = Some t ->
+    i <> j ->
+    0 < u <= 1 ->
+    0 < v <= 1 ->
+    point s u <> point t v.
+
+(* 先頭延長線と strict 末尾延長線は、全セグメントの正パラメータ部分を
+   避ける。末尾の t=1 は本体側に含まれるのでここでは重ねて要求しない。 *)
+Definition extensions_avoid_positive_bodies (ls : list Segment) : Prop :=
+  forall i s u,
+    nth_error ls i = Some s ->
+    0 < u <= 1 ->
+    (forall p, onHead_extend ls p -> p <> point s u)
+    /\ (forall p, onLast_extend_strict ls p -> p <> point s u).
+
+(* 本体・延長線の三種類の衝突を独立に排除すれば、列全体は開である。 *)
+Lemma separated_bodies_extensions_open :
+  forall ls,
+    ls <> [] ->
+    positive_bodies_disjoint ls ->
+    extensions_avoid_positive_bodies ls ->
+    extensions_disjoint ls ->
+    ~ close ls.
+Proof.
+  intros ls Hne Hbody Hextbody Hext [t1 [t2 [Hneq Heq]]].
+  destruct (extend_repr ls t1 Hne) as [s1 [Hnth1 Hrepr1]].
+  destruct (extend_repr ls t2 Hne) as [s2 [Hnth2 Hrepr2]].
+  assert (Hpoint : point s1 (extend_param ls t1) =
+                   point s2 (extend_param ls t2)).
+  { now rewrite <- Hrepr1, <- Hrepr2. }
+  destruct (extend_param_region ls t1 Hne) as [Hbody1 | [Hhead1 | Hlast1]];
+  destruct (extend_param_region ls t2 Hne) as [Hbody2 | [Hhead2 | Hlast2]].
+  - destruct (Nat.eq_dec (extend_index ls t1) (extend_index ls t2)) as [Hi | Hi].
+    + apply Hneq. eapply same_extend_piece_no_collision; eauto.
+    + exact (Hbody _ _ _ _ _ _ Hnth1 Hnth2 Hi Hbody1 Hbody2 Hpoint).
+  - destruct Hhead2 as [Hi2 Hu2].
+    pose proof (extend_head_from_repr
+                  ls t2 s2 Hne Hnth2 Hrepr2 Hi2 Hu2) as Hhead.
+    destruct (Hextbody _ _ _ Hnth1 Hbody1) as [Havoid _].
+    exact (Havoid (extend ls t2) Hhead ltac:(now rewrite Hrepr2, <- Hpoint)).
+  - destruct Hlast2 as [Hi2 Hu2].
+    pose proof (extend_last_strict_from_repr
+                  ls t2 s2 Hne Hnth2 Hrepr2 Hi2 Hu2) as Hlast.
+    destruct (Hextbody _ _ _ Hnth1 Hbody1) as [_ Havoid].
+    exact (Havoid (extend ls t2) Hlast ltac:(now rewrite Hrepr2, <- Hpoint)).
+  - destruct Hhead1 as [Hi1 Hu1].
+    pose proof (extend_head_from_repr
+                  ls t1 s1 Hne Hnth1 Hrepr1 Hi1 Hu1) as Hhead.
+    destruct (Hextbody _ _ _ Hnth2 Hbody2) as [Havoid _].
+    exact (Havoid (extend ls t1) Hhead ltac:(now rewrite Hrepr1, Hpoint)).
+  - apply Hneq. eapply same_extend_piece_no_collision; eauto; lia.
+  - destruct Hhead1 as [Hi1 Hu1].
+    destruct Hlast2 as [Hi2 Hu2].
+    apply (Hext (extend ls t1)).
+    + eapply extend_head_from_repr; eauto.
+    + rewrite Heq. eapply extend_last_from_repr; eauto.
+  - destruct Hlast1 as [Hi1 Hu1].
+    pose proof (extend_last_strict_from_repr
+                  ls t1 s1 Hne Hnth1 Hrepr1 Hi1 Hu1) as Hlast.
+    destruct (Hextbody _ _ _ Hnth2 Hbody2) as [_ Havoid].
+    exact (Havoid (extend ls t1) Hlast ltac:(now rewrite Hrepr1, Hpoint)).
+  - destruct Hhead2 as [Hi2 Hu2].
+    destruct Hlast1 as [Hi1 Hu1].
+    apply (Hext (extend ls t2)).
+    + eapply extend_head_from_repr; eauto.
+    + rewrite <- Heq. eapply extend_last_from_repr; eauto.
   - apply Hneq. eapply same_extend_piece_no_collision; eauto; lia.
 Qed.
 
