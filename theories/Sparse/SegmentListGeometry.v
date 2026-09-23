@@ -92,6 +92,43 @@ Proof.
     unfold gap in Hnegative. lra.
 Qed.
 
+(* 同じ x で同期して動く二つの連続 trace は、交わらない限り上下を
+   入れ替えない。head/last/body 固有の場合分けは同期の構成側に残す。 *)
+Lemma continuous_paired_curves_vertical_order_constant :
+  forall (lower upper : R -> Point) a b,
+    continuity (fun t => snd (lower t)) ->
+    continuity (fun t => snd (upper t)) ->
+    (forall t,
+      Rmin a b <= t <= Rmax a b ->
+      fst (lower t) = fst (upper t)) ->
+    (forall t,
+      Rmin a b <= t <= Rmax a b ->
+      lower t <> upper t) ->
+    (snd (lower a) < snd (upper a) ->
+       snd (lower b) < snd (upper b))
+    /\
+    (snd (upper a) < snd (lower a) ->
+       snd (upper b) < snd (lower b)).
+Proof.
+  intros lower upper a b Hlower Hupper HsameX Hdisjoint.
+  set (gap := fun t => snd (lower t) - snd (upper t)).
+  assert (HgapContinuous : continuity gap).
+  { unfold gap. apply continuity_minus; assumption. }
+  assert (HgapNonzero : forall t,
+      Rmin a b <= t <= Rmax a b -> gap t <> 0).
+  { intros t Ht Hzero. apply (Hdisjoint t Ht).
+    apply injective_projections.
+    - exact (HsameX t Ht).
+    - unfold gap in Hzero. lra. }
+  destruct (continuous_nonzero_sign_constant
+              gap a b HgapContinuous HgapNonzero) as [Hnegative Hpositive].
+  split; intros Horder.
+  - specialize (Hnegative ltac:(unfold gap; lra)).
+    unfold gap in Hnegative. lra.
+  - specialize (Hpositive ltac:(unfold gap; lra)).
+    unfold gap in Hpositive. lra.
+Qed.
+
 (* セグメントと延長線の任意の部分曲線は、端点の x 範囲を飛び出さない。
    本体では x 単調性から従い、延長部分についても同じ幾何仕様を要求する。 *)
 Axiom segment_x_between_parameters : forall seg t0 t1 t,

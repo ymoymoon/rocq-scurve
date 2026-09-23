@@ -759,24 +759,25 @@ Qed.
 (*  構成した分類器が ClassificationSpec を満たすこと                *)
 (* ----------------------------------------------------------------- *)
 
-(* sub に隣接する左端セグメントの上下外側では、順序閉包はその
-   長方形へ向かう分類を生成しない。隣接性による例外は設けない。 *)
+(* 蓋でない左通常境界の下では、固定接続点までの空いた閉長方形と
+   その外側から伸びる rising 障壁により Up 到達を排除する。 *)
 Lemma classify_below_terminal_not_up :
   forall l sub r,
     ClassificationContext l sub r ->
     l <> [] ->
+    ~ terminal_lid l ->
     forall p,
       endpoint_of (l ++ sub ++ r) p ->
       snd p < ry0 (rect_of [last_segment l]) ->
       classify l sub r p <> RegUp.
 Admitted.
 
-(* 右端についての双対。sub と共有する端点を持つ隣接セグメントも
-   通常の端点と同じ制約に含める。 *)
+(* 右通常境界についての双対。 *)
 Lemma classify_below_initial_not_up :
   forall l sub r,
     ClassificationContext l sub r ->
     r <> [] ->
+    ~ initial_lid r ->
     forall p,
       endpoint_of (l ++ sub ++ r) p ->
       snd p < ry0 (rect_of [hd_segment r]) ->

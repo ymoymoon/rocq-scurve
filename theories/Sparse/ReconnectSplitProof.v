@@ -1105,7 +1105,7 @@ Proof.
             pose proof (operated_endpoint_below_terminal_stays_below
                           l sub r h p Hsub Hmono Hsparse
                           (ex_intro _ ds Hembed) Hext (Rlt_le _ _ (proj1 Hh))
-                          Hl HpWhole HpBelow) as Hop.
+                          Hl HnotTerminal HpWhole HpBelow) as Hop.
             change (snd (operate_point l sub r h p) <
                     Rmin (snd (init b)) (snd (term b))) in Hop.
             rewrite Hfixed. eapply Rlt_le_trans; [exact Hop | apply Rmin_r]. }
@@ -1330,7 +1330,7 @@ Proof.
             pose proof (operated_endpoint_below_initial_stays_below
                           l sub r h p Hsub Hmono Hsparse
                           (ex_intro _ ds Hembed) Hext (Rlt_le _ _ (proj1 Hh))
-                          Hr HpWhole HpBelow) as Hop.
+                          Hr HnotInitial HpWhole HpBelow) as Hop.
             change (snd (operate_point l sub r h p) <
                     Rmin (snd (init b)) (snd (term b))) in Hop.
             rewrite Hfixed. eapply Rlt_le_trans; [exact Hop | apply Rmin_l]. }

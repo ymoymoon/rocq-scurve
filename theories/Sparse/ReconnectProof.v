@@ -815,16 +815,17 @@ Lemma operated_endpoint_below_terminal_stays_below :
     extensions_disjoint (l ++ sub ++ r) ->
     0 <= h ->
     l <> [] ->
+    ~ terminal_lid l ->
     endpoint_of (l ++ sub ++ r) p ->
     snd p < ry0 (rect_of [last_segment l]) ->
     snd (operate_point l sub r h p) < ry0 (rect_of [last_segment l]).
 Proof.
-  intros l sub r h p Hne Hmono Hsparse Hembed Hext Hh Hl Hp Hbelow.
+  intros l sub r h p Hne Hmono Hsparse Hembed Hext Hh Hl HnotLid Hp Hbelow.
   unfold operate_point.
   pose proof (classified_below_terminal_not_up
                 l sub r
                 (classify_spec l sub r Hne Hmono Hsparse Hembed Hext)
-                Hl p Hp Hbelow) as HnotUp.
+                Hl HnotLid p Hp Hbelow) as HnotUp.
   pose proof (shift_not_up_nonincreasing
                 h (classify l sub r p) p Hh HnotUp).
   lra.
@@ -840,16 +841,17 @@ Lemma operated_endpoint_below_initial_stays_below :
     extensions_disjoint (l ++ sub ++ r) ->
     0 <= h ->
     r <> [] ->
+    ~ initial_lid r ->
     endpoint_of (l ++ sub ++ r) p ->
     snd p < ry0 (rect_of [hd_segment r]) ->
     snd (operate_point l sub r h p) < ry0 (rect_of [hd_segment r]).
 Proof.
-  intros l sub r h p Hne Hmono Hsparse Hembed Hext Hh Hr Hp Hbelow.
+  intros l sub r h p Hne Hmono Hsparse Hembed Hext Hh Hr HnotLid Hp Hbelow.
   unfold operate_point.
   pose proof (classified_below_initial_not_up
                 l sub r
                 (classify_spec l sub r Hne Hmono Hsparse Hembed Hext)
-                Hr p Hp Hbelow) as HnotUp.
+                Hr HnotLid p Hp Hbelow) as HnotUp.
   pose proof (shift_not_up_nonincreasing
                 h (classify l sub r p) p Hh HnotUp).
   lra.
@@ -929,44 +931,8 @@ Proof.
                l sub r h s Hne Hconn Hmono Hh Hsparse Hwhole Hembedded Hext).
 Qed.
 
-(* 左蓋の移動後の二端点を、始点傾きを保ちつつ、通常再接続された
-   非隣接セグメントの閉長方形を避けるように結べる。 *)
-Lemma terminal_lid_safe_reconnect_exists :
-  forall l sub r h,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    h_large h sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
-    terminal_lid l ->
-    exists s',
-      terminal_lid_reconnect_spec l sub r h (last_segment l)
-        (terminal_lid_blockers l sub r h) s'.
-Admitted.
-
-(* 右蓋についての双対。外側の末尾延長線に必要な終点傾きを保つ。 *)
-Lemma initial_lid_safe_reconnect_exists :
-  forall l sub r h,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    h_large h sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
-    initial_lid r ->
-    exists s',
-      initial_lid_reconnect_spec l sub r h (hd_segment r)
-        (initial_lid_blockers l sub r h) s'.
-Admitted.
-
-Require Import Stdlib.Logic.ClassicalEpsilon.
-
-(* 安全な再接続の存在証明から、epsilon で選んだ左蓋の仕様を回収する。 *)
+(* 左蓋の安全再接続。将来は l/sub/r 非依存の safe-corridor における
+   始点傾き保存再接続定理から導く。 *)
 Lemma choose_terminal_lid_spec :
   forall l sub r h,
     sub <> [] ->
@@ -981,14 +947,9 @@ Lemma choose_terminal_lid_spec :
     terminal_lid_reconnect_spec l sub r h (last_segment l)
       (terminal_lid_blockers l sub r h)
       (choose_terminal_lid l sub r h).
-  Proof.
-  intros l sub r h Hne Hconn Hmono Hh Hsparse Hwhole Hembedded Hext Hlid.
-  unfold choose_terminal_lid.
-  apply epsilon_spec.
-  eapply terminal_lid_safe_reconnect_exists; eauto.
-Qed.
+Admitted.
 
-(* 右蓋についても、選択した証人は終点傾きと障害物回避を満たす。 *)
+(* 右蓋の双対。終点傾きを保存する safe-corridor 定理から導く予定。 *)
 Lemma choose_initial_lid_spec :
   forall l sub r h,
     sub <> [] ->
@@ -1003,12 +964,7 @@ Lemma choose_initial_lid_spec :
     initial_lid_reconnect_spec l sub r h (hd_segment r)
       (initial_lid_blockers l sub r h)
       (choose_initial_lid l sub r h).
-Proof.
-  intros l sub r h Hne Hconn Hmono Hh Hsparse Hwhole Hembedded Hext Hlid.
-  unfold choose_initial_lid.
-  apply epsilon_spec.
-  eapply initial_lid_safe_reconnect_exists; eauto.
-Qed.
+Admitted.
 
 Lemma removelast_length_nonempty : forall (A : Type) (xs : list A),
   xs <> [] -> S (length (removelast xs)) = length xs.

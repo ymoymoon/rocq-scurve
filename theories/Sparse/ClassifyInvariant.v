@@ -2946,6 +2946,10 @@ Lemma barrier_reverse_step_preserves_up_path_invariant :
     up_path_invariant l sub r p.
 Admitted.
 
+(* 以下の六補題は end-step ごとの証明を保つ。共通する連続 trace の
+   上下順序保存だけは [continuous_paired_curves_vertical_order_constant]
+   に切り出し、head/last/body 固有の非交差証明は各補題で与える。 *)
+
 (* 同じ x にある先頭・末尾延長線の上下比較を、その基点間へ移す二場合。 *)
 Lemma head_below_last_preserves_up_path_invariant :
   forall l sub r ph pl,

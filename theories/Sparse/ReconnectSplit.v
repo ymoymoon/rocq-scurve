@@ -1,5 +1,4 @@
 Require Export Sparse.Reconnect.
-Require Import Stdlib.Logic.ClassicalEpsilon.
 Require Import Stdlib.Lists.List.
 Import ListNotations.
 
@@ -7,16 +6,6 @@ Import ListNotations.
 Definition ordinary_reconnect_split
   (l sub r : list Segment) (h : R) : list Segment :=
   reconnect_segs l sub r h l ++ sub ++ reconnect_segs l sub r h r.
-
-(* 蓋かどうかは、sub 側へ x 方向に戻る位置関係だけで判定する。
-   可能な向きと凸性は、後で隣接関係 [dc] から導く。 *)
-Definition terminal_lid (l : list Segment) : Prop :=
-  l <> [] /\
-  fst (term (last_segment l)) < fst (init (last_segment l)).
-
-Definition initial_lid (r : list Segment) : Prop :=
-  r <> [] /\
-  fst (term (hd_segment r)) < fst (init (hd_segment r)).
 
 Definition terminal_lid_blockers
     (l sub r : list Segment) (h : R) : list Segment :=
@@ -44,18 +33,13 @@ Definition initial_lid_reconnect_spec
   /\ slope_term new = slope_term old
   /\ segment_avoids_boxes new blockers.
 
-(* sparse 性から得る安全な蓋を、epsilon で一つ選ぶ。 *)
-Definition choose_terminal_lid
-    (l sub r : list Segment) (h : R) : Segment :=
-  epsilon (inhabits (reconnect_one l sub r h (last_segment l)))
-    (terminal_lid_reconnect_spec l sub r h (last_segment l)
-       (terminal_lid_blockers l sub r h)).
+(* 安全な蓋の具体的構成は、局所的な安全 corridor における
+   セグメント再接続定理を導入するまで抽象化しておく。 *)
+Parameter choose_terminal_lid :
+  list Segment -> list Segment -> list Segment -> R -> Segment.
 
-Definition choose_initial_lid
-    (l sub r : list Segment) (h : R) : Segment :=
-  epsilon (inhabits (reconnect_one l sub r h (hd_segment r)))
-    (initial_lid_reconnect_spec l sub r h (hd_segment r)
-       (initial_lid_blockers l sub r h)).
+Parameter choose_initial_lid :
+  list Segment -> list Segment -> list Segment -> R -> Segment.
 
 Definition reconnect_left
     (l sub r : list Segment) (h : R) : list Segment :=

@@ -19,6 +19,15 @@ Require Export Sparse.Sparsity.
 
 Inductive Region : Type := RegFix | RegUp | RegDown.
 
+(* sub に隣接する左右のセグメントが、sub 側へ x 方向に戻る蓋か。 *)
+Definition terminal_lid (l : list Segment) : Prop :=
+  l <> [] /\
+  fst (term (last_segment l)) < fst (init (last_segment l)).
+
+Definition initial_lid (r : list Segment) : Prop :=
+  r <> [] /\
+  fst (term (hd_segment r)) < fst (init (hd_segment r)).
+
 Inductive region_above : Region -> Region -> Prop :=
   | RegUp_above_Fix : region_above RegUp RegFix
   | RegUp_above_Down : region_above RegUp RegDown

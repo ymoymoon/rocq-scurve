@@ -45,19 +45,20 @@ Record ClassificationSpec
       snd ps <= snd pt ->
       region_at_or_above (classifier pt) (classifier ps);
 
-  (* l 末尾の端点長方形より完全に下にある端点は、固定接続点へ
-     向かって上昇させない。隣接端点も含めて要求する。 *)
+  (* l 末尾が蓋でない通常境界では、その端点長方形より完全に下の
+     端点を固定接続点へ向かって上昇させない。 *)
   classified_below_terminal_not_up :
     l <> [] ->
+    ~ terminal_lid l ->
     forall p,
       endpoint_of (l ++ sub ++ r) p ->
       snd p < ry0 (rect_of [last_segment l]) ->
       classifier p <> RegUp;
 
-  (* r 先頭についても、その長方形より完全に下にある全端点を
-     上昇させない。 *)
+  (* r 先頭が蓋でない通常境界についても同様。 *)
   classified_below_initial_not_up :
     r <> [] ->
+    ~ initial_lid r ->
     forall p,
       endpoint_of (l ++ sub ++ r) p ->
       snd p < ry0 (rect_of [hd_segment r]) ->
