@@ -794,6 +794,22 @@ Lemma reconnect_segs_length :
     length (reconnect_segs l sub r h ls) = length ls.
 Proof. intros. unfold reconnect_segs. apply length_map. Qed.
 
+(* map による再接続列は、各位置で分類後の端点と元の向きを共有する。 *)
+Lemma reconnect_segs_reconnects_after :
+  forall l sub r h ls,
+    all_reconnectable l sub r h ls ->
+    reconnects_list_after l sub r h ls (reconnect_segs l sub r h ls).
+Proof.
+  intros l sub r h ls Hrec.
+  unfold reconnects_list_after.
+  induction ls as [|s ls IH]; simpl.
+  - constructor.
+  - constructor.
+    + unfold reconnects_after.
+      exact (reconnect_one_endpoints_orn l sub r h s (Hrec s (or_introl eq_refl))).
+    + apply IH. intros t Ht. apply Hrec. now right.
+Qed.
+
 Lemma reconnect_segs_nth_error :
   forall l sub r h ls i s,
     nth_error ls i = Some s ->
@@ -1206,11 +1222,16 @@ Lemma operated_endpoint_rectangles_axis_separated :
     term s' = operate_point l sub r h (term s) ->
     init t' = operate_point l sub r h (init t) ->
     term t' = operate_point l sub r h (term t) ->
+    ~ onSegmentlist sub (init s) ->
+    ~ onSegmentlist sub (term s) ->
+    ~ onSegmentlist sub (init t) ->
+    ~ onSegmentlist sub (term t) ->
     endpoint_rectangles_axis_separated s t ->
     endpoint_rectangles_axis_separated s' t'.
 Proof.
   intros l sub r h i j s t s' t' Hne Hconn Hmono Hsparse Hwhole Hembedded Hext Hh
-    Hs Ht Hfar Hsinit Hsterm Htinit Htterm Haxis.
+    Hs Ht Hfar Hsinit Hsterm Htinit Htterm
+    HsinitNotSub HstermNotSub HtinitNotSub HttermNotSub Haxis.
   assert (Horder :
     forall i0 j0 u v pu pv,
       nth_error (l ++ sub ++ r) i0 = Some u ->
@@ -1218,17 +1239,18 @@ Proof.
       (S i0 < j0 \/ S j0 < i0)%nat ->
       segment_x_ranges_overlap u v ->
       endpoint_of_seg u pu -> endpoint_of_seg v pv ->
+      ~ onSegmentlist sub pv ->
       snd pu < snd pv ->
       snd (operate_point l sub r h pu) <
       snd (operate_point l sub r h pv)).
-  { intros i0 j0 u v pu pv Hu Hv Hfar0 Hoverlap Hpu Hpv Hy.
+  { intros i0 j0 u v pu pv Hu Hv Hfar0 Hoverlap Hpu Hpv HpvNotSub Hy.
     unfold operate_point. eapply shift_preserves_strict_vertical_order;
       [exact Hh | exact Hy |].
     exact (classified_nonadjacent_endpoint_order
              l sub r
              (classify_spec l sub r Hne Hmono Hsparse Hembedded Hext)
              i0 j0 u v pu pv Hu Hv Hfar0 Hoverlap Hpu Hpv
-             (Rlt_le _ _ Hy)). }
+             HpvNotSub (Rlt_le _ _ Hy)). }
   unfold endpoint_rectangles_axis_separated in Haxis |- *.
   assert (Hhorizontal_or_overlap :
       rx1 (rect_of [t]) < rx0 (rect_of [s])
@@ -1276,20 +1298,20 @@ Proof.
     apply Rmax_lub_lt; apply Rmin_glb_lt.
     * eapply (Horder j i t s (init t) (init s));
         [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
-         now left | now left |].
-      apply Hold; now left.
+         now left | now left | exact HsinitNotSub |
+         apply Hold; now left].
     * eapply (Horder j i t s (init t) (term s));
         [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
-         now left | now right |].
-      apply Hold; [now left | now right].
+         now left | now right | exact HstermNotSub |
+         apply Hold; [now left | now right]].
     * eapply (Horder j i t s (term t) (init s));
         [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
-         now right | now left |].
-      apply Hold; [now right | now left].
+         now right | now left | exact HsinitNotSub |
+         apply Hold; [now right | now left]].
     * eapply (Horder j i t s (term t) (term s));
         [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
-         now right | now right |].
-      apply Hold; now right.
+         now right | now right | exact HstermNotSub |
+         apply Hold; now right].
     + right; right; right.
     change (Rmax (snd (init s')) (snd (term s')) <
             Rmin (snd (init t')) (snd (term t'))).
@@ -1306,75 +1328,20 @@ Proof.
     apply Rmax_lub_lt; apply Rmin_glb_lt.
     * eapply (Horder i j s t (init s) (init t));
         [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
-         now left | now left |].
-      apply Hold; now left.
+         now left | now left | exact HtinitNotSub |
+         apply Hold; now left].
     * eapply (Horder i j s t (init s) (term t));
         [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
-         now left | now right |].
-      apply Hold; [now left | now right].
+         now left | now right | exact HttermNotSub |
+         apply Hold; [now left | now right]].
     * eapply (Horder i j s t (term s) (init t));
         [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
-         now right | now left |].
-      apply Hold; [now right | now left].
+         now right | now left | exact HtinitNotSub |
+         apply Hold; [now right | now left]].
     * eapply (Horder i j s t (term s) (term t));
         [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
-         now right | now right |].
-      apply Hold; now right.
-Qed.
-
-(* 再接続後の異なるセグメントの端点長方形も互いを避ける。 *)
-Lemma reconnect_preserves_segment_rectangles_separated :
-  forall l sub r h,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    h_large h sub ->
-    all_reconnectable l sub r h (l ++ sub ++ r) ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
-    segment_rectangles_separated (reconnect_split l sub r h).
-Proof.
-  intros l sub r h Hne Hconn Hmono Hh Hrec Hsparse Hwhole Hembedded Hext.
-  unfold segment_rectangles_separated.
-  intros l' s' r' Hsplit t' Ht' p Hp.
-  destruct (split_nonadjacent_nth_errors
-              (reconnect_split l sub r h) l' s' r' t' Hsplit Ht')
-    as [i [j [Hs' [Ht'idx Hfar]]]].
-  assert (Hlen :
-    length (l ++ sub ++ r) = length (reconnect_split l sub r h)).
-  { symmetry. apply reconnect_split_length. }
-  destruct (nth_error_exists_at_equal_length
-              (l ++ sub ++ r) (reconnect_split l sub r h) i s' Hlen Hs')
-    as [s Hs].
-  destruct (nth_error_exists_at_equal_length
-              (l ++ sub ++ r) (reconnect_split l sub r h) j t' Hlen Ht'idx)
-    as [t Ht].
-  pose proof (reconnect_split_nth_spec
-                l sub r h i s s' Hne Hconn Hmono Hsparse Hwhole Hembedded
-                Hrec Hs Hs')
-    as [_ [Hsinit Hsterm]].
-  pose proof (reconnect_split_nth_spec
-                l sub r h j t t' Hne Hconn Hmono Hsparse Hwhole Hembedded
-                Hrec Ht Ht'idx)
-    as [_ [Htinit Htterm]].
-  destruct (nth_error_far_in_nonadjacent_sides
-              (l ++ sub ++ r) i j s t Hs Ht Hfar)
-    as [l0 [r0 [HoldSplit HoldIn]]].
-  destruct (Hsparse l0 s r0 HoldSplit) as [_ HoldRect].
-  assert (HoldAxis : endpoint_rectangles_axis_separated s t).
-  { apply rectangles_avoid_implies_axis_separated.
-    intros q Hq. exact (HoldRect t q HoldIn Hq). }
-  assert (HnewAxis : endpoint_rectangles_axis_separated s' t').
-  { eapply (operated_endpoint_rectangles_axis_separated
-              l sub r h i j s t s' t');
-      [exact Hne | exact Hconn | exact Hmono | exact Hsparse |
-       exact Hwhole | exact Hembedded | exact Hext | exact (proj1 Hh) |
-       exact Hs | exact Ht | exact Hfar |
-       exact Hsinit | exact Hsterm | exact Htinit | exact Htterm |
-       exact HoldAxis]. }
-  exact (axis_separated_boxes_avoid s' t' HnewAxis p Hp).
+         now right | now right | exact HttermNotSub |
+         apply Hold; now right].
 Qed.
 
 (* 延長線点と同じ x の旧セグメント点が与える分類順序から，
@@ -1633,34 +1600,6 @@ Proof.
     exact (Rlt_le _ _ (proj1 Hh)).
   - intros Hr. eapply reconnect_last_term_slope_after with (ds := ds); eauto.
     exact (Rlt_le _ _ (proj1 Hh)).
-Qed.
-
-(* 再接続後の非隣接長方形と strict 延長線の分離から、
-   新しい全域疎性を組み立てる。 *)
-Lemma reconnect_preserves_sparse :
-  forall ds l sub r h,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    h_large h sub ->
-    all_reconnectable l sub r h (l ++ sub ++ r) ->
-    sparse_embedding (l ++ sub ++ r) ->
-    embed_listDir ds (l ++ sub ++ r) ->
-    extensions_disjoint (l ++ sub ++ r) ->
-    sparse_embedding (reconnect_split l sub r h).
-Proof.
-  intros ds l sub r h Hne Hconn Hmono Hh Hrec Hsparse Hembed Hext.
-  assert (Hwhole : connected (l ++ sub ++ r)).
-  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
-  assert (Hrect :
-      segment_rectangles_separated (reconnect_split l sub r h)).
-  { eapply reconnect_preserves_segment_rectangles_separated; eauto. }
-  assert (HextRect :
-      extensions_avoid_segment_rectangles (reconnect_split l sub r h)).
-  { now apply reconnect_preserves_extensions_avoid_rectangles with (ds := ds). }
-  apply geometric_sparse_embedding.
-  - exact Hrect.
-  - exact HextRect.
 Qed.
 
 Definition both_left_of_sub (sub : list Segment) (p q : Point) : Prop :=
@@ -1979,8 +1918,59 @@ Proof.
     pose proof (Rmin_glb_lt _ _ _ Hinit' Hterm'). lra.
 Qed.
 
-(* 再接続した外側セグメントの端点長方形は、十分大きな移動後に
-   sub の長方形を避ける。 *)
+(* [nonadjacent_sides] に現れるセグメントは、もとの三分割列に属する。 *)
+Lemma nonadjacent_sides_in_whole :
+  forall l sub r s,
+    In s (nonadjacent_sides l r) ->
+    In s (l ++ sub ++ r).
+Proof.
+  intros l sub r s Hs.
+  unfold nonadjacent_sides in Hs. rewrite in_app_iff in Hs.
+  destruct Hs as [Hl | Hr].
+  - rewrite !in_app_iff. left.
+    induction l as [|a l IH]; [contradiction|].
+    destruct l as [|b l].
+    + simpl in Hl. contradiction.
+    + simpl in Hl |- *. destruct Hl as [<- | Hl].
+      * now left.
+      * right. apply IH. exact Hl.
+  - rewrite !in_app_iff. right; right.
+    destruct r as [|a r]; [simpl in Hr; contradiction|].
+    simpl in Hr |- *. now right.
+Qed.
+
+(* 非隣接の元セグメントと同じ移動端点を持つ再接続は、形の選び方に
+   依らず sub の閉長方形を避ける。蓋用に選び直す場合にも使う。 *)
+Lemma reconnected_nonadjacent_avoids_sub_rect :
+  forall l sub r h s s',
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    In s (nonadjacent_sides l r) ->
+    init s' = operate_point l sub r h (init s) ->
+    term s' = operate_point l sub r h (term s) ->
+    forall p,
+      in_segment_rect_or_endpoints s' p ->
+      ~ in_rect_or_endpoints_at sub p.
+Proof.
+  intros l sub r h s s' Hne Hconn Hmono Hh Hsparse Hwhole Hembedded Hext
+    Hs Hinit Hterm p Hp.
+  assert (Hsep : endpoint_box_separated_from_sub sub
+      (init s') (term s')).
+  { rewrite Hinit, Hterm.
+    eapply operated_nonadjacent_endpoints_separated; eauto. }
+  apply (separated_endpoint_box_avoids_sub
+           sub s' p Hne).
+  - exact Hsep.
+  - exact Hp.
+Qed.
+
+(* 標準の [reconnect_one] は上の一般補題の特別な場合である。 *)
 Lemma reconnect_one_avoids_sub_rect :
   forall l sub r h s,
     sub <> [] ->
@@ -1998,31 +1988,11 @@ Lemma reconnect_one_avoids_sub_rect :
       ~ in_rect_or_endpoints_at sub p.
 Proof.
   intros l sub r h s Hne Hconn Hmono Hh Hsparse Hwhole Hembedded Hext Hrec Hs p Hp.
-  assert (Hsfull : In s (l ++ sub ++ r)).
-  { unfold nonadjacent_sides in Hs. rewrite in_app_iff in Hs.
-    destruct Hs as [Hl | Hr].
-    - rewrite !in_app_iff. left.
-      clear -Hl. induction l as [|a l IH]; [contradiction|].
-      destruct l as [|b l].
-      + simpl in Hl. contradiction.
-      + simpl in Hl |- *. destruct Hl as [<- | Hl].
-        * now left.
-        * right. apply IH. exact Hl.
-    - rewrite !in_app_iff. right; right.
-      destruct r as [|a r]; [contradiction|].
-      simpl in Hr |- *. now right. }
-  assert (HrecOne : reconnectable_after l sub r h s).
-  { now apply Hrec. }
-  assert (Hsep : endpoint_box_separated_from_sub sub
-      (init (reconnect_one l sub r h s))
-      (term (reconnect_one l sub r h s))).
-  { rewrite (reconnect_one_init l sub r h s HrecOne).
-    rewrite (reconnect_one_term l sub r h s HrecOne).
-    eapply operated_nonadjacent_endpoints_separated; eauto. }
-  apply (separated_endpoint_box_avoids_sub
-           sub (reconnect_one l sub r h s) p Hne).
-  - exact Hsep.
-  - exact Hp.
+  eapply reconnected_nonadjacent_avoids_sub_rect; eauto.
+  - apply reconnect_one_init. apply Hrec.
+    now apply nonadjacent_sides_in_whole.
+  - apply reconnect_one_term. apply Hrec.
+    now apply nonadjacent_sides_in_whole.
 Qed.
 
 (* 一セグメント版の退避を、左右の再接続列全体へ持ち上げる。 *)
@@ -2292,33 +2262,47 @@ Proof.
              Hsparse Hconn (ex_intro _ ds Hembed) Hext Hrec Hs Hp).
 Qed.
 
+(* 局所 sparse 性と元の開性から、選び直した蓋を含む再接続列の開性を得る。
+   全域 sparse 性や全セグメント長方形の分離は要求しない。
+   蓋を含む安全な再接続選択の幾何学的核心は [Classify] 側に隔離する。 *)
 Lemma reconnect_preserves_open :
-  forall ds l sub r h,
+  forall l sub r h,
     h_large h sub ->
     sub <> [] ->
     x_monotone_segs sub ->
     all_reconnectable l sub r h (l ++ sub ++ r) ->
-    embed_listDir ds (l ++ sub ++ r) ->
-    sparse_embedding (l ++ sub ++ r) ->
-    extensions_disjoint (l ++ sub ++ r) ->
+    extensions_disjoint (reconnect_split l sub r h) ->
+    sparse_around
+      (reconnect_segs l sub r h l) sub
+      (reconnect_segs l sub r h r)
+    -> ~ close (l ++ sub ++ r) ->
     ~ close (reconnect_split l sub r h).
 Proof.
-  intros ds l sub r h Hh Hne Hmono Hrec Hembed Hsparse Hext.
-  assert (HconnSub : connected sub).
-  { apply connected_middle with (l := l) (r := r).
-    now apply embed_listDir_connected with (ds := ds). }
-  apply sparse_extensions_open with (ds := ds).
-  - unfold reconnect_split. intro Hnil.
-    apply app_eq_nil in Hnil as [_ Htail].
-    apply app_eq_nil in Htail as [Hsubnil _].
-    contradiction.
-  - now apply reconnect_split_preserves_embed.
-  - now apply reconnect_preserves_sparse with (ds := ds).
-  - now apply reconnect_preserves_extensions_disjoint with (ds := ds).
+  intros l sub r h Hh Hne Hmono Hrec Hext Hlocal Hopen.
+  change (~ close
+    (reconnect_segs l sub r h l ++ sub ++ reconnect_segs l sub r h r)).
+  assert (HrecL : all_reconnectable l sub r h l).
+  { eapply all_reconnectable_mono; [exact Hrec |].
+    intros s Hs. rewrite !in_app_iff. auto. }
+  assert (HrecR : all_reconnectable l sub r h r).
+  { eapply all_reconnectable_mono; [exact Hrec |].
+    intros s Hs. rewrite !in_app_iff. auto. }
+  eapply (classified_reconnect_preserves_open
+            l sub r h
+            (reconnect_segs l sub r h l)
+            (reconnect_segs l sub r h r)).
+  - exact Hh.
+  - exact Hne.
+  - exact Hmono.
+  - now apply reconnect_segs_reconnects_after.
+  - now apply reconnect_segs_reconnects_after.
+  - exact Hext.
+  - exact Hlocal.
+  - exact Hopen.
 Qed.
 
-(* 全域疎性の保存と sub 周りの局所疎性を一つの sparse にまとめる。 *)
-Lemma reconnect_gives_sparse :
+(* 再接続後に残す不変量は、sub 周りの局所 sparse 性と開性だけである。 *)
+Lemma reconnect_gives_sparse_around_and_open :
   forall ds l sub r h,
     connected (l ++ sub ++ r) ->
     well_split l sub r ->
@@ -2326,10 +2310,11 @@ Lemma reconnect_gives_sparse :
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
-    sparse
+    sparse_around
       (reconnect_segs l sub r h l)
       sub
-      (reconnect_segs l sub r h r).
+      (reconnect_segs l sub r h r)
+    /\ ~ close (reconnect_split l sub r h).
 Proof.
   intros ds l sub r h Hconn Hws Hh Hsparse Hembed Hext.
   pose proof Hws as [Hsubne [Hmono _]].
@@ -2338,9 +2323,15 @@ Proof.
   pose proof (operate_endpoints_reconnectable
                 l sub r h Hsubne HconnSub Hmono Hh Hsparse Hconn
                 (ex_intro _ ds Hembed) Hext) as Hrec.
-  unfold sparse, reconnect_split. split.
-  - now apply reconnect_preserves_sparse with (ds := ds).
-  - now apply reconnect_gives_sparse_around with (ds := ds).
+  assert (Hlocal : sparse_around
+      (reconnect_segs l sub r h l) sub
+      (reconnect_segs l sub r h r)).
+  { now apply reconnect_gives_sparse_around with (ds := ds). }
+  assert (HextNew : extensions_disjoint (reconnect_split l sub r h)).
+  { now apply reconnect_preserves_extensions_disjoint with (ds := ds). }
+  split; [exact Hlocal |].
+  eapply reconnect_preserves_open; eauto.
+  exact (proj2 (proj2 Hws)).
 Qed.
 
 
@@ -2358,7 +2349,8 @@ Lemma AdmissibleDirs_has_sparse_embedding :
       /\ extensions_disjoint ls.
 Admitted.
 
-(* 疎な埋め込みを回転して sub を x 単調にし、再接続で所望の疎性を得る。 *)
+(* 疎な初期埋め込みを回転して sub を x 単調にし、再接続後の局所疎性と
+   開性を得る。全域 sparse 性はこの結論に含めない。 *)
 Lemma embed_sparsely_xmono :
   forall ds1 sub_ds ds2 l sub r,
     embed_listDir ds1 l -> embed_listDir sub_ds sub -> embed_listDir ds2 r ->
@@ -2370,7 +2362,7 @@ Lemma embed_sparsely_xmono :
    /\ embed_listDir ds2 r'
    /\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l' ++ sub' ++ r')
    /\ ~ close (l' ++ sub' ++ r')
-   /\ sparse l' sub' r'
+   /\ sparse_around l' sub' r'
    /\ sub' <> [].
 Proof.
   intros ds1 sub_ds ds2 l sub r Hl Hsub Hr Hall Hws.
@@ -2449,6 +2441,13 @@ Proof.
   assert (HrecR1 : all_reconnectable l1 sub1 r1 h r1).
   { eapply all_reconnectable_mono; [exact HrecAll1 |].
     intros s Hs. rewrite !in_app_iff. auto. }
+  assert (HlocalOpen :
+      sparse_around
+        (reconnect_segs l1 sub1 r1 h l1) sub1
+        (reconnect_segs l1 sub1 r1 h r1)
+      /\ ~ close (reconnect_split l1 sub1 r1 h)).
+  { apply reconnect_gives_sparse_around_and_open
+      with (ds := ds1 ++ sub_ds ++ ds2); assumption. }
   exists (reconnect_segs l1 sub1 r1 h l1),
          (reconnect_segs l1 sub1 r1 h r1),
          sub1.
@@ -2460,19 +2459,9 @@ Proof.
               (reconnect_split l1 sub1 r1 h)).
     apply reconnect_split_preserves_embed; assumption.
   - split.
-    + change (~ close (reconnect_split l1 sub1 r1 h)).
-      apply reconnect_preserves_open
-        with (ds := ds1 ++ sub_ds ++ ds2).
-      * exact Hh.
-      * exact Hsub1ne.
-      * exact Hx1.
-      * exact HrecAll1.
-      * exact Hall1.
-      * exact Hsparse1.
-      * exact Hext1.
+    + exact (proj2 HlocalOpen).
     + split.
-      * apply reconnect_gives_sparse with
-          (ds := ds1 ++ sub_ds ++ ds2); assumption.
+      * exact (proj1 HlocalOpen).
       * exact Hsub1ne.
 Qed.
 
@@ -2486,7 +2475,7 @@ Proposition embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
     /\ embed_listDir ds2 r
     /\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r)
     /\ ~ close (l ++ sub_ls ++ r)
-    /\ sparse l sub_ls r.
+    /\ sparse_around l sub_ls r.
 Proof.
   intros Hadm Hone.
   destruct (admissible_gives_open_embed _ Hadm) as [ls0 [Hemb0 Hopen0]].
