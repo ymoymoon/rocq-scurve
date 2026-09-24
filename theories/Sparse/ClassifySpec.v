@@ -2,6 +2,8 @@ Require Export Sparse.ClassifyDefinition.
 Require Import Stdlib.Lists.List.
 Import ListNotations.
 From Stdlib Require Import Relations.Relation_Operators.
+From Stdlib Require Import Lra.
+From Stdlib Require Import Lia.
 
 Record ClassificationSpec (l sub r : list Segment) : Prop := {
 
@@ -29,11 +31,32 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
       segment_x_ranges_overlap s t ->
       endpoint_of_seg s ps ->
       endpoint_of_seg t pt ->
-      ~ onSegmentlist sub ps ->
       ~ onSegmentlist sub pt ->
       snd ps <= snd pt ->
       region_at_or_above
         (classify l sub r pt) (classify l sub r ps);
+
+  (* 蓋でない左境界では、その完全に下の非隣接端点を上へ動かさない。 *)
+  classified_below_terminal_not_up :
+    l <> [] ->
+    ~ terminal_lid l ->
+    forall t p,
+      In t (nonadjacent_sides l r) ->
+      segment_x_ranges_overlap t (last_segment l) ->
+      ry1 (rect_of [t]) < ry0 (rect_of [last_segment l]) ->
+      endpoint_of_seg t p ->
+      classify l sub r p <> RegUp;
+
+  (* 蓋でない右境界についても、完全に下の端点を上へ動かさない。 *)
+  classified_below_initial_not_up :
+    r <> [] ->
+    ~ initial_lid r ->
+    forall t p,
+      In t (nonadjacent_sides l r) ->
+      segment_x_ranges_overlap t (hd_segment r) ->
+      ry1 (rect_of [t]) < ry0 (rect_of [hd_segment r]) ->
+      endpoint_of_seg t p ->
+      classify l sub r p <> RegUp;
 
   (* sub と同じ x 座標を持つセグメントは Up もしくは Down *)
   classified_segment_at_sub_x :

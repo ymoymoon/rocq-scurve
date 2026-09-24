@@ -20,6 +20,8 @@ Proof.
   - now apply classified_sub_fixed_from_construction.
   - now apply classified_segment_endpoints_monotone_from_construction.
   - now apply classified_nonadjacent_endpoint_order_from_construction.
+  - now apply classified_below_terminal_not_up_from_construction.
+  - now apply classified_below_initial_not_up_from_construction.
   - now apply classified_segment_at_sub_x_from_construction.
   - now apply classified_head_extension_at_sub_x_from_construction.
   - now apply classified_last_extension_at_sub_x_from_construction.
@@ -28,6 +30,25 @@ Proof.
   - now apply classified_last_segment_crossing_order_from_construction.
   - now apply classified_head_slope_case_from_construction.
   - now apply classified_last_slope_case_from_construction.
+Qed.
+
+(* 埋め込み証人を受け取る再接続側の呼出形。連結性は証人から復元し、
+   現行の境界分類に対する [classify_spec] へ渡す。 *)
+Lemma classify_spec_from_embedding :
+  forall l sub r,
+    sub <> [] ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    ClassificationSpec l sub r.
+Proof.
+  intros l sub r Hne Hmono Hsparse [ds Hembed] Hext.
+  assert (Hwhole : connected (l ++ sub ++ r)).
+  { now apply (embed_listDir_connected ds (l ++ sub ++ r)). }
+  assert (Hsub : connected sub).
+  { apply connected_middle with (l := l) (r := r). exact Hwhole. }
+  now apply (classify_spec l sub r Hne Hsub Hmono Hsparse Hwhole).
 Qed.
 
 (* 同じ x 上の具体的な分類単調性から、異なる領域の上下順序を逆に読む。 *)
@@ -45,27 +66,6 @@ Proof.
     simpl in Hx, Heq |- *. f_equal; lra.
   - exfalso. apply (region_above_not_reverse _ _ Habove).
     eapply classify_same_x_monotone; eauto.
-Qed.
-
-Definition shift (h : R) (g : Region) (p : Point) : Point :=
-  match g with
-  | RegFix  => p
-  | RegUp   => (fst p, snd p + h)
-  | RegDown => (fst p, snd p - h)
-  end.
-
-Definition region_translation (h : R) (g : Region) : Point :=
-  match g with
-  | RegFix => (0, 0)
-  | RegUp => (0, h)
-  | RegDown => (0, - h)
-  end.
-
-Lemma shift_as_translation :
-  forall h g p, shift h g p = translate_pt (region_translation h g) p.
-Proof.
-  intros h g [x y]. destruct g; unfold shift, region_translation, translate_pt;
-    simpl; f_equal; ring.
 Qed.
 
 Lemma shift_preserves_strict_vertical_order :
@@ -90,6 +90,17 @@ Proof.
   intros h [xp yp] [xq yq] gp gq Hh Hy [Heq | Habove].
   - subst gq. destruct gp; simpl in Hy |- *; lra.
   - destruct Habove; simpl in Hy |- *; lra.
+Qed.
+
+(* Up 以外の分類は、非負の高さで点を上昇させない。 *)
+Lemma shift_not_up_nonincreasing :
+  forall h g p,
+    0 <= h ->
+    g <> RegUp ->
+    snd (shift h g p) <= snd p.
+Proof.
+  intros h g [x y] Hh Hnot.
+  destruct g; simpl; try lra; contradiction.
 Qed.
 
 Definition operate_point

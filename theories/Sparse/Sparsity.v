@@ -1,14 +1,11 @@
 Require Export Sparse.SegmentListGeometry.
-Require Import Stdlib.Reals.Reals.
+Require Export Sparse.VerticalShiftGeometry.
 Require Import Stdlib.Lists.List.
-Require Import SegmentsTranslation.
 Import ListNotations.
 From Stdlib Require Import Lra.
 From Stdlib Require Import Lia.
-Open Scope R_scope.
-(* ================================================================= *)
-(* 長方形と sparse *)
-(* ================================================================= *)
+
+(* 長方形と sparse。 *)
 
 Lemma Rmin_opp : forall a b, Rmin (- a) (- b) = - Rmax a b.
 Proof. intros. unfold Rmin, Rmax. destruct (Rle_dec (-a) (-b)), (Rle_dec a b); lra. Qed.
@@ -24,9 +21,6 @@ Definition rect_of (sub : list Segment) : Rect :=
   mkRect (Rmin (fst q0) (fst q3)) (Rmin (snd q0) (snd q3))
          (Rmax (fst q0) (fst q3)) (Rmax (snd q0) (snd q3)).
 
-Definition rect_height (Rc : Rect) : R := ry1 Rc - ry0 Rc.
-
-(* 境界を含む閉長方形。疎性では、境界上だけの接触も排除する。 *)
 Definition in_closed_rect (Rc : Rect) (p : Point) : Prop :=
   rx0 Rc <= fst p <= rx1 Rc /\ ry0 Rc <= snd p <= ry1 Rc.
 
@@ -115,12 +109,12 @@ Proof.
   rewrite in_app_iff. left. now apply in_removelast_in.
 Qed.
 
-(* strict 延長線と非隣接セグメントは、sub の閉長方形を避ける。
-   隣接セグメントと sub の共有端点は、埋め込みの連結性側で扱う。 *)
+(* sub の外側に実在する strict 延長線と非隣接セグメントは、sub の
+   閉長方形を避ける。sub 自身の延長線と共有端点はここでは扱わない。 *)
 Definition sparse_around (l sub r : list Segment) : Prop :=
   (forall p,
-     (onHead_extend_strict (l ++ sub ++ r) p
-      \/ onLast_extend_strict (l ++ sub ++ r) p) ->
+     ((l <> [] /\ onHead_extend_strict (l ++ sub ++ r) p)
+      \/ (r <> [] /\ onLast_extend_strict (l ++ sub ++ r) p)) ->
      ~ in_rect_or_endpoints_at sub p)
   /\ (forall s p,
         In s (nonadjacent_sides l r) ->
@@ -133,6 +127,31 @@ Definition sparse_embedding (ls : list Segment) : Prop :=
   forall l s r,
     ls = l ++ [s] ++ r ->
     sparse_around l [s] r.
+
+(* 全域 sparse 性は、非隣接セグメントの閉端点長方形から sub 上の
+   任意の点を排除する。 *)
+Lemma sparse_nonadjacent_box_avoids_sub_points :
+  forall l sub r s q,
+    sparse_embedding (l ++ sub ++ r) ->
+    In s (nonadjacent_sides l r) ->
+    onSegmentlist sub q ->
+    ~ in_segment_rect_or_endpoints s q.
+Proof.
+  intros l sub r s q Hsparse Hs [t [Ht Hqt]] Hqbox.
+  destruct (in_app_app sub t Ht) as [sl [sr Hdecomp]].
+  assert (Hfull :
+      l ++ sub ++ r = (l ++ sl) ++ [t] ++ (sr ++ r)).
+  { transitivity (l ++ (sl ++ [t] ++ sr) ++ r).
+    - exact (f_equal (fun xs => l ++ xs ++ r) Hdecomp).
+    - repeat rewrite app_assoc. reflexivity. }
+  pose proof (Hsparse (l ++ sl) t (sr ++ r) Hfull) as Haround.
+  assert (Hs' : In s (nonadjacent_sides (l ++ sl) (sr ++ r))).
+  { apply nonadjacent_sides_extend_right.
+    now apply nonadjacent_sides_extend_left. }
+  apply ((proj2 Haround) s q Hs' Hqbox).
+  change (in_segment_rect_or_endpoints t q).
+  now apply segment_in_rect_or_endpoints.
+Qed.
 
 (* 全域で疎であり、さらに指定した部分列 sub の周りでも疎である。 *)
 Definition sparse (l sub r : list Segment) : Prop :=
@@ -148,11 +167,14 @@ Definition segment_rectangles_separated (ls : list Segment) : Prop :=
       in_segment_rect_or_endpoints t p ->
       ~ in_rect_or_endpoints_at [s] p.
 
+(* 各セグメントの閉長方形を、そのセグメントの外側から来る
+   先頭・末尾延長線が避ける。自己延長は単射性側で扱う。 *)
 Definition extensions_avoid_segment_rectangles (ls : list Segment) : Prop :=
   forall l s r,
     ls = l ++ [s] ++ r ->
     forall p,
-      (onHead_extend_strict ls p \/ onLast_extend_strict ls p) ->
+      ((l <> [] /\ onHead_extend_strict ls p)
+       \/ (r <> [] /\ onLast_extend_strict ls p)) ->
       ~ in_rect_or_endpoints_at [s] p.
 
 (* 矩形・延長線・端点についての局所的な分離条件から全域疎性を組み立てる。 *)
@@ -164,9 +186,11 @@ Lemma geometric_sparse_embedding :
 Proof.
   intros ls Hrect Hext l s r Heq.
   split.
-  - intros p [Hhead | Hlast].
-    + apply (Hext l s r Heq p). left. rewrite Heq. exact Hhead.
-    + apply (Hext l s r Heq p). right. rewrite Heq. exact Hlast.
+  - intros p [[Hl Hhead] | [Hr Hlast]].
+    + apply (Hext l s r Heq p). left. split; [exact Hl |].
+      rewrite Heq. exact Hhead.
+    + apply (Hext l s r Heq p). right. split; [exact Hr |].
+      rewrite Heq. exact Hlast.
   - intros t p Ht Hp. eapply Hrect; eauto.
 Qed.
 
@@ -211,6 +235,25 @@ Proof.
     rewrite Hnth in Hlast. now injection Hlast. }
   unfold onLast_extend, onLast. exists (extend_param ls t).
   split; [lra|]. now rewrite <- Hs, <- Hrepr.
+Qed.
+
+Lemma extend_last_strict_from_repr : forall ls t s,
+  ls <> [] ->
+  nth_error ls (extend_index ls t) = Some s ->
+  extend ls t = point s (extend_param ls t) ->
+  S (extend_index ls t) = length ls ->
+  1 < extend_param ls t ->
+  onLast_extend_strict ls (extend ls t).
+Proof.
+  intros ls t s Hne Hnth Hrepr Hindex Hparam.
+  assert (Hs : s = last_segment ls).
+  { unfold last_segment.
+    assert (K : extend_index ls t = (length ls - 1)%nat) by lia.
+    rewrite K in Hnth.
+    pose proof (@nth_error_last Segment ls default_segment Hne) as Hlast.
+    rewrite Hnth in Hlast. now injection Hlast. }
+  unfold onLast_extend_strict. exists (extend_param ls t).
+  split; [exact Hparam |]. now rewrite <- Hs, <- Hrepr.
 Qed.
 
 Lemma same_extend_piece_no_collision : forall ls t1 t2 s1 s2,
@@ -502,17 +545,19 @@ Proof.
     change (uo <= 0) in Huo.
     destruct (Rlt_dec uo 0) as [Huostrict | Huozero].
     + destruct (@nth_error_split Segment ls ib sb Hnthb)
-        as [l [r [Hsplit _]]].
+        as [l [r [Hsplit Hlen]]].
       destruct (Hsparse l sb r Hsplit) as [Hextend _].
       assert (Hwhole : l ++ [sb] ++ r = ls).
       { change (l ++ sb :: r = ls). now symmetry. }
       apply (Hextend (point sb ub)).
-      * left. rewrite Hwhole. unfold onHead_extend_strict.
+      * left. split.
+        -- intros Hl. subst l. simpl in Hlen. lia.
+        -- rewrite Hwhole. unfold onHead_extend_strict.
         assert (Hso : so = hd_segment ls).
         { rewrite Hio0 in Hntho. unfold hd_segment. symmetry.
           eapply nth_error_hd; exact Hntho. }
-        exists uo. split; [exact Huostrict |].
-        rewrite <- Hso, <- Hpoints. reflexivity.
+           exists uo. split; [exact Huostrict |].
+           rewrite <- Hso, <- Hpoints. reflexivity.
       * exact Hboxb.
     + assert (Huo0 : uo = 0) by lra.
       assert (Hlt : (io < ib)%nat) by lia.
@@ -523,20 +568,23 @@ Proof.
   - change (S io = length ls) in Hiolast.
     change (1 < uo) in Huo.
     destruct (@nth_error_split Segment ls ib sb Hnthb)
-      as [l [r [Hsplit _]]].
+      as [l [r [Hsplit Hlen]]].
     destruct (Hsparse l sb r Hsplit) as [Hextend _].
     assert (Hwhole : l ++ [sb] ++ r = ls).
     { change (l ++ sb :: r = ls). now symmetry. }
     apply (Hextend (point sb ub)).
-    + right. rewrite Hwhole. unfold onLast_extend_strict.
+    + right. split.
+      * intros Hr. subst r. simpl in Hsplit.
+        subst ls. rewrite length_app in Hiolast. simpl in Hiolast. lia.
+      * rewrite Hwhole. unfold onLast_extend_strict.
       assert (Hso : so = last_segment ls).
       { unfold last_segment.
         assert (K : io = (length ls - 1)%nat) by lia.
         rewrite K in Hntho.
         pose proof (@nth_error_last Segment ls default_segment Hne) as Hlast.
         rewrite Hntho in Hlast. now injection Hlast. }
-      exists uo. split; [exact Huo |].
-      rewrite <- Hso, <- Hpoints. reflexivity.
+        exists uo. split; [exact Huo |].
+        rewrite <- Hso, <- Hpoints. reflexivity.
     + exact Hboxb.
 Qed.
 
@@ -592,6 +640,80 @@ Proof.
   - apply Hneq. eapply same_extend_piece_no_collision; eauto; lia.
 Qed.
 
+(* 二つの異なるセグメント出現の正パラメータ部分が交わらない。
+   隣接点は後続セグメント側のパラメータ 0 なので、この条件には含まれない。 *)
+Definition positive_bodies_disjoint (ls : list Segment) : Prop :=
+  forall i j s t u v,
+    nth_error ls i = Some s ->
+    nth_error ls j = Some t ->
+    i <> j ->
+    0 < u <= 1 ->
+    0 < v <= 1 ->
+    point s u <> point t v.
+
+(* 先頭延長線と strict 末尾延長線は、全セグメントの正パラメータ部分を
+   避ける。末尾の t=1 は本体側に含まれるのでここでは重ねて要求しない。 *)
+Definition extensions_avoid_positive_bodies (ls : list Segment) : Prop :=
+  forall i s u,
+    nth_error ls i = Some s ->
+    0 < u <= 1 ->
+    (forall p, onHead_extend ls p -> p <> point s u)
+    /\ (forall p, onLast_extend_strict ls p -> p <> point s u).
+
+(* 本体・延長線の三種類の衝突を独立に排除すれば、列全体は開である。 *)
+Lemma separated_bodies_extensions_open :
+  forall ls,
+    ls <> [] ->
+    positive_bodies_disjoint ls ->
+    extensions_avoid_positive_bodies ls ->
+    extensions_disjoint ls ->
+    ~ close ls.
+Proof.
+  intros ls Hne Hbody Hextbody Hext [t1 [t2 [Hneq Heq]]].
+  destruct (extend_repr ls t1 Hne) as [s1 [Hnth1 Hrepr1]].
+  destruct (extend_repr ls t2 Hne) as [s2 [Hnth2 Hrepr2]].
+  assert (Hpoint : point s1 (extend_param ls t1) =
+                   point s2 (extend_param ls t2)).
+  { now rewrite <- Hrepr1, <- Hrepr2. }
+  destruct (extend_param_region ls t1 Hne) as [Hbody1 | [Hhead1 | Hlast1]];
+  destruct (extend_param_region ls t2 Hne) as [Hbody2 | [Hhead2 | Hlast2]].
+  - destruct (Nat.eq_dec (extend_index ls t1) (extend_index ls t2)) as [Hi | Hi].
+    + apply Hneq. eapply same_extend_piece_no_collision; eauto.
+    + exact (Hbody _ _ _ _ _ _ Hnth1 Hnth2 Hi Hbody1 Hbody2 Hpoint).
+  - destruct Hhead2 as [Hi2 Hu2].
+    pose proof (extend_head_from_repr
+                  ls t2 s2 Hne Hnth2 Hrepr2 Hi2 Hu2) as Hhead.
+    destruct (Hextbody _ _ _ Hnth1 Hbody1) as [Havoid _].
+    exact (Havoid (extend ls t2) Hhead ltac:(now rewrite Hrepr2, <- Hpoint)).
+  - destruct Hlast2 as [Hi2 Hu2].
+    pose proof (extend_last_strict_from_repr
+                  ls t2 s2 Hne Hnth2 Hrepr2 Hi2 Hu2) as Hlast.
+    destruct (Hextbody _ _ _ Hnth1 Hbody1) as [_ Havoid].
+    exact (Havoid (extend ls t2) Hlast ltac:(now rewrite Hrepr2, <- Hpoint)).
+  - destruct Hhead1 as [Hi1 Hu1].
+    pose proof (extend_head_from_repr
+                  ls t1 s1 Hne Hnth1 Hrepr1 Hi1 Hu1) as Hhead.
+    destruct (Hextbody _ _ _ Hnth2 Hbody2) as [Havoid _].
+    exact (Havoid (extend ls t1) Hhead ltac:(now rewrite Hrepr1, Hpoint)).
+  - apply Hneq. eapply same_extend_piece_no_collision; eauto; lia.
+  - destruct Hhead1 as [Hi1 Hu1].
+    destruct Hlast2 as [Hi2 Hu2].
+    apply (Hext (extend ls t1)).
+    + eapply extend_head_from_repr; eauto.
+    + rewrite Heq. eapply extend_last_from_repr; eauto.
+  - destruct Hlast1 as [Hi1 Hu1].
+    pose proof (extend_last_strict_from_repr
+                  ls t1 s1 Hne Hnth1 Hrepr1 Hi1 Hu1) as Hlast.
+    destruct (Hextbody _ _ _ Hnth2 Hbody2) as [_ Havoid].
+    exact (Havoid (extend ls t1) Hlast ltac:(now rewrite Hrepr1, Hpoint)).
+  - destruct Hhead2 as [Hi2 Hu2].
+    destruct Hlast1 as [Hi1 Hu1].
+    apply (Hext (extend ls t2)).
+    + eapply extend_head_from_repr; eauto.
+    + rewrite <- Heq. eapply extend_last_from_repr; eauto.
+  - apply Hneq. eapply same_extend_piece_no_collision; eauto; lia.
+Qed.
+
 Definition rot_rect (g : Rot) (Rc : Rect) : Rect :=
   match g with
   | R0   => Rc
@@ -606,6 +728,14 @@ Proof.
   intros g Rc [x y]. destruct g; unfold in_rect, rot_rect; simpl; split; intros; lra.
 Qed.
 
+Lemma in_closed_rect_rot :
+  forall g Rc p,
+    in_closed_rect (rot_rect g Rc) (rot_pt g p) <-> in_closed_rect Rc p.
+Proof.
+  intros g Rc [x y]. destruct g; unfold in_closed_rect, rot_rect; simpl;
+    split; intros; lra.
+Qed.
+
 Lemma rect_of_rot :
   forall g sub, sub <> [] -> rect_of (rot_segs g sub) = rot_rect g (rect_of sub).
 Proof.
@@ -616,14 +746,148 @@ Proof.
     rewrite ?Rmin_opp, ?Rmax_opp; reflexivity.
 Qed.
 
+Lemma in_rect_or_endpoints_at_rot :
+  forall g sub p,
+    sub <> [] ->
+    in_rect_or_endpoints_at (rot_segs g sub) (rot_pt g p) <->
+    in_rect_or_endpoints_at sub p.
+Proof.
+  intros g sub p Hsub.
+  unfold in_rect_or_endpoints_at.
+  rewrite rect_of_rot by exact Hsub.
+  apply in_closed_rect_rot.
+Qed.
+
+Lemma onHead_extend_rot :
+  forall g ls p,
+    ls <> [] ->
+    onHead_extend ls p ->
+    onHead_extend (rot_segs g ls) (rot_pt g p).
+Proof.
+  intros g ls p Hls Hp.
+  unfold onHead_extend in *.
+  unfold rot_segs.
+  rewrite hd_map_nonnil by exact Hls.
+  now apply onHead_rot.
+Qed.
+
+Lemma onLast_extend_rot :
+  forall g ls p,
+    ls <> [] ->
+    onLast_extend ls p ->
+    onLast_extend (rot_segs g ls) (rot_pt g p).
+Proof.
+  intros g ls p Hls Hp.
+  unfold onLast_extend in *.
+  unfold rot_segs.
+  rewrite last_map_nonnil by exact Hls.
+  now apply onLast_rot.
+Qed.
+
+Lemma onHead_extend_strict_rot :
+  forall g ls p,
+    ls <> [] ->
+    onHead_extend_strict ls p ->
+    onHead_extend_strict (rot_segs g ls) (rot_pt g p).
+Proof.
+  intros g ls p Hls [t [Ht Hp]].
+  exists t. split; [exact Ht |].
+  unfold rot_segs.
+  rewrite hd_map_nonnil by exact Hls.
+  rewrite rot_seg_point, Hp. reflexivity.
+Qed.
+
+Lemma onLast_extend_strict_rot :
+  forall g ls p,
+    ls <> [] ->
+    onLast_extend_strict ls p ->
+    onLast_extend_strict (rot_segs g ls) (rot_pt g p).
+Proof.
+  intros g ls p Hls [t [Ht Hp]].
+  exists t. split; [exact Ht |].
+  unfold rot_segs.
+  rewrite last_map_nonnil by exact Hls.
+  rewrite rot_seg_point, Hp. reflexivity.
+Qed.
+
 Lemma rot_sparse_embedding :
   forall g ls,
     sparse_embedding ls ->
     sparse_embedding (rot_segs g ls).
-Admitted.
+Proof.
+  intros g ls Hsparse l s r Hdecomp.
+  assert (Hwhole : l ++ [s] ++ r <> []).
+  { destruct l; simpl; discriminate. }
+  assert (Hback :
+      ls = rot_segs (rot_inv g) l ++
+           [rot_seg (rot_inv g) s] ++
+           rot_segs (rot_inv g) r).
+  { pose proof (f_equal (rot_segs (rot_inv g)) Hdecomp) as H.
+    rewrite rot_inv_segs in H.
+    rewrite !rot_segs_app in H. simpl in H.
+    exact H. }
+  pose proof
+    (Hsparse
+       (rot_segs (rot_inv g) l)
+       (rot_seg (rot_inv g) s)
+       (rot_segs (rot_inv g) r)
+       Hback) as Haround.
+  destruct Haround as [Hextensions Hrectangles].
+  split.
+  - intros p [[Hl Hhead] | [Hr Hlast]] Hin.
+    + apply (Hextensions (rot_pt (rot_inv g) p)).
+      * left. split.
+        -- now apply rot_segs_nonnil.
+        -- pose proof
+             (onHead_extend_strict_rot
+                (rot_inv g) (l ++ [s] ++ r) p Hwhole Hhead) as Hhead'.
+           rewrite !rot_segs_app in Hhead'. simpl in Hhead'. exact Hhead'.
+      * assert (Hin' :=
+            proj2 (in_rect_or_endpoints_at_rot
+                     (rot_inv g) [s] p ltac:(discriminate)) Hin).
+        simpl in Hin'. exact Hin'.
+    + apply (Hextensions (rot_pt (rot_inv g) p)).
+      * right. split.
+        -- now apply rot_segs_nonnil.
+        -- pose proof
+             (onLast_extend_strict_rot
+                (rot_inv g) (l ++ [s] ++ r) p Hwhole Hlast) as Hlast'.
+           rewrite !rot_segs_app in Hlast'. simpl in Hlast'. exact Hlast'.
+      * assert (Hin' :=
+            proj2 (in_rect_or_endpoints_at_rot
+                     (rot_inv g) [s] p ltac:(discriminate)) Hin).
+        simpl in Hin'. exact Hin'.
+  - intros t p Ht Hbox Hin.
+    apply (Hrectangles
+             (rot_seg (rot_inv g) t) (rot_pt (rot_inv g) p)).
+    + unfold rot_segs. rewrite nonadjacent_sides_map. now apply in_map.
+    + change (in_rect_or_endpoints_at [t] p) in Hbox.
+      assert (Hbox' :=
+          proj2 (in_rect_or_endpoints_at_rot
+                   (rot_inv g) [t] p ltac:(discriminate)) Hbox).
+      simpl in Hbox'. exact Hbox'.
+    + assert (Hin' :=
+          proj2 (in_rect_or_endpoints_at_rot
+                   (rot_inv g) [s] p ltac:(discriminate)) Hin).
+      simpl in Hin'. exact Hin'.
+Qed.
 
 Lemma rot_extensions_disjoint :
   forall g ls,
     extensions_disjoint ls ->
     extensions_disjoint (rot_segs g ls).
-Admitted.
+Proof.
+  intros g ls Hdisjoint p Hhead Hlast.
+  destruct ls as [|s ls].
+  - exact (Hdisjoint p Hhead Hlast).
+  - assert (Hne : rot_segs g (s :: ls) <> []).
+    { apply rot_segs_nonnil. discriminate. }
+    pose proof
+      (onHead_extend_rot
+         (rot_inv g) (rot_segs g (s :: ls)) p Hne Hhead) as Hhead'.
+    pose proof
+      (onLast_extend_rot
+         (rot_inv g) (rot_segs g (s :: ls)) p Hne Hlast) as Hlast'.
+    rewrite rot_inv_segs in Hhead', Hlast'.
+    exact (Hdisjoint (rot_pt (rot_inv g) p) Hhead' Hlast').
+Qed.

@@ -1,21 +1,9 @@
-Require Import Admissible.
-Require Import Reduction.
-Require Import Stdlib.Reals.Reals.
-Require Import Embed.
-Require Import PrimitiveSegment.
-Require Import Segment.
-Require Import SegmentsTranslation.
-Require Import ListExt.
-Require Import Stdlib.Logic.ClassicalDescription.
-Import ListNotations.
-From Stdlib Require Import Lra.
-From Stdlib Require Import Lia.
-
 Require Export Sparse.Classify.
-(* ================================================================= *)
-(* 端点移動後の再接続 *)
-(* ================================================================= *)
+Require Import Stdlib.Logic.ClassicalDescription.
+Require Import Stdlib.Lists.List.
+Import ListNotations.
 
+(* 分類後の端点から各セグメントを作り直す通常再接続。 *)
 Definition reconnectable_after
   (l sub r : list Segment) (h : R) (s : Segment) : Prop :=
   reconnectable
@@ -94,7 +82,25 @@ Definition reconnect_segs
   (l sub r : list Segment) (h : R) (ls : list Segment) : list Segment :=
   map (reconnect_one l sub r h) ls.
 
-(* sub 自体は変更せず、左右の全端点だけを移動して再接続する。 *)
-Definition reconnect_split
-  (l sub r : list Segment) (h : R) : list Segment :=
-  reconnect_segs l sub r h l ++ sub ++ reconnect_segs l sub r h r.
+(* sub 自体は変更せず、左右の全端点だけを通常の方法で再接続する。
+   安全な先頭・末尾を選ぶ最終的な [reconnect_split] の内部候補である。 *)
+
+Definition reconnects_after
+    (l sub r : list Segment) (h : R) (s s' : Segment) : Prop :=
+  init s' = operate_point l sub r h (init s)
+  /\ term s' = operate_point l sub r h (term s)
+  /\ orn_seg s' = orn_seg s.
+
+(* 左右の各セグメントを、位置を保って再接続した対応。 *)
+Definition reconnects_list_after
+    (l sub r : list Segment) (h : R)
+    (old new : list Segment) : Prop :=
+  Forall2 (reconnects_after l sub r h) old new.
+
+(* 同じ向きの再接続セグメントが、指定した全障害長方形を避けること。 *)
+Definition segment_avoids_boxes
+    (s : Segment) (blockers : list Segment) : Prop :=
+  forall t p,
+    In t blockers ->
+    in_segment_rect_or_endpoints t p ->
+    ~ onSegment s p.

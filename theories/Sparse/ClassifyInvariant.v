@@ -942,7 +942,6 @@ Lemma classified_nonadjacent_endpoint_order_from_construction :
       segment_x_ranges_overlap s t ->
       endpoint_of_seg s ps ->
       endpoint_of_seg t pt ->
-      ~ onSegmentlist sub ps ->
       ~ onSegmentlist sub pt ->
       snd ps <= snd pt ->
       region_at_or_above (classify l sub r pt) (classify l sub r ps).
@@ -1120,4 +1119,41 @@ Lemma classified_last_slope_case_from_construction :
     \/ (classify l sub r (term (last_segment r)) = RegDown
         /\ (embed (s, w, cc) (last_segment r)
             \/ embed (s, e, cc) (last_segment r))).
+Admitted.
+
+(* 蓋でない左境界の完全下側にある非隣接端点は上へ動かさない。
+   現行の境界パッチ構成に固有の幾何学的検証は、再接続側と分離しておく。 *)
+Lemma classified_below_terminal_not_up_from_construction :
+  forall l sub r,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
+    l <> [] ->
+    ~ terminal_lid l ->
+    forall t p,
+      In t (nonadjacent_sides l r) ->
+      segment_x_ranges_overlap t (last_segment l) ->
+      ry1 (rect_of [t]) < ry0 (rect_of [last_segment l]) ->
+      endpoint_of_seg t p ->
+      classify l sub r p <> RegUp.
+Admitted.
+
+(* 右境界についての双対。 *)
+Lemma classified_below_initial_not_up_from_construction :
+  forall l sub r,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
+    r <> [] ->
+    ~ initial_lid r ->
+    forall t p,
+      In t (nonadjacent_sides l r) ->
+      segment_x_ranges_overlap t (hd_segment r) ->
+      ry1 (rect_of [t]) < ry0 (rect_of [hd_segment r]) ->
+      endpoint_of_seg t p ->
+      classify l sub r p <> RegUp.
 Admitted.

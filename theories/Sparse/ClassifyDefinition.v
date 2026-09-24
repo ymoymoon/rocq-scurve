@@ -18,47 +18,6 @@ Require Export Sparse.ClassifyGeometry.
 (* 端点の分類と上下移動 *)
 (* ================================================================= *)
 
-Inductive Region : Type := RegFix | RegUp | RegDown.
-
-Inductive region_above : Region -> Region -> Prop :=
-  | RegUp_above_Fix : region_above RegUp RegFix
-  | RegUp_above_Down : region_above RegUp RegDown
-  | RegFix_above_Down : region_above RegFix RegDown.
-
-Definition region_at_or_above (g1 g2 : Region) : Prop :=
-  g1 = g2 \/ region_above g1 g2.
-
-Lemma region_at_or_above_RegUp_inv : forall g,
-  region_at_or_above g RegUp -> g = RegUp.
-Proof. intros g [H | H]; [exact H | inversion H]. Qed.
-
-Lemma RegDown_at_or_above_inv : forall g,
-  region_at_or_above RegDown g -> g = RegDown.
-Proof. intros g [H | H]; [now symmetry | inversion H]. Qed.
-
-Lemma region_above_not_reverse :
-  forall g1 g2,
-    region_above g1 g2 -> ~ region_at_or_above g2 g1.
-Proof.
-  intros g1 g2 H. destruct H; intros [Heq | Hrev];
-    try discriminate; inversion Hrev.
-Qed.
-
-Definition endpoint_of_seg (s : Segment) (p : Point) : Prop :=
-  p = init s \/ p = term s.
-
-Definition endpoint_of (ls : list Segment) (p : Point) : Prop :=
-  exists s, In s ls /\ endpoint_of_seg s p.
-
-Lemma endpoint_of_onSegmentlist : forall ls p,
-  endpoint_of ls p -> onSegmentlist ls p.
-Proof.
-  intros ls p [s [Hs Hend]]. exists s. split; [exact Hs |].
-  destruct Hend as [Hp | Hp].
-  - subst p. apply onInit.
-  - subst p. apply onTerm.
-Qed.
-
 (* ----------------------------------------------------------------- *)
 (*  分類境界と端点補正                                               *)
 (* ----------------------------------------------------------------- *)
@@ -725,23 +684,3 @@ Proof.
   apply process_both_ends_fix_inv in Hfix.
   now apply process_both_ends_fix_inv in Hfix.
 Qed.
-
-Definition in_sub_x_range (sub : list Segment) (p : Point) : Prop :=
-  rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub).
-
-Definition above_sub_at_x (sub : list Segment) (p : Point) : Prop :=
-  exists q,
-    onSegmentlist sub q
-    /\ fst p = fst q
-    /\ snd q < snd p.
-
-Definition below_sub_at_x (sub : list Segment) (p : Point) : Prop :=
-  exists q,
-    onSegmentlist sub q
-    /\ fst p = fst q
-    /\ snd p < snd q.
-
-(* x 方向の閉区間が交わる二つの端点長方形。 *)
-Definition segment_x_ranges_overlap (s t : Segment) : Prop :=
-  rx0 (rect_of [s]) <= rx1 (rect_of [t])
-  /\ rx0 (rect_of [t]) <= rx1 (rect_of [s]).
