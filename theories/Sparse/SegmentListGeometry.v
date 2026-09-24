@@ -564,10 +564,6 @@ Proof.
     exact Hpt.
 Qed.
 
-Corollary open_no_crossing : forall ls, ls <> [] -> ~ close ls -> ~ crossing ls.
-Proof. intros ls Hne H Hc. apply H. apply crossing_close; assumption. Qed.
-
-
 (* embed_scurve, listDir に関わる補題 *)
 Definition nil_scurve : scurve := exist _ nil IsScurveNil.
 

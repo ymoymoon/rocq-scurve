@@ -804,10 +804,10 @@ Qed.
 
 (* 疎性と延長線を保つ再接続。 *)
 
-(* sub に隣接する l 末尾より下の端点は、分類移動後にもその旧長方形
-   より下に残る。隣接・非隣接の区別は不要である。 *)
+(* l 末尾と x 範囲が重なる非隣接セグメントがその完全下側にあれば、
+   各端点は分類移動後にも l 末尾の旧長方形より下に残る。 *)
 Lemma operated_endpoint_below_terminal_stays_below :
-  forall l sub r h p,
+  forall l sub r h t p,
     sub <> [] ->
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
@@ -816,24 +816,35 @@ Lemma operated_endpoint_below_terminal_stays_below :
     0 <= h ->
     l <> [] ->
     ~ terminal_lid l ->
-    endpoint_of (l ++ sub ++ r) p ->
-    snd p < ry0 (rect_of [last_segment l]) ->
+    In t (nonadjacent_sides l r) ->
+    segment_x_ranges_overlap t (last_segment l) ->
+    ry1 (rect_of [t]) < ry0 (rect_of [last_segment l]) ->
+    endpoint_of_seg t p ->
     snd (operate_point l sub r h p) < ry0 (rect_of [last_segment l]).
 Proof.
-  intros l sub r h p Hne Hmono Hsparse Hembed Hext Hh Hl HnotLid Hp Hbelow.
+  intros l sub r h t p Hne Hmono Hsparse Hembed Hext Hh Hl HnotLid
+    Ht Hoverlap Hbelow Hp.
   unfold operate_point.
   pose proof (classified_below_terminal_not_up
                 l sub r
                 (classify_spec l sub r Hne Hmono Hsparse Hembed Hext)
-                Hl HnotLid p Hp Hbelow) as HnotUp.
+                Hl HnotLid t p Ht Hoverlap Hbelow Hp) as HnotUp.
   pose proof (shift_not_up_nonincreasing
                 h (classify l sub r p) p Hh HnotUp).
-  lra.
+  change (Rmax (snd (init t)) (snd (term t)) <
+          Rmin (snd (init (last_segment l)))
+               (snd (term (last_segment l)))) in Hbelow.
+  change (snd (shift h (classify l sub r p) p) <
+          Rmin (snd (init (last_segment l)))
+               (snd (term (last_segment l)))).
+  destruct Hp as [-> | ->];
+    pose proof (Rmax_l (snd (init t)) (snd (term t)));
+    pose proof (Rmax_r (snd (init t)) (snd (term t))); lra.
 Qed.
 
 (* r 先頭についての双対。 *)
 Lemma operated_endpoint_below_initial_stays_below :
-  forall l sub r h p,
+  forall l sub r h t p,
     sub <> [] ->
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
@@ -842,19 +853,30 @@ Lemma operated_endpoint_below_initial_stays_below :
     0 <= h ->
     r <> [] ->
     ~ initial_lid r ->
-    endpoint_of (l ++ sub ++ r) p ->
-    snd p < ry0 (rect_of [hd_segment r]) ->
+    In t (nonadjacent_sides l r) ->
+    segment_x_ranges_overlap t (hd_segment r) ->
+    ry1 (rect_of [t]) < ry0 (rect_of [hd_segment r]) ->
+    endpoint_of_seg t p ->
     snd (operate_point l sub r h p) < ry0 (rect_of [hd_segment r]).
 Proof.
-  intros l sub r h p Hne Hmono Hsparse Hembed Hext Hh Hr HnotLid Hp Hbelow.
+  intros l sub r h t p Hne Hmono Hsparse Hembed Hext Hh Hr HnotLid
+    Ht Hoverlap Hbelow Hp.
   unfold operate_point.
   pose proof (classified_below_initial_not_up
                 l sub r
                 (classify_spec l sub r Hne Hmono Hsparse Hembed Hext)
-                Hr HnotLid p Hp Hbelow) as HnotUp.
+                Hr HnotLid t p Ht Hoverlap Hbelow Hp) as HnotUp.
   pose proof (shift_not_up_nonincreasing
                 h (classify l sub r p) p Hh HnotUp).
-  lra.
+  change (Rmax (snd (init t)) (snd (term t)) <
+          Rmin (snd (init (hd_segment r)))
+               (snd (term (hd_segment r)))) in Hbelow.
+  change (snd (shift h (classify l sub r p) p) <
+          Rmin (snd (init (hd_segment r)))
+               (snd (term (hd_segment r)))).
+  destruct Hp as [-> | ->];
+    pose proof (Rmax_l (snd (init t)) (snd (term t)));
+    pose proof (Rmax_r (snd (init t)) (snd (term t))); lra.
 Qed.
 
 (* 十分大きい移動では、各セグメントの二端点の y 座標は一致しない。 *)

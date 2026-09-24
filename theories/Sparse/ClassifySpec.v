@@ -50,18 +50,22 @@ Record ClassificationSpec
   classified_below_terminal_not_up :
     l <> [] ->
     ~ terminal_lid l ->
-    forall p,
-      endpoint_of (l ++ sub ++ r) p ->
-      snd p < ry0 (rect_of [last_segment l]) ->
+    forall t p,
+      In t (nonadjacent_sides l r) ->
+      segment_x_ranges_overlap t (last_segment l) ->
+      ry1 (rect_of [t]) < ry0 (rect_of [last_segment l]) ->
+      endpoint_of_seg t p ->
       classifier p <> RegUp;
 
   (* r 先頭が蓋でない通常境界についても同様。 *)
   classified_below_initial_not_up :
     r <> [] ->
     ~ initial_lid r ->
-    forall p,
-      endpoint_of (l ++ sub ++ r) p ->
-      snd p < ry0 (rect_of [hd_segment r]) ->
+    forall t p,
+      In t (nonadjacent_sides l r) ->
+      segment_x_ranges_overlap t (hd_segment r) ->
+      ry1 (rect_of [t]) < ry0 (rect_of [hd_segment r]) ->
+      endpoint_of_seg t p ->
       classifier p <> RegUp;
 
   (* sub の x 範囲でその上側・下側を通る非隣接セグメントは、

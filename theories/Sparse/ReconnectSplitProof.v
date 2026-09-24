@@ -1095,17 +1095,10 @@ Proof.
               snd (operate_point l sub r h p) <
               snd (operate_point l sub r h (term b))).
           { intros p Hp.
-            assert (HpWhole : endpoint_of (l ++ sub ++ r) p).
-            { exists t. split; [now apply nth_error_In in Ht | exact Hp]. }
-            assert (HpBelow : snd p < ry0 (rect_of [b])).
-            { change (snd p < Rmin (snd (init b)) (snd (term b))).
-              destruct Hp as [-> | ->];
-              pose proof (Rmax_l (snd (init t)) (snd (term t)));
-              pose proof (Rmax_r (snd (init t)) (snd (term t))); lra. }
             pose proof (operated_endpoint_below_terminal_stays_below
-                          l sub r h p Hsub Hmono Hsparse
+                          l sub r h t p Hsub Hmono Hsparse
                           (ex_intro _ ds Hembed) Hext (Rlt_le _ _ (proj1 Hh))
-                          Hl HnotTerminal HpWhole HpBelow) as Hop.
+                          Hl HnotTerminal Hin HoverlapRev HtBelow Hp) as Hop.
             change (snd (operate_point l sub r h p) <
                     Rmin (snd (init b)) (snd (term b))) in Hop.
             rewrite Hfixed. eapply Rlt_le_trans; [exact Hop | apply Rmin_r]. }
@@ -1320,17 +1313,10 @@ Proof.
               snd (operate_point l sub r h p) <
               snd (operate_point l sub r h (init b))).
           { intros p Hp.
-            assert (HpWhole : endpoint_of (l ++ sub ++ r) p).
-            { exists t. split; [now apply nth_error_In in Ht | exact Hp]. }
-            assert (HpBelow : snd p < ry0 (rect_of [b])).
-            { change (snd p < Rmin (snd (init b)) (snd (term b))).
-              destruct Hp as [-> | ->];
-                pose proof (Rmax_l (snd (init t)) (snd (term t)));
-                pose proof (Rmax_r (snd (init t)) (snd (term t))); lra. }
             pose proof (operated_endpoint_below_initial_stays_below
-                          l sub r h p Hsub Hmono Hsparse
+                          l sub r h t p Hsub Hmono Hsparse
                           (ex_intro _ ds Hembed) Hext (Rlt_le _ _ (proj1 Hh))
-                          Hr HnotInitial HpWhole HpBelow) as Hop.
+                          Hr HnotInitial Hin HoverlapRev HtBelow Hp) as Hop.
             change (snd (operate_point l sub r h p) <
                     Rmin (snd (init b)) (snd (term b))) in Hop.
             rewrite Hfixed. eapply Rlt_le_trans; [exact Hop | apply Rmin_l]. }
@@ -1552,25 +1538,6 @@ Proof.
                ordinary_s ordinary_t Hseparated p).
       * now apply segment_in_rect_or_endpoints.
       * now apply segment_in_rect_or_endpoints.
-Qed.
-
-(* 具体的な再接続列について、本体・延長線の三種類の衝突を排除して
-   開性を得る。初期 sparse 性は各衝突証明書を作る前段でのみ使う。 *)
-Lemma reconnect_preserves_open :
-  forall l sub r h,
-    sub <> [] ->
-    positive_bodies_disjoint (reconnect_split l sub r h) ->
-    extensions_avoid_positive_bodies (reconnect_split l sub r h) ->
-    extensions_disjoint (reconnect_split l sub r h) ->
-    ~ close (reconnect_split l sub r h).
-Proof.
-  intros l sub r h Hsub Hbody Hextbody Hext.
-  apply separated_bodies_extensions_open; try assumption.
-  intros Hnil.
-  unfold reconnect_split in Hnil.
-  apply app_eq_nil in Hnil as [_ Hsubr].
-  apply app_eq_nil in Hsubr as [Hsubnil _].
-  now apply Hsub.
 Qed.
 
 (* 再接続後に残す不変量は、sub 周りの局所 sparse 性と開性だけである。 *)

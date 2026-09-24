@@ -55,15 +55,6 @@ Lemma RegDown_at_or_above_inv : forall g,
   region_at_or_above RegDown g -> g = RegDown.
 Proof. intros g [H | H]; [now symmetry | inversion H]. Qed.
 
-Lemma RegFix_at_or_above_not_up : forall g,
-  g <> RegUp -> region_at_or_above RegFix g.
-Proof.
-  intros g Hnot. destruct g.
-  - now left.
-  - contradiction.
-  - right. constructor.
-Qed.
-
 Definition endpoint_of_seg (s : Segment) (p : Point) : Prop :=
   p = init s \/ p = term s.
 
