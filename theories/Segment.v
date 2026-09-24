@@ -55,6 +55,8 @@ Definition term_y (s: Segment) : R := snd (term s).
 Parameter embed : PrimitiveSegment -> Segment -> Prop.
 Parameter primitive_segment : Segment -> PrimitiveSegment.
 Axiom primitive_segment_embed : forall s, embed (primitive_segment s) s.
+Axiom embed_primitive_segment : forall ps s,
+  embed ps s -> ps = primitive_segment s.
 
 (* Segment の向きは対応する PrimitiveSegment の向きと一致する。 *)
 Parameter orn_seg : Segment -> Direction.

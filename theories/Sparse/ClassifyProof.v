@@ -114,6 +114,7 @@ Qed.
 
 (* sub 上から出た順序パスは、sub 外だけを通って Down source へ
    到達できない。末尾側まで含む下側の局所的な障壁補題である。 *)
+(* 上側の双対 *)
 Lemma endpoint_order_sub_first_exit_to_down_impossible :
   forall l sub r,
     ClassificationContext l sub r ->
@@ -712,6 +713,33 @@ Proof.
   - unfold sub_left_anchor. now rewrite <- Hhd.
 Qed.
 
+(* 蓋でない右境界は東向きで、その始点が sub の右 anchor である。 *)
+Lemma ordinary_initial_boundary_data : forall l sub r,
+  ClassificationContext l sub r ->
+  r <> [] ->
+  ~ initial_lid r ->
+  fst (init (hd_segment r)) < fst (term (hd_segment r))
+  /\ init (hd_segment r) = sub_right_anchor sub.
+Proof.
+  intros l sub r Hctx Hr HnotLid.
+  assert (Hsub : sub <> []) by now apply context_sub_nonempty with (l := l) (r := r).
+  assert (Hleft : l ++ sub <> []).
+  { intro Hnil. apply app_eq_nil in Hnil. tauto. }
+  assert (Hjoin : term (last_segment (l ++ sub)) = init (hd_segment r)).
+  { apply connected_app_junction; [|exact Hleft|exact Hr].
+    rewrite <- app_assoc. exact (context_whole_connected l sub r Hctx). }
+  assert (Hlast : last_segment (l ++ sub) = last_segment sub).
+  { now apply last_app_nonnil. }
+  split.
+  - destruct (total_order_T
+                (fst (init (hd_segment r)))
+                (fst (term (hd_segment r)))) as [[Hlt | Heq] | Hgt].
+    + exact Hlt.
+    + exfalso. apply (neq_init_term_x (hd_segment r)). exact Heq.
+    + exfalso. apply HnotLid. now split.
+  - unfold sub_right_anchor. now rewrite <- Hlast, Hjoin.
+Qed.
+
 (* sub の同じ x に下側の本体点を持つ非隣接セグメントの端点は、
    その本体点を証人とする Down seed なので RegDown になる。 *)
 Lemma nonadjacent_below_sub_point_classified_down : forall l sub r t p z,
@@ -762,6 +790,36 @@ Proof.
   - pose proof (w_end_relation s1 n c Hembed1). lra.
   - pose proof (s_end_relation s1 e c Hembed1). lra.
   - pose proof (w_end_relation s1 s c Hembed1). lra.
+Qed.
+
+(* 東南向き境界の直前にある falling な先頭 trace は、接続点より
+   右下へ戻れない。左側で用いる補題の左右双対。 *)
+Lemma dc_before_southeast_cannot_return_right_below :
+  forall ps1 ps2 s1 s2 p,
+    dc ps1 ps2 ->
+    embed ps1 s1 ->
+    embed ps2 s2 ->
+    term s1 = init s2 ->
+    fst (init s2) < fst (term s2) ->
+    snd (term s2) < snd (init s2) ->
+    onHeadSegment s1 p ->
+    fst (term s1) < fst p ->
+    snd p < snd (term s1) ->
+    False.
+Proof.
+  intros ps1 [[v h] c] s1 s2 p Hdc Hembed1 Hembed2 Hjoin
+    Hx2 Hy2 Hp Hpx Hpy.
+  destruct v, h.
+  - pose proof (n_end_relation s2 e c Hembed2). lra.
+  - pose proof (w_end_relation s2 n c Hembed2). lra.
+  - inversion Hdc; subst; clear Hdc.
+    + pose proof (embedded_head_trace_horizontal_bound
+                    s1 s e c0 p Hembed1 Hp). cbn in H. lra.
+    + pose proof (embedded_head_trace_horizontal_bound
+                    s1 n e cx p Hembed1 Hp). cbn in H. lra.
+    + pose proof (embedded_head_trace_vertical_bound
+                    s1 s h cx p Hembed1 Hp). cbn in H. lra.
+  - pose proof (w_end_relation s2 s c Hembed2). lra.
 Qed.
 
 Lemma classification_context_app_boundary_data :
@@ -951,6 +1009,156 @@ Proof.
         -- exact HbBox.
 Qed.
 
+(* 通常右境界の下端高さにある falling 障壁点は、その境界セグメントの
+   右端より左へ入れない。左側の floor 補題の左右双対。 *)
+Lemma ordinary_initial_barrier_floor_not_left :
+  forall l sub r side b,
+    ClassificationContext l sub r ->
+    r <> [] ->
+    ~ initial_lid r ->
+    on_barrier_trace side (l ++ sub ++ r) b ->
+    right_falling_barrier side (l ++ sub ++ r) ->
+    snd b = ry0 (rect_of [hd_segment r]) ->
+    fst (sub_right_anchor sub) < fst b ->
+    rx1 (rect_of [hd_segment r]) <= fst b.
+Proof.
+  intros l sub r side b Hctx Hr HnotLid Htrace Hfalling Hby Hbx.
+  destruct (ordinary_initial_boundary_data l sub r Hctx Hr HnotLid)
+    as [Heast Hjoin].
+  apply Rnot_lt_le. intro HinsideRight.
+  assert (HinsideLeft : fst (init (hd_segment r)) < fst b).
+  { now rewrite Hjoin. }
+  assert (HtermRight : fst b < fst (term (hd_segment r))).
+  { change (fst b < Rmax (fst (init (hd_segment r)))
+                           (fst (term (hd_segment r)))) in HinsideRight.
+    rewrite Rmax_right in HinsideRight by lra. exact HinsideRight. }
+  assert (HbBox : in_segment_rect_or_endpoints (hd_segment r) b).
+  { unfold in_segment_rect_or_endpoints, in_closed_rect, rect_of. cbn.
+    split.
+    - rewrite Rmin_left, Rmax_right by lra. lra.
+    - rewrite Hby. split; [apply Rle_refl | apply Rminmax]. }
+  destruct r as [|a tail]; [contradiction |].
+  cbn in Hjoin, Heast, HinsideLeft, HtermRight, HbBox, Hby.
+  set (prefix := l ++ sub).
+  assert (Hprefix : prefix <> []).
+  { unfold prefix. intro Hnil. apply app_eq_nil in Hnil.
+    destruct Hnil as [_ Hsub]. exact (context_sub_nonempty l sub (a :: tail) Hctx Hsub). }
+  assert (Hdecomp : l ++ sub ++ a :: tail = prefix ++ [a] ++ tail).
+  { unfold prefix. rewrite app_assoc. reflexivity. }
+  destruct (context_sparse l sub (a :: tail) Hctx prefix a tail Hdecomp)
+    as [Hext Hrect].
+  rewrite Hdecomp in Htrace, Hfalling.
+  destruct side.
+  - cbn in Htrace, Hfalling.
+    destruct Htrace as [u [Hu Hub]].
+    destruct prefix as [|h prefix']; [contradiction |].
+    cbn in Hub, Hfalling.
+    destruct (Rlt_dec u 0) as [HuStrict | HuBody].
+    + apply (Hext b).
+      * left. split; [discriminate |].
+        unfold onHead_extend_strict. exists u. split; assumption.
+      * exact HbBox.
+    + assert (HbBody : onSegment h b).
+      { exists u. split; [lra | exact Hub]. }
+      destruct prefix' as [|h' prefix''].
+      * assert (HwholeConn : connected ([h] ++ a :: tail)).
+        { pose proof (context_whole_connected l sub (a :: tail) Hctx) as Hconn.
+          rewrite Hdecomp in Hconn. exact Hconn. }
+        assert (Hboundary : term h = init a).
+        { eapply connected_app_junction with (l := [h]) (r := a :: tail);
+            eauto; discriminate. }
+        destruct (classification_context_app_boundary_data
+                    l sub (a :: tail) [h] (a :: tail) Hctx
+                    ltac:(rewrite Hdecomp; reflexivity)
+                    ltac:(discriminate) ltac:(discriminate))
+          as [ps1 [ps2 [Hemb1 [Hemb2 [Hdc _]]]]].
+        assert (HjointTrace : onHeadSegment h (term h)).
+        { exists 1. split; [lra | reflexivity]. }
+        assert (HbTrace : onHeadSegment h b).
+        { exists u. split; [exact Hu | exact Hub]. }
+        assert (HbBelowJoint : snd b < snd (term h)).
+        { apply (proj1 (Hfalling (term h) b HjointTrace HbTrace)).
+          now rewrite Hboundary. }
+        assert (HaSouth : snd (term a) < snd (init a)).
+        { change (snd b = Rmin (snd (init a)) (snd (term a))) in Hby.
+          rewrite Hboundary in HbBelowJoint.
+          unfold Rmin in Hby. destruct Rle_dec; lra. }
+        exact (dc_before_southeast_cannot_return_right_below
+                 ps1 ps2 h a b Hdc Hemb1 Hemb2 Hboundary Heast HaSouth
+                 HbTrace ltac:(now rewrite Hboundary) HbBelowJoint).
+      * apply (Hrect h b).
+        -- unfold nonadjacent_sides. rewrite in_app_iff. left. simpl. now left.
+        -- exact (segment_in_rect_or_endpoints h b HbBody).
+        -- exact HbBox.
+  - cbn in Htrace, Hfalling.
+    destruct Htrace as [u [Hu Hub]].
+    destruct tail as [|s tail'].
+    + assert (HlastSelf : last_segment (prefix ++ [a]) = a)
+        by now apply last_app_nonnil.
+      rewrite HlastSelf in Hub.
+      unfold right_falling_barrier, on_barrier_trace in Hfalling. cbn in Hfalling.
+      rewrite HlastSelf in Hfalling.
+      assert (HbTrace : onLastSegment a b).
+      { exists u. split; [exact Hu | exact Hub]. }
+      assert (HtermTrace : onLastSegment a (term a)).
+      { exists 1. split; [lra | reflexivity]. }
+      pose proof (proj1 (Hfalling b (term a) HbTrace HtermTrace) HtermRight).
+      change (snd b = Rmin (snd (init a)) (snd (term a))) in Hby.
+      pose proof (Rmin_r (snd (init a)) (snd (term a))). lra.
+    + destruct (Rlt_dec 1 u) as [HuStrict | HuBody].
+      * apply (Hext b).
+        -- right. split; [discriminate |].
+           unfold onLast_extend_strict. exists u. split; assumption.
+        -- exact HbBox.
+      * assert (HlastWhole : last_segment (prefix ++ a :: s :: tail') =
+                              last_segment (s :: tail')).
+        { rewrite (last_app_nonnil prefix (a :: s :: tail')) by discriminate.
+          change (last_segment ([a] ++ s :: tail') = last_segment (s :: tail')).
+          apply last_app_nonnil. discriminate. }
+        assert (HbBody : onSegment (last_segment (s :: tail')) b).
+        { rewrite HlastWhole in Hub. exists u. split; [lra | exact Hub]. }
+        destruct tail' as [|s' tail''].
+        -- cbn in HbBody, HlastWhole.
+           assert (Hboundary : term a = init s).
+           { destruct (classification_context_app_boundary_data
+                         l sub (a :: [s]) (prefix ++ [a]) [s] Hctx
+                         ltac:(rewrite Hdecomp, app_assoc; reflexivity)
+                         ltac:(intro Hnil; apply app_eq_nil in Hnil;
+                               destruct Hnil as [_ Hnil]; discriminate)
+                         ltac:(discriminate))
+               as [ps1 [ps2 [Hemb1 [Hemb2 [Hdc Hboundary]]]]].
+             rewrite last_app_nonnil in Hboundary by discriminate.
+             cbn in Hboundary. exact Hboundary. }
+           assert (HbTrace : onLastSegment s b).
+           { destruct HbBody as [v [[Hv0 Hv1] Hvb]].
+             exists v. split; [exact Hv0 | exact Hvb]. }
+           assert (HinitTrace : onLastSegment s (init s)).
+           { exists 0. split; [lra | reflexivity]. }
+           assert (HbLeftInit : fst b < fst (init s)) by now rewrite <- Hboundary.
+           assert (HfallingS : forall x y,
+               onLastSegment s x -> onLastSegment s y ->
+               (fst x < fst y <-> snd y < snd x)).
+           { intros x y Hx Hy. apply Hfalling.
+             - cbn. rewrite HlastWhole. exact Hx.
+             - cbn. rewrite HlastWhole. exact Hy. }
+           pose proof (proj1 (HfallingS b (init s) HbTrace HinitTrace)
+                         HbLeftInit) as HfallY.
+           change (snd b = Rmin (snd (init a)) (snd (term a))) in Hby.
+           pose proof (Rmin_r (snd (init a)) (snd (term a))) as Hmin.
+           rewrite <- Hboundary in HfallY. lra.
+        -- apply (Hrect (last_segment (s :: s' :: tail'')) b).
+           ++ unfold nonadjacent_sides. rewrite in_app_iff. right.
+              change (In (last_segment (s :: s' :: tail'')) (s' :: tail'')).
+              assert (HlastTail : last_segment (s :: s' :: tail'') =
+                                    last_segment (s' :: tail'')).
+              { change (last_segment ([s] ++ s' :: tail'') =
+                        last_segment (s' :: tail'')).
+                apply last_app_nonnil. discriminate. }
+              rewrite HlastTail. apply last_In. discriminate.
+           ++ exact (segment_in_rect_or_endpoints _ _ HbBody).
+           ++ exact HbBox.
+Qed.
+
 (* 左下の certificate core は通常境界の下端高さまで実在する。そこでの
    障壁点は、通常境界との重なりにより target の右端より左にある。 *)
 Lemma ordinary_terminal_core_reaches_floor :
@@ -1002,6 +1210,54 @@ Proof.
   exists b. repeat split; assumption.
 Qed.
 
+(* 右下の certificate core も通常右境界の下端高さまで実在する。 *)
+Lemma ordinary_initial_core_reaches_floor :
+  forall l sub r t p side,
+    ClassificationContext l sub r ->
+    r <> [] ->
+    ~ initial_lid r ->
+    segment_x_ranges_overlap t (hd_segment r) ->
+    ry1 (rect_of [t]) < ry0 (rect_of [hd_segment r]) ->
+    endpoint_of_seg t p ->
+    right_barrier_core side l sub r p ->
+    exists b,
+      on_barrier_trace side (l ++ sub ++ r) b
+      /\ snd b = ry0 (rect_of [hd_segment r])
+      /\ fst b < fst p
+      /\ rx1 (rect_of [hd_segment r]) <= fst b
+      /\ rx0 (rect_of [t]) <= fst b.
+Proof.
+  intros l sub r t p side Hctx Hr HnotLid Hover Hbelow Hp Hcore.
+  destruct (ordinary_initial_boundary_data l sub r Hctx Hr HnotLid)
+    as [_ Hjoin].
+  pose proof Hcore as Hcore'.
+  unfold right_barrier_core in Hcore'. cbn in Hcore'.
+  destruct Hcore' as [Hwhole [Hfalling [Hpx [Hpy Hopen]]]].
+  assert (HpBox : in_segment_rect_or_endpoints t p).
+  { apply segment_in_rect_or_endpoints. destruct Hp as [-> | ->];
+      [apply onInit | apply onTerm]. }
+  unfold in_segment_rect_or_endpoints, in_closed_rect in HpBox.
+  destruct HpBox as [_ [_ HpTop]].
+  assert (HpFloor : snd p < ry0 (rect_of [hd_segment r])) by lra.
+  assert (HfloorAnchor :
+      ry0 (rect_of [hd_segment r]) <= snd (sub_right_anchor sub)).
+  { change (Rmin (snd (init (hd_segment r)))
+                 (snd (term (hd_segment r))) <=
+            snd (sub_right_anchor sub)).
+    rewrite <- Hjoin. apply Rmin_l. }
+  destruct (Hopen (ry0 (rect_of [hd_segment r])) ltac:(lra))
+    as [x [[HanchorX Hxp] Htrace]].
+  set (b := (x, ry0 (rect_of [hd_segment r]))).
+  assert (HbTrace : on_barrier_trace side (l ++ sub ++ r) b) by exact Htrace.
+  assert (HbFloor : snd b = ry0 (rect_of [hd_segment r])) by reflexivity.
+  assert (HbBoundary : rx1 (rect_of [hd_segment r]) <= fst b).
+  { eapply (ordinary_initial_barrier_floor_not_left
+              l sub r side b Hctx Hr HnotLid); eauto. }
+  assert (HbTarget : rx0 (rect_of [t]) <= fst b).
+  { unfold segment_x_ranges_overlap in Hover. cbn in HanchorX, Hxp. lra. }
+  exists b. repeat split; assumption.
+Qed.
+
 (* 通常高さの証明書では、同じ高さの障壁点が target の閉長方形へ
    入る。同一・非隣接は単射性と sparse、隣接だけを dc で処理する。 *)
 Lemma ordinary_terminal_at_level_collision_impossible :
@@ -1042,9 +1298,218 @@ Proof.
     unfold in_segment_rect_or_endpoints, in_closed_rect in HpBox |- *.
     destruct p as [xp yp]. cbn in *. destruct HpBox as [[Hpx0 Hpx1] [Hpy0 Hpy1]].
     split; cbn; split; lra. }
-  (* 残る有限の場合分けは、障壁が target と同一・遠隔・隣接の順。
-     隣接二場合は head/last trace 補題と dc 補題へ還元する。 *)
-Admitted.
+  assert (HtWhole : In t (l ++ sub ++ r)) by now apply nonadjacent_sides_in_whole.
+  destruct (in_app_app (l ++ sub ++ r) t HtWhole)
+    as [before [after Hdecomp]].
+  destruct (context_sparse l sub r Hctx before t after Hdecomp)
+    as [Hext Hrect].
+  rewrite Hdecomp in HxbTrace, HbTrace, Hrising.
+  destruct side.
+  - cbn in HxbTrace, HbTrace, Hrising.
+    destruct HxbTrace as [u [Hu Hub]].
+    destruct before as [|h before']; cbn in Hub, HbTrace, Hrising.
+    + assert (HpTrace : onHeadSegment t p).
+      { destruct Hp as [-> | ->].
+        - exists 0. split; [lra | reflexivity].
+        - exists 1. split; [lra | reflexivity]. }
+      assert (HbpTrace : onHeadSegment t (xb, snd p)).
+      { exists u. split; [exact Hu | exact Hub]. }
+      pose proof (right_rising_barrier_same_height_unique
+                    BarrierHead (t :: after) p (xb, snd p)
+                    Hrising HpTrace HbpTrace eq_refl) as Heq.
+      pose proof (f_equal fst Heq). cbn in H. lra.
+    + destruct (Rlt_dec u 0) as [HuStrict | HuBody].
+      * apply (Hext (xb, snd p)).
+        -- left. split; [discriminate |].
+           unfold onHead_extend_strict. exists u. split; [exact HuStrict |].
+           exact Hub.
+        -- exact HxbBox.
+      * assert (HbpBody : onSegment h (xb, snd p)).
+        { exists u. split; [lra | exact Hub]. }
+        destruct before' as [|h' before''].
+        -- assert (HwholeConn : connected ([h] ++ t :: after)).
+           { replace ([h] ++ t :: after) with ([h] ++ [t] ++ after)
+               by reflexivity.
+             rewrite <- Hdecomp. exact (context_whole_connected l sub r Hctx). }
+           assert (Hjunction : term h = init t).
+           { eapply connected_app_junction with (l := [h]) (r := t :: after);
+               eauto; discriminate. }
+           assert (HjointTrace : onHeadSegment h (init t)).
+           { rewrite <- Hjunction. exists 1. split; [lra | reflexivity]. }
+           assert (HbpTrace : onHeadSegment h (xb, snd p)).
+           { exists u. split; [exact Hu | exact Hub]. }
+           destruct Hp as [Hp | Hp].
+           ++ subst p.
+              pose proof (right_rising_barrier_same_height_unique
+                            BarrierHead (h :: t :: after)
+                            (init t) (xb, snd (init t))
+                            Hrising HjointTrace HbpTrace eq_refl) as Heq.
+              pose proof (f_equal fst Heq). cbn in H. lra.
+           ++ subst p.
+              destruct (total_order_T (snd (init t)) (snd (term t)))
+                as [[Hnorth | HeqY] | Hsouth].
+              ** assert (HjointLeft : fst (init t) < xb).
+                 { apply (proj2 (Hrising (init t) (xb, snd (term t))
+                                   HjointTrace HbpTrace)). cbn. exact Hnorth. }
+                 unfold in_segment_rect_or_endpoints, in_closed_rect,
+                   rect_of in HxbBox. cbn in HxbBox.
+                 destruct HxbBox as [[_ HxbRight] _].
+                 unfold Rmax in HxbRight. destruct Rle_dec; lra.
+              ** apply (neq_init_term_y t). exact HeqY.
+              ** assert (HinitAbove : snd (init t) < snd b).
+                 { assert (HinitTop : snd (init t) <= ry1 (rect_of [t])).
+                   { unfold rect_of. cbn. apply Rmax_l. }
+                   rewrite HbY. lra. }
+                 assert (HbpWhole :
+                     onHeadSegment (hd_segment (l ++ sub ++ r))
+                       (xb, snd (term t))).
+                 { rewrite Hdecomp. exact HbpTrace. }
+                 assert (HjointWhole :
+                     onHeadSegment (hd_segment (l ++ sub ++ r)) (init t)).
+                 { rewrite Hdecomp. exact HjointTrace. }
+                 assert (HbWhole :
+                     onHeadSegment (hd_segment (l ++ sub ++ r)) b).
+                 { rewrite Hdecomp. exact HbTrace. }
+                 exact (head_trace_cannot_straddle_segment_endpoint
+                          l sub r t (term t) (init t)
+                          (xb, snd (term t)) b Hctx HtWhole
+                          (or_intror eq_refl) (or_introl eq_refl)
+                          HbpWhole HjointWhole HbWhole eq_refl
+                          ltac:(cbn; lra) Hsouth HinitAbove).
+        -- apply (Hrect h (xb, snd p)).
+           ++ unfold nonadjacent_sides. rewrite in_app_iff. left. simpl. now left.
+           ++ exact (segment_in_rect_or_endpoints h _ HbpBody).
+           ++ exact HxbBox.
+  - cbn in HxbTrace, HbTrace, Hrising.
+    destruct HxbTrace as [u [Hu Hub]].
+    destruct after as [|s after']; cbn in Hub, HbTrace, Hrising.
+    + assert (HlastSelf : last_segment (before ++ [t]) = t).
+      { now apply last_app_nonnil. }
+      rewrite HlastSelf in Hub, HbTrace.
+      unfold right_rising_barrier, on_barrier_trace in Hrising. cbn in Hrising.
+      rewrite HlastSelf in Hrising.
+      assert (HpTrace : onLastSegment t p).
+      { destruct Hp as [-> | ->].
+        - exists 0. split; [lra | reflexivity].
+        - exists 1. split; [lra | reflexivity]. }
+      assert (HbpTrace : onLastSegment t (xb, snd p)).
+      { exists u. split; [exact Hu | exact Hub]. }
+      assert (Hxeq : fst p = xb).
+      { destruct (total_order_T (fst p) xb) as [[Hlt | Heq] | Hgt].
+        - pose proof (proj1 (Hrising p (xb, snd p) HpTrace HbpTrace) Hlt).
+          cbn in H. lra.
+        - exact Heq.
+        - pose proof (proj1 (Hrising (xb, snd p) p HbpTrace HpTrace) Hgt).
+          cbn in H. lra. }
+      lra.
+    + destruct (Rlt_dec 1 u) as [HuStrict | HuBody].
+      * apply (Hext (xb, snd p)).
+        -- right. split; [discriminate |].
+           unfold onLast_extend_strict. exists u. split; [exact HuStrict |].
+           exact Hub.
+        -- exact HxbBox.
+      * assert (HlastWhole : last_segment (before ++ t :: s :: after') =
+                              last_segment (s :: after')).
+        { rewrite (last_app_nonnil before (t :: s :: after')) by discriminate.
+          change (last_segment ([t] ++ (s :: after')) =
+                  last_segment (s :: after')).
+          apply last_app_nonnil. discriminate. }
+        assert (HbpBody : onSegment (last_segment (s :: after')) (xb, snd p)).
+        { rewrite HlastWhole in Hub. exists u. split; [lra | exact Hub]. }
+        destruct after' as [|s' after''].
+        -- cbn in HbpBody.
+           assert (HwholeConn : connected ((before ++ [t]) ++ [s])).
+           { replace ((before ++ [t]) ++ [s]) with
+                 (before ++ [t] ++ [s]) by (rewrite app_assoc; reflexivity).
+             rewrite <- Hdecomp.
+             exact (context_whole_connected l sub r Hctx). }
+           assert (HleftNE : before ++ [t] <> []).
+           { intros Hnil. apply app_eq_nil in Hnil. destruct Hnil as [_ Hnil].
+             discriminate. }
+           assert (Hjunction : term t = init s).
+           { pose proof (connected_app_junction
+                           (before ++ [t]) [s] HwholeConn HleftNE
+                           ltac:(discriminate)) as Hjunction'.
+             rewrite last_app_nonnil in Hjunction' by discriminate.
+             cbn in Hjunction'. exact Hjunction'. }
+           assert (HjointTrace : onLastSegment s (term t)).
+           { rewrite Hjunction. exists 0. split; [lra | reflexivity]. }
+           assert (HbpTrace : onLastSegment s (xb, snd p)).
+           { destruct HbpBody as [v [[Hv0 Hv1] Hvp]].
+             exists v. split; [exact Hv0 | exact Hvp]. }
+           destruct Hp as [Hp | Hp].
+           ++ subst p.
+              destruct (total_order_T (snd (init t)) (snd (term t)))
+                as [[Hnorth | HeqY] | Hsouth].
+              ** destruct (classification_context_app_boundary_data
+                            l sub r (before ++ [t]) [s]
+                            Hctx ltac:(rewrite Hdecomp, app_assoc; reflexivity)
+                            HleftNE ltac:(discriminate))
+                   as [ps1 [ps2 [Hemb1 [Hemb2 [Hdc Hboundary]]]]].
+                 rewrite last_app_nonnil in Hemb1, Hboundary by discriminate.
+                 cbn in Hemb2, Hboundary.
+                 assert (HbpWhole :
+                     on_barrier_trace BarrierLast (before ++ [t; s])
+                       (xb, snd (init t))).
+                 { cbn. rewrite HlastWhole. exact HbpTrace. }
+                 assert (HjointWhole :
+                     on_barrier_trace BarrierLast (before ++ [t; s]) (term t)).
+                 { cbn. rewrite HlastWhole. exact HjointTrace. }
+                 assert (HbpLeft : xb < fst (init s)).
+                 { assert (HxbTerm : xb < fst (term t)).
+                   { apply (proj2 (Hrising (xb, snd (init t)) (term t)
+                                     HbpWhole HjointWhole)). cbn.
+                     exact Hnorth. }
+                   now rewrite <- Hboundary. }
+                 assert (HbpBelow : snd (xb, snd (init t)) < snd (init s)).
+                 { cbn. now rewrite <- Hjunction. }
+                 cbn in Hemb1.
+                 assert (HtEast : fst (init t) < fst (term t)).
+                 { rewrite Hboundary. lra. }
+                 exact (dc_after_northeast_cannot_return_left_below
+                          ps1 ps2 t s (xb, snd (init t)) Hdc Hemb1 Hemb2
+                          Hboundary HtEast Hnorth HbpTrace HbpLeft HbpBelow).
+              ** apply (neq_init_term_y t). exact HeqY.
+              ** assert (HjointLeft : fst (term t) < xb).
+                 { assert (HjointWhole :
+                       on_barrier_trace BarrierLast (before ++ [t; s])
+                         (term t)).
+                   { cbn. rewrite HlastWhole. exact HjointTrace. }
+                   assert (HbpWhole :
+                       on_barrier_trace BarrierLast (before ++ [t; s])
+                         (xb, snd (init t))).
+                   { cbn. rewrite HlastWhole. exact HbpTrace. }
+                   apply (proj2 (Hrising (term t) (xb, snd (init t))
+                                     HjointWhole HbpWhole)). cbn. lra. }
+                 unfold in_segment_rect_or_endpoints, in_closed_rect,
+                   rect_of in HxbBox. cbn in HxbBox.
+                 destruct HxbBox as [[_ HxbRight] _].
+                 unfold Rmax in HxbRight. destruct Rle_dec; lra.
+           ++ subst p.
+              assert (HjointWhole :
+                  on_barrier_trace BarrierLast (before ++ [t; s]) (term t)).
+              { cbn. rewrite HlastWhole. exact HjointTrace. }
+              assert (HbpWhole :
+                  on_barrier_trace BarrierLast (before ++ [t; s])
+                    (xb, snd (term t))).
+              { cbn. rewrite HlastWhole. exact HbpTrace. }
+              pose proof (right_rising_barrier_same_height_unique
+                            BarrierLast (before ++ [t; s])
+                            (term t) (xb, snd (term t))
+                            Hrising HjointWhole HbpWhole eq_refl) as Heq.
+              pose proof (f_equal fst Heq). cbn in H. lra.
+        -- apply (Hrect (last_segment (s :: s' :: after'')) (xb, snd p)).
+           ++ unfold nonadjacent_sides. rewrite in_app_iff. right.
+              change (In (last_segment (s :: s' :: after'')) (s' :: after'')).
+              assert (HlastTail : last_segment (s :: s' :: after'') =
+                                    last_segment (s' :: after'')).
+              { change (last_segment ([s] ++ (s' :: after'')) =
+                        last_segment (s' :: after'')).
+                apply last_app_nonnil. discriminate. }
+              rewrite HlastTail. apply last_In. discriminate.
+           ++ exact (segment_in_rect_or_endpoints _ _ HbpBody).
+           ++ exact HxbBox.
+Qed.
 
 (* extension seed 自身が target の端点の場合。異なるセグメントなら
    sparse/隣接交差、同じ end なら trace bounds で floor 点を排除する。 *)
@@ -1068,9 +1533,154 @@ Proof.
   destruct (ordinary_terminal_core_reaches_floor
               l sub r t p side Hctx Hl HnotLid Hover Hbelow Hp Hcore)
     as [b [HbTrace [HbY [Hpb [HbBoundary HbTarget]]]]].
-  (* floor 点は target の x 範囲内まで達する。自己障壁なら end trace の
-     bounds、別障壁なら closed sparse または隣接 junction で矛盾する。 *)
-Admitted.
+  assert (HtWhole : In t (l ++ sub ++ r)) by now apply nonadjacent_sides_in_whole.
+  destruct (in_app_app (l ++ sub ++ r) t HtWhole)
+    as [before [after Hdecomp]].
+  destruct (context_sparse l sub r Hctx before t after Hdecomp)
+    as [_ Hrect].
+  rewrite Hdecomp in HrootTrace, HbTrace.
+  destruct side.
+  - cbn in Hseed, HrootTrace, HbTrace.
+    destruct Hseed as [_ [HpHead _]].
+    rewrite Hdecomp in HpHead.
+    destruct before as [|h before']; cbn in HpHead, HrootTrace, HbTrace.
+    + subst p.
+      destruct (context_whole_embedded l sub r Hctx)
+        as [ds [sc [_ Hembed]]].
+      rewrite Hdecomp in Hembed.
+      assert (Hnth : nth_error (t :: after) 0 = Some t) by reflexivity.
+      destruct (embed_scurve_nth_embed sc (t :: after) Hembed 0 t Hnth)
+        as [[[v hor] c] [_ Hemb]].
+      destruct HbTrace as [u [Hu Hub]].
+      assert (HuStrict : u < 0).
+      { apply Rnot_le_lt. intro Hu0.
+        assert (HbBody : onSegment t b).
+        { exists u. split; [lra | exact Hub]. }
+        pose proof (segment_in_rect_or_endpoints t b HbBody) as HbBox.
+        unfold in_segment_rect_or_endpoints, in_closed_rect in HbBox.
+        destruct HbBox as [_ [_ HbTop]]. rewrite HbY in HbTop. lra. }
+      assert (HbHead : onHead t b).
+      { exists u. split; [lra | exact Hub]. }
+      destruct hor.
+      * pose proof (east_head_extension_bounds t v c b Hemb HbHead). lra.
+      * pose proof (w_end_relation t v c Hemb) as Hwest.
+        change (fst b <= Rmax (fst (init t)) (fst (term t))) in HbTarget.
+        rewrite Rmax_left in HbTarget by lra. lra.
+    + assert (HpBarrier : p = init h) by exact HpHead.
+      assert (HpBody : onSegment h p).
+      { rewrite HpBarrier. apply onInit. }
+      destruct before' as [|h' before''].
+      * assert (HwholeConn : connected ([h] ++ t :: after)).
+        { replace ([h] ++ t :: after) with ([h] ++ [t] ++ after)
+            by reflexivity.
+          rewrite <- Hdecomp. exact (context_whole_connected l sub r Hctx). }
+        assert (Hjunction : term h = init t).
+        { eapply connected_app_junction with (l := [h]) (r := t :: after);
+            eauto; discriminate. }
+        destruct (context_whole_embedded l sub r Hctx)
+          as [ds [sc [_ Hembed]]].
+        rewrite Hdecomp in Hembed.
+        destruct (embed_scurve_adjacent_data
+                    sc (h :: t :: after) 0 h t Hembed eq_refl eq_refl)
+          as [ps1 [ps2 [Hemb1 [Hemb2 [Hdc Hjoin]]]]].
+        assert (HpT : onSegment t p).
+        { destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
+        pose proof (adjacent_not_intersect_except_junction
+                      ps1 ps2 h t p Hdc Hemb1 Hemb2 Hjoin HpBody HpT) as HpJoin.
+        apply (neq_init_term h). transitivity p.
+        -- symmetry. exact HpBarrier.
+        -- exact HpJoin.
+      * apply (Hrect h p).
+        -- unfold nonadjacent_sides. rewrite in_app_iff. left. simpl. now left.
+        -- exact (segment_in_rect_or_endpoints h p HpBody).
+        -- apply segment_in_rect_or_endpoints.
+           destruct Hp as [-> | ->]; [apply onInit | apply onTerm].
+  - cbn in Hseed, HrootTrace, HbTrace.
+    destruct Hseed as [_ [HpLast _]].
+    rewrite Hdecomp in HpLast.
+    destruct after as [|s after']; cbn in HpLast, HrootTrace, HbTrace.
+    + assert (HlastSelf : last_segment (before ++ [t]) = t)
+        by now apply last_app_nonnil.
+      rewrite HlastSelf in HpLast, HrootTrace, HbTrace.
+      subst p.
+      destruct (context_whole_embedded l sub r Hctx)
+        as [ds [sc [_ Hembed]]].
+      rewrite Hdecomp in Hembed.
+      set (last_i := (length (before ++ [t]) - 1)%nat).
+      assert (Hnth : nth_error (before ++ [t]) last_i = Some t).
+      { unfold last_i.
+        rewrite (@nth_error_last Segment (before ++ [t]) default_segment)
+          by (intro Hnil; apply app_eq_nil in Hnil;
+              destruct Hnil as [_ Hnil]; inversion Hnil).
+        f_equal. exact HlastSelf. }
+      destruct (embed_scurve_nth_embed
+                  sc (before ++ [t]) Hembed last_i t Hnth)
+        as [[[v hor] c] [_ Hemb]].
+      destruct HbTrace as [u [Hu Hub]].
+      assert (HuStrict : 1 < u).
+      { destruct (Rlt_dec 1 u) as [Hlt | Hnot]; [exact Hlt |].
+        exfalso. assert (HbBody : onSegment t b).
+        { exists u. split; [lra | exact Hub]. }
+        pose proof (segment_in_rect_or_endpoints t b HbBody) as HbBox.
+        unfold in_segment_rect_or_endpoints, in_closed_rect in HbBox.
+        destruct HbBox as [_ [_ HbTop]]. rewrite HbY in HbTop. lra. }
+      assert (HbLast : onLast t b).
+      { exists u. split; [lra | exact Hub]. }
+      destruct hor.
+      * pose proof (e_end_relation t v c Hemb) as Heast.
+        change (fst b <= Rmax (fst (init t)) (fst (term t))) in HbTarget.
+        rewrite Rmax_right in HbTarget by lra. lra.
+      * pose proof (west_last_extension_bounds t v c b Hemb HbLast). lra.
+    + assert (HlastWhole : last_segment (before ++ t :: s :: after') =
+                              last_segment (s :: after')).
+      { rewrite (last_app_nonnil before (t :: s :: after')) by discriminate.
+        change (last_segment ([t] ++ (s :: after')) =
+                last_segment (s :: after')).
+        apply last_app_nonnil. discriminate. }
+      rewrite HlastWhole in HpLast, HrootTrace.
+      assert (HpBarrier : p = term (last_segment (s :: after')))
+        by exact HpLast.
+      assert (HpBody : onSegment (last_segment (s :: after')) p).
+      { rewrite HpBarrier. apply onTerm. }
+      destruct after' as [|s' after''].
+      * cbn in HpBarrier, HpBody.
+        assert (HwholeConn : connected ((before ++ [t]) ++ [s])).
+        { replace ((before ++ [t]) ++ [s]) with
+              (before ++ [t] ++ [s]) by (rewrite app_assoc; reflexivity).
+          rewrite <- Hdecomp. exact (context_whole_connected l sub r Hctx). }
+        assert (HleftNE : before ++ [t] <> []).
+        { intros Hnil. apply app_eq_nil in Hnil. destruct Hnil as [_ Hnil].
+          discriminate. }
+        assert (Hjunction : term t = init s).
+        { pose proof (connected_app_junction
+                        (before ++ [t]) [s] HwholeConn HleftNE
+                        ltac:(discriminate)) as Hj.
+          rewrite last_app_nonnil in Hj by discriminate. cbn in Hj. exact Hj. }
+        destruct (classification_context_app_boundary_data
+                    l sub r (before ++ [t]) [s] Hctx
+                    ltac:(rewrite Hdecomp, app_assoc; reflexivity)
+                    HleftNE ltac:(discriminate))
+          as [ps1 [ps2 [Hemb1 [Hemb2 [Hdc Hjoin]]]]].
+        cbn in Hemb2. rewrite last_app_nonnil in Hemb1 by discriminate.
+        assert (HpT : onSegment t p).
+        { destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
+        pose proof (adjacent_not_intersect_except_junction
+                      ps1 ps2 t s p Hdc Hemb1 Hemb2 Hjunction HpT HpBody) as HpJoin.
+        apply (neq_init_term s).
+        rewrite <- Hjunction, <- HpJoin, HpBarrier. reflexivity.
+      * apply (Hrect (last_segment (s :: s' :: after'')) p).
+        -- unfold nonadjacent_sides. rewrite in_app_iff. right.
+           change (In (last_segment (s :: s' :: after'')) (s' :: after'')).
+           assert (HlastTail : last_segment (s :: s' :: after'') =
+                                 last_segment (s' :: after'')).
+           { change (last_segment ([s] ++ (s' :: after'')) =
+                     last_segment (s' :: after'')).
+             apply last_app_nonnil. discriminate. }
+           rewrite HlastTail. apply last_In. discriminate.
+        -- exact (segment_in_rect_or_endpoints _ _ HpBody).
+        -- apply segment_in_rect_or_endpoints.
+           destruct Hp as [-> | ->]; [apply onInit | apply onTerm].
+Qed.
 
 (* reverse root が別セグメントの端点でもある場合。共有点が junction
    なら reverse の四形と dc、遠隔なら closed sparse で排除する。 *)
@@ -1095,9 +1705,179 @@ Proof.
   destruct (ordinary_terminal_core_reaches_floor
               l sub r t p side Hctx Hl HnotLid Hover Hbelow Hp Hcore)
     as [b [HbTrace [HbY [Hpb [HbBoundary HbTarget]]]]].
-  (* strict extension、非隣接本体、前後一つの隣接本体に分ける。最後の
-     二枝は既存の rising-head/last の dc 補題で外向きを得る。 *)
-Admitted.
+  unfold left_barrier_core in Hcore. cbn in Hcore.
+  destruct Hcore as [Hwhole [Hrising _]].
+  assert (HpBarrierBody :
+      onSegment (barrier_segment side (l ++ sub ++ r)) p).
+  { destruct Hreverse; cbn.
+    - replace (hd_segment (l ++ sub ++ r)) with (hd_segment l).
+      + apply onInit.
+      + unfold hd_segment. now apply hd_app.
+    - replace (hd_segment (l ++ sub ++ r)) with (hd_segment l).
+      + apply onTerm.
+      + unfold hd_segment. now apply hd_app.
+    - replace (last_segment (l ++ sub ++ r)) with (last_segment r).
+      + apply onInit.
+      + symmetry. rewrite last_app_nonnil by
+          (intro Hnil; apply app_eq_nil in Hnil; tauto).
+        now apply last_app_nonnil.
+    - replace (last_segment (l ++ sub ++ r)) with (last_segment r).
+      + apply onTerm.
+      + symmetry. rewrite last_app_nonnil by
+          (intro Hnil; apply app_eq_nil in Hnil; tauto).
+        now apply last_app_nonnil. }
+  assert (HtWhole : In t (l ++ sub ++ r)) by now apply nonadjacent_sides_in_whole.
+  destruct (in_app_app (l ++ sub ++ r) t HtWhole)
+    as [before [after Hdecomp]].
+  destruct (context_sparse l sub r Hctx before t after Hdecomp)
+    as [_ Hrect].
+  rewrite Hdecomp in HrootTrace, HbTrace, HpBarrierBody, Hrising, Hdistinct.
+  destruct side.
+  - cbn in HrootTrace, HbTrace, HpBarrierBody, Hrising, Hdistinct.
+    destruct before as [|h before']; cbn in HrootTrace, HbTrace,
+      HpBarrierBody, Hrising, Hdistinct.
+    + apply Hdistinct. reflexivity.
+    + destruct before' as [|h' before''].
+      * destruct (classification_context_app_boundary_data
+                    l sub r [h] (t :: after) Hctx
+                    ltac:(rewrite Hdecomp; reflexivity)
+                    ltac:(discriminate) ltac:(discriminate))
+          as [ps1 [ps2 [Hemb1 [Hemb2 [Hdc Hjoin]]]]].
+        cbn in Hemb1, Hjoin.
+        assert (HpT : onSegment t p).
+        { destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
+        pose proof (adjacent_not_intersect_except_junction
+                      ps1 ps2 h t p Hdc Hemb1 Hemb2 Hjoin
+                      HpBarrierBody HpT) as HpJoin.
+        assert (Hl' : l <> []).
+        { inversion Hreverse; assumption. }
+        assert (HheadEq : hd_segment l = h).
+        { assert (Hhd : hd_segment (l ++ sub ++ r) = hd_segment l).
+          { symmetry. unfold hd_segment. now apply hd_app. }
+          rewrite Hdecomp in Hhd. cbn in Hhd. symmetry. exact Hhd. }
+        inversion Hreverse.
+        -- subst p. apply (neq_init_term h). congruence.
+        -- subst p. rewrite HheadEq in H0.
+           assert (HpInitT : term h = init t) by exact Hjoin.
+           pose proof (f_equal fst HpInitT) as HpInitTX. cbn in HpInitTX.
+           assert (HbarWest : fst (term h) < fst (init h)).
+           { apply (proj2 (Hrising (term h) (init h)
+                              ltac:(exists 1; split; [lra | reflexivity])
+                              ltac:(exists 0; split; [lra | reflexivity]))).
+             pose proof (s_end_relation h hor cc H0). lra. }
+           assert (Hps1 : ps1 = (s, hor, cc)).
+           { transitivity (primitive_segment h).
+             - now apply embed_primitive_segment.
+             - symmetry. now apply embed_primitive_segment. }
+           subst ps1.
+           destruct hor.
+           ++ pose proof (e_end_relation h s cc H0). lra.
+           ++ inversion Hdc; subst.
+              ** pose proof (w_end_relation t s cx Hemb2) as Hwest.
+                 unfold in_segment_rect_or_endpoints, in_closed_rect,
+                   rect_of in HbTarget. cbn in HbTarget.
+                 rewrite HpInitT in Hpb. unfold Rmax in HbTarget.
+                 destruct Rle_dec; lra.
+              ** pose proof (w_end_relation t n cc Hemb2) as Hwest.
+                 unfold in_segment_rect_or_endpoints, in_closed_rect,
+                   rect_of in HbTarget. cbn in HbTarget.
+                 rewrite HpInitT in Hpb. unfold Rmax in HbTarget.
+                 destruct Rle_dec; lra.
+      * apply (Hrect h p).
+        -- unfold nonadjacent_sides. rewrite in_app_iff. left. simpl. now left.
+        -- exact (segment_in_rect_or_endpoints h p HpBarrierBody).
+        -- apply segment_in_rect_or_endpoints.
+           destruct Hp as [-> | ->]; [apply onInit | apply onTerm].
+  - cbn in HrootTrace, HbTrace, HpBarrierBody, Hrising, Hdistinct.
+    destruct after as [|s after']; cbn in HrootTrace, HbTrace,
+      HpBarrierBody, Hrising, Hdistinct.
+    + apply Hdistinct. symmetry. now apply last_app_nonnil.
+    + assert (HlastWhole : last_segment (before ++ t :: s :: after') =
+                            last_segment (s :: after')).
+      { rewrite (last_app_nonnil before (t :: s :: after')) by discriminate.
+        change (last_segment ([t] ++ (s :: after')) =
+                last_segment (s :: after')).
+        apply last_app_nonnil. discriminate. }
+      try rewrite HlastWhole in HrootTrace.
+      try rewrite HlastWhole in HbTrace.
+      try rewrite HlastWhole in HpBarrierBody.
+      try rewrite HlastWhole in Hrising.
+      try rewrite HlastWhole in Hdistinct.
+      destruct after' as [|s' after''].
+      * cbn in HrootTrace, HbTrace, HpBarrierBody, Hrising, Hdistinct.
+        assert (HleftNE : before ++ [t] <> []).
+        { intro Hnil. apply app_eq_nil in Hnil. destruct Hnil as [_ Hnil].
+          discriminate. }
+        destruct (classification_context_app_boundary_data
+                    l sub r (before ++ [t]) [s] Hctx
+                    ltac:(rewrite Hdecomp, app_assoc; reflexivity)
+                    HleftNE ltac:(discriminate))
+          as [ps1 [ps2 [Hemb1 [Hemb2 [Hdc Hjoin]]]]].
+        rewrite last_app_nonnil in Hemb1, Hjoin by discriminate.
+        cbn in Hemb2, Hjoin.
+        assert (HpT : onSegment t p).
+        { destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
+        pose proof (adjacent_not_intersect_except_junction
+                      ps1 ps2 t s p Hdc Hemb1 Hemb2 Hjoin
+                      HpT HpBarrierBody) as HpJoin.
+        assert (Hr : r <> []).
+        { inversion Hreverse; assumption. }
+        assert (HlastEq : last_segment r = s).
+        { assert (Hlast : last_segment (l ++ sub ++ r) = last_segment r).
+          { rewrite last_app_nonnil by
+              (intro Hnil; apply app_eq_nil in Hnil;
+               destruct Hnil as [_ Hnil]; contradiction).
+            now apply last_app_nonnil. }
+          rewrite Hdecomp in Hlast. cbn in Hlast.
+          rewrite last_app_nonnil in Hlast by discriminate.
+          symmetry. exact Hlast. }
+        assert (HrisingS : forall x y,
+            onLastSegment s x -> onLastSegment s y ->
+            (fst x < fst y <-> snd x < snd y)).
+        { intros x y Hx Hy. apply Hrising.
+          - cbn. rewrite HlastWhole. exact Hx.
+          - cbn. rewrite HlastWhole. exact Hy. }
+        inversion Hreverse.
+        -- subst p. rewrite HlastEq in H0.
+           assert (HpTermT : init s = term t) by (symmetry; exact Hjoin).
+           assert (HbarEast : fst (init s) < fst (term s)).
+           { apply (proj2 (HrisingS (init s) (term s)
+                              ltac:(exists 0; split; [lra | reflexivity])
+                              ltac:(exists 1; split; [lra | reflexivity]))).
+             pose proof (n_end_relation s hor cc H0). lra. }
+           assert (Hps2 : ps2 = (n, hor, cc)).
+           { transitivity (primitive_segment s).
+             - now apply embed_primitive_segment.
+             - symmetry. now apply embed_primitive_segment. }
+           subst ps2.
+           destruct hor.
+           ++ inversion Hdc; subst.
+              ** pose proof (e_end_relation t n c Hemb1) as Heast.
+                 unfold in_segment_rect_or_endpoints, in_closed_rect,
+                   rect_of in HbTarget. cbn in HbTarget.
+                 unfold Rmax in HbTarget.
+                 destruct Rle_dec; lra.
+              ** pose proof (e_end_relation t s cc Hemb1) as Heast.
+                 unfold in_segment_rect_or_endpoints, in_closed_rect,
+                   rect_of in HbTarget. cbn in HbTarget.
+                 unfold Rmax in HbTarget.
+                 destruct Rle_dec; lra.
+           ++ pose proof (w_end_relation s n cc H0). lra.
+        -- subst p. apply (neq_init_term s).
+           congruence.
+      * apply (Hrect (last_segment (s :: s' :: after'')) p).
+        -- unfold nonadjacent_sides. rewrite in_app_iff. right.
+           change (In (last_segment (s :: s' :: after'')) (s' :: after'')).
+           assert (HlastTail : last_segment (s :: s' :: after'') =
+                                 last_segment (s' :: after'')).
+           { change (last_segment ([s] ++ (s' :: after'')) =
+                     last_segment (s' :: after'')).
+             apply last_app_nonnil. discriminate. }
+           rewrite HlastTail. apply last_In. discriminate.
+        -- exact (segment_in_rect_or_endpoints _ _ HpBarrierBody).
+        -- apply segment_in_rect_or_endpoints.
+           destruct Hp as [-> | ->]; [apply onInit | apply onTerm].
+Qed.
 
 (* 通常左境界の完全下側にある端点が境界より左で Up なら、実際の
    到達経路と証明書の生成形を同時に追って衝突を導く必要がある。
@@ -1156,6 +1936,663 @@ Proof.
       * exact (ordinary_terminal_distinct_reverse_root_impossible
                  l sub r t p side previous Hctx Hl HnotLid Ht Hover Hbelow
                  Hp HtLeft Hcore Hreverse HrootTrace Hdistinct).
+Qed.
+
+Lemma ordinary_initial_at_level_collision_impossible :
+  forall l sub r t p side,
+    ClassificationContext l sub r ->
+    r <> [] ->
+    ~ initial_lid r ->
+    In t (nonadjacent_sides l r) ->
+    segment_x_ranges_overlap t (hd_segment r) ->
+    ry1 (rect_of [t]) < ry0 (rect_of [hd_segment r]) ->
+    endpoint_of_seg t p ->
+    fst (sub_right_anchor sub) < rx0 (rect_of [t]) ->
+    right_barrier_core side l sub r p ->
+    right_barrier_at_level side l sub r p ->
+    False.
+Proof.
+  intros l sub r t p side Hctx Hr HnotLid Ht Hover Hbelow Hp HtRight
+    Hcore Hlevel.
+  destruct (ordinary_initial_core_reaches_floor
+              l sub r t p side Hctx Hr HnotLid Hover Hbelow Hp Hcore)
+    as [b [HbTrace [HbY [Hbp [HbBoundary HbTarget]]]]].
+  destruct Hlevel as [xb [[HanchorX Hxbp] HxbTrace]].
+  assert (HpFloor : snd p < snd b).
+  { rewrite HbY. assert (HpBox : in_segment_rect_or_endpoints t p).
+    { apply segment_in_rect_or_endpoints. destruct Hp as [-> | ->];
+        [apply onInit | apply onTerm]. }
+    unfold in_segment_rect_or_endpoints, in_closed_rect in HpBox.
+    destruct HpBox as [_ [_ HpTop]]. lra. }
+  pose proof Hcore as Hcore'.
+  unfold right_barrier_core in Hcore'. cbn in Hcore'.
+  destruct Hcore' as [Hwhole [Hfalling _]].
+  pose proof Hfalling as HfallingWhole.
+  assert (Hbbx : fst b < xb).
+  { apply (proj2 (Hfalling b (xb, snd p) HbTrace HxbTrace)).
+    cbn. exact HpFloor. }
+  assert (HxbBox : in_segment_rect_or_endpoints t (xb, snd p)).
+  { assert (HpBox : in_segment_rect_or_endpoints t p).
+    { apply segment_in_rect_or_endpoints. destruct Hp as [-> | ->];
+        [apply onInit | apply onTerm]. }
+    unfold in_segment_rect_or_endpoints, in_closed_rect in HpBox |- *.
+    destruct p as [xp yp]. cbn in *.
+    destruct HpBox as [[Hpx0 Hpx1] [Hpy0 Hpy1]].
+    split; cbn; split; lra. }
+  assert (HtWhole : In t (l ++ sub ++ r)) by now apply nonadjacent_sides_in_whole.
+  destruct (in_app_app (l ++ sub ++ r) t HtWhole)
+    as [before [after Hdecomp]].
+  destruct (context_sparse l sub r Hctx before t after Hdecomp)
+    as [Hext Hrect].
+  rewrite Hdecomp in HxbTrace, HbTrace, Hfalling.
+  destruct side.
+  - cbn in HxbTrace, HbTrace, Hfalling.
+    destruct HxbTrace as [u [Hu Hub]].
+    destruct before as [|h before']; cbn in Hub, HbTrace, Hfalling.
+    + assert (HpTrace : onHeadSegment t p).
+      { destruct Hp as [-> | ->].
+        - exists 0. split; [lra | reflexivity].
+        - exists 1. split; [lra | reflexivity]. }
+      assert (HbpTrace : onHeadSegment t (xb, snd p)).
+      { exists u. split; [exact Hu | exact Hub]. }
+      pose proof (right_falling_barrier_same_height_unique
+                    BarrierHead (t :: after) p (xb, snd p)
+                    Hfalling HpTrace HbpTrace eq_refl) as Heq.
+      pose proof (f_equal fst Heq). cbn in H. lra.
+    + destruct (Rlt_dec u 0) as [HuStrict | HuBody].
+      * apply (Hext (xb, snd p)).
+        -- left. split; [discriminate |].
+           unfold onHead_extend_strict. exists u. split; [exact HuStrict |].
+           exact Hub.
+        -- exact HxbBox.
+      * assert (HbpBody : onSegment h (xb, snd p)).
+        { exists u. split; [lra | exact Hub]. }
+        destruct before' as [|h' before''].
+        -- assert (HwholeConn : connected ([h] ++ t :: after)).
+           { replace ([h] ++ t :: after) with ([h] ++ [t] ++ after)
+               by reflexivity.
+             rewrite <- Hdecomp. exact (context_whole_connected l sub r Hctx). }
+           assert (Hjunction : term h = init t).
+           { eapply connected_app_junction with (l := [h]) (r := t :: after);
+               eauto; discriminate. }
+           assert (HjointTrace : onHeadSegment h (init t)).
+           { rewrite <- Hjunction. exists 1. split; [lra | reflexivity]. }
+           assert (HbpTrace : onHeadSegment h (xb, snd p)).
+           { exists u. split; [exact Hu | exact Hub]. }
+           destruct Hp as [Hp | Hp].
+           ++ subst p.
+              pose proof (right_falling_barrier_same_height_unique
+                            BarrierHead (h :: t :: after)
+                            (init t) (xb, snd (init t))
+                            Hfalling HjointTrace HbpTrace eq_refl) as Heq.
+              pose proof (f_equal fst Heq). cbn in H. lra.
+           ++ subst p.
+              destruct (total_order_T (snd (init t)) (snd (term t)))
+                as [[Hnorth | HeqY] | Hsouth].
+              ** assert (HxbLeftJoint : xb < fst (init t)).
+                 { apply (proj2 (Hfalling (xb, snd (term t)) (init t)
+                                   HbpTrace HjointTrace)). cbn. exact Hnorth. }
+                 unfold in_segment_rect_or_endpoints, in_closed_rect,
+                   rect_of in HxbBox. cbn in HxbBox.
+                 destruct HxbBox as [[HxbLeft _] _].
+                 unfold Rmin in HxbLeft. destruct Rle_dec; lra.
+              ** apply (neq_init_term_y t). exact HeqY.
+              ** assert (HinitAbove : snd (init t) < snd b).
+                 { assert (HinitTop : snd (init t) <= ry1 (rect_of [t])).
+                   { unfold rect_of. cbn. apply Rmax_l. }
+                   rewrite HbY. lra. }
+                 assert (HbpWhole :
+                     on_barrier_trace BarrierHead (l ++ sub ++ r)
+                       (xb, snd (term t))).
+                 { rewrite Hdecomp. exact HbpTrace. }
+                 assert (HjointWhole :
+                     on_barrier_trace BarrierHead (l ++ sub ++ r) (init t)).
+                 { rewrite Hdecomp. exact HjointTrace. }
+                 assert (HbWhole :
+                     on_barrier_trace BarrierHead (l ++ sub ++ r) b).
+                 { rewrite Hdecomp. exact HbTrace. }
+                 exact (two_sided_falling_barrier_endpoint_contact_impossible
+                          l sub r t (term t) (init t) BarrierHead
+                          (xb, snd (term t)) b Hctx HtWhole
+                          (or_intror eq_refl) (or_introl eq_refl)
+                          Hwhole HfallingWhole HbpWhole HjointWhole HbWhole
+                          eq_refl ltac:(cbn; lra) Hsouth HinitAbove).
+        -- apply (Hrect h (xb, snd p)).
+           ++ unfold nonadjacent_sides. rewrite in_app_iff. left. simpl. now left.
+           ++ exact (segment_in_rect_or_endpoints h _ HbpBody).
+           ++ exact HxbBox.
+  - cbn in HxbTrace, HbTrace, Hfalling.
+    destruct HxbTrace as [u [Hu Hub]].
+    destruct after as [|s after']; cbn in Hub, HbTrace, Hfalling.
+    + assert (HlastSelf : last_segment (before ++ [t]) = t)
+        by now apply last_app_nonnil.
+      rewrite HlastSelf in Hub, HbTrace.
+      unfold right_falling_barrier, on_barrier_trace in Hfalling. cbn in Hfalling.
+      rewrite HlastSelf in Hfalling.
+      assert (HpTrace : onLastSegment t p).
+      { destruct Hp as [-> | ->].
+        - exists 0. split; [lra | reflexivity].
+        - exists 1. split; [lra | reflexivity]. }
+      assert (HbpTrace : onLastSegment t (xb, snd p)).
+      { exists u. split; [exact Hu | exact Hub]. }
+      assert (Hxeq : fst p = xb).
+      { destruct (total_order_T (fst p) xb) as [[Hlt | Heq] | Hgt].
+        - pose proof (proj1 (Hfalling p (xb, snd p) HpTrace HbpTrace) Hlt).
+          cbn in H. lra.
+        - exact Heq.
+        - pose proof (proj1 (Hfalling (xb, snd p) p HbpTrace HpTrace) Hgt).
+          cbn in H. lra. }
+      lra.
+    + destruct (Rlt_dec 1 u) as [HuStrict | HuBody].
+      * apply (Hext (xb, snd p)).
+        -- right. split; [discriminate |].
+           unfold onLast_extend_strict. exists u. split; [exact HuStrict |].
+           exact Hub.
+        -- exact HxbBox.
+      * assert (HlastWhole : last_segment (before ++ t :: s :: after') =
+                              last_segment (s :: after')).
+        { rewrite (last_app_nonnil before (t :: s :: after')) by discriminate.
+          change (last_segment ([t] ++ (s :: after')) =
+                  last_segment (s :: after')).
+          apply last_app_nonnil. discriminate. }
+        assert (HbpBody : onSegment (last_segment (s :: after')) (xb, snd p)).
+        { rewrite HlastWhole in Hub. exists u. split; [lra | exact Hub]. }
+        destruct after' as [|s' after''].
+        -- cbn in HbpBody.
+           assert (HwholeConn : connected ((before ++ [t]) ++ [s])).
+           { replace ((before ++ [t]) ++ [s]) with
+                 (before ++ [t] ++ [s]) by (rewrite app_assoc; reflexivity).
+             rewrite <- Hdecomp.
+             exact (context_whole_connected l sub r Hctx). }
+           assert (HleftNE : before ++ [t] <> []).
+           { intros Hnil. apply app_eq_nil in Hnil. destruct Hnil as [_ Hnil].
+             discriminate. }
+           assert (Hjunction : term t = init s).
+           { pose proof (connected_app_junction
+                           (before ++ [t]) [s] HwholeConn HleftNE
+                           ltac:(discriminate)) as Hjunction'.
+             rewrite last_app_nonnil in Hjunction' by discriminate.
+             cbn in Hjunction'. exact Hjunction'. }
+           assert (HjointTrace : onLastSegment s (term t)).
+           { rewrite Hjunction. exists 0. split; [lra | reflexivity]. }
+           assert (HbpTrace : onLastSegment s (xb, snd p)).
+           { destruct HbpBody as [v [[Hv0 Hv1] Hvp]].
+             exists v. split; [exact Hv0 | exact Hvp]. }
+           assert (HfallingS : forall x y,
+               onLastSegment s x -> onLastSegment s y ->
+               (fst x < fst y <-> snd y < snd x)).
+           { intros x y Hx Hy. apply Hfalling.
+             - cbn. rewrite HlastWhole. exact Hx.
+             - cbn. rewrite HlastWhole. exact Hy. }
+           destruct Hp as [Hp | Hp].
+           ++ subst p.
+              destruct (total_order_T (snd (init t)) (snd (term t)))
+                as [[Hnorth | HeqY] | Hsouth].
+              ** assert (HinitAbove : snd (term t) < snd b).
+                 { assert (HtermTop : snd (term t) <= ry1 (rect_of [t])).
+                   { unfold rect_of. cbn. apply Rmax_r. }
+                   rewrite HbY. lra. }
+                 assert (HbpWhole :
+                     on_barrier_trace BarrierLast (l ++ sub ++ r)
+                       (xb, snd (init t))).
+                 { rewrite Hdecomp. cbn. rewrite HlastWhole. exact HbpTrace. }
+                 assert (HjointWhole :
+                     on_barrier_trace BarrierLast (l ++ sub ++ r) (term t)).
+                 { rewrite Hdecomp. cbn. rewrite HlastWhole. exact HjointTrace. }
+                 assert (HbWhole :
+                     on_barrier_trace BarrierLast (l ++ sub ++ r) b).
+                 { rewrite Hdecomp. exact HbTrace. }
+                 exact (two_sided_falling_barrier_endpoint_contact_impossible
+                          l sub r t (init t) (term t) BarrierLast
+                          (xb, snd (init t)) b Hctx HtWhole
+                          (or_introl eq_refl) (or_intror eq_refl)
+                          Hwhole HfallingWhole HbpWhole HjointWhole HbWhole
+                          eq_refl ltac:(cbn; lra) Hnorth HinitAbove).
+              ** apply (neq_init_term_y t). exact HeqY.
+              ** assert (HxbLeftJoint : xb < fst (term t)).
+                 { apply (proj2 (HfallingS (xb, snd (init t)) (term t)
+                                   HbpTrace HjointTrace)). cbn. exact Hsouth. }
+                 unfold in_segment_rect_or_endpoints, in_closed_rect,
+                   rect_of in HxbBox. cbn in HxbBox.
+                 destruct HxbBox as [[HxbLeft _] _].
+                 unfold Rmin in HxbLeft. destruct Rle_dec; lra.
+           ++ subst p.
+              pose proof (right_falling_barrier_same_height_unique
+                            BarrierLast (before ++ [t; s])
+                            (term t) (xb, snd (term t))
+                            Hfalling
+                            ltac:(cbn; rewrite HlastWhole; exact HjointTrace)
+                            ltac:(cbn; rewrite HlastWhole; exact HbpTrace)
+                            eq_refl) as Heq.
+              pose proof (f_equal fst Heq). cbn in H. lra.
+        -- apply (Hrect (last_segment (s :: s' :: after'')) (xb, snd p)).
+           ++ unfold nonadjacent_sides. rewrite in_app_iff. right.
+              change (In (last_segment (s :: s' :: after'')) (s' :: after'')).
+              assert (HlastTail : last_segment (s :: s' :: after'') =
+                                    last_segment (s' :: after'')).
+              { change (last_segment ([s] ++ (s' :: after'')) =
+                        last_segment (s' :: after'')).
+                apply last_app_nonnil. discriminate. }
+              rewrite HlastTail. apply last_In. discriminate.
+           ++ exact (segment_in_rect_or_endpoints _ _ HbpBody).
+           ++ exact HxbBox.
+Qed.
+
+Lemma ordinary_initial_extension_root_impossible :
+  forall l sub r t p side,
+    ClassificationContext l sub r ->
+    r <> [] ->
+    ~ initial_lid r ->
+    In t (nonadjacent_sides l r) ->
+    segment_x_ranges_overlap t (hd_segment r) ->
+    ry1 (rect_of [t]) < ry0 (rect_of [hd_segment r]) ->
+    endpoint_of_seg t p ->
+    fst (sub_right_anchor sub) < rx0 (rect_of [t]) ->
+    right_barrier_core side l sub r p ->
+    barrier_extension_seed l sub r side p ->
+    on_barrier_trace side (l ++ sub ++ r) p ->
+    False.
+Proof.
+  intros l sub r t p side Hctx Hr HnotLid Ht Hover Hbelow Hp HtRight
+    Hcore Hseed HrootTrace.
+  destruct (ordinary_initial_core_reaches_floor
+              l sub r t p side Hctx Hr HnotLid Hover Hbelow Hp Hcore)
+    as [b [HbTrace [HbY [Hbp [HbBoundary HbTarget]]]]].
+  assert (HtWhole : In t (l ++ sub ++ r)) by now apply nonadjacent_sides_in_whole.
+  destruct (in_app_app (l ++ sub ++ r) t HtWhole)
+    as [before [after Hdecomp]].
+  destruct (context_sparse l sub r Hctx before t after Hdecomp)
+    as [_ Hrect].
+  rewrite Hdecomp in HrootTrace, HbTrace.
+  destruct side.
+  - cbn in Hseed, HrootTrace, HbTrace.
+    destruct Hseed as [_ [HpHead _]].
+    rewrite Hdecomp in HpHead.
+    destruct before as [|h before']; cbn in HpHead, HrootTrace, HbTrace.
+    + subst p.
+      destruct (context_whole_embedded l sub r Hctx)
+        as [ds [sc [_ Hembed]]].
+      rewrite Hdecomp in Hembed.
+      assert (Hnth : nth_error (t :: after) 0 = Some t) by reflexivity.
+      destruct (embed_scurve_nth_embed sc (t :: after) Hembed 0 t Hnth)
+        as [[[v hor] c] [_ Hemb]].
+      destruct HbTrace as [u [Hu Hub]].
+      assert (HuStrict : u < 0).
+      { apply Rnot_le_lt. intro Hu0.
+        assert (HbBody : onSegment t b).
+        { exists u. split; [lra | exact Hub]. }
+        pose proof (segment_in_rect_or_endpoints t b HbBody) as HbBox.
+        unfold in_segment_rect_or_endpoints, in_closed_rect in HbBox.
+        destruct HbBox as [_ [_ HbTop]]. rewrite HbY in HbTop. lra. }
+      assert (HbHead : onHead t b).
+      { exists u. split; [lra | exact Hub]. }
+      destruct hor.
+      * pose proof (e_end_relation t v c Hemb) as Heast.
+        change (Rmin (fst (init t)) (fst (term t)) <= fst b) in HbTarget.
+        rewrite Rmin_left in HbTarget by lra. lra.
+      * pose proof (west_head_extension_bounds t v c b Hemb HbHead). lra.
+    + assert (HpBarrier : p = init h) by exact HpHead.
+      assert (HpBody : onSegment h p).
+      { rewrite HpBarrier. apply onInit. }
+      destruct before' as [|h' before''].
+      * assert (HwholeConn : connected ([h] ++ t :: after)).
+        { replace ([h] ++ t :: after) with ([h] ++ [t] ++ after)
+            by reflexivity.
+          rewrite <- Hdecomp. exact (context_whole_connected l sub r Hctx). }
+        assert (Hjunction : term h = init t).
+        { eapply connected_app_junction with (l := [h]) (r := t :: after);
+            eauto; discriminate. }
+        destruct (context_whole_embedded l sub r Hctx)
+          as [ds [sc [_ Hembed]]].
+        rewrite Hdecomp in Hembed.
+        destruct (embed_scurve_adjacent_data
+                    sc (h :: t :: after) 0 h t Hembed eq_refl eq_refl)
+          as [ps1 [ps2 [Hemb1 [Hemb2 [Hdc Hjoin]]]]].
+        assert (HpT : onSegment t p).
+        { destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
+        pose proof (adjacent_not_intersect_except_junction
+                      ps1 ps2 h t p Hdc Hemb1 Hemb2 Hjoin HpBody HpT) as HpJoin.
+        apply (neq_init_term h). transitivity p.
+        -- symmetry. exact HpBarrier.
+        -- exact HpJoin.
+      * apply (Hrect h p).
+        -- unfold nonadjacent_sides. rewrite in_app_iff. left. simpl. now left.
+        -- exact (segment_in_rect_or_endpoints h p HpBody).
+        -- apply segment_in_rect_or_endpoints.
+           destruct Hp as [-> | ->]; [apply onInit | apply onTerm].
+  - cbn in Hseed, HrootTrace, HbTrace.
+    destruct Hseed as [_ [HpLast _]].
+    rewrite Hdecomp in HpLast.
+    destruct after as [|s after']; cbn in HpLast, HrootTrace, HbTrace.
+    + assert (HlastSelf : last_segment (before ++ [t]) = t)
+        by now apply last_app_nonnil.
+      rewrite HlastSelf in HpLast, HrootTrace, HbTrace.
+      subst p.
+      destruct (context_whole_embedded l sub r Hctx)
+        as [ds [sc [_ Hembed]]].
+      rewrite Hdecomp in Hembed.
+      set (last_i := (length (before ++ [t]) - 1)%nat).
+      assert (Hnth : nth_error (before ++ [t]) last_i = Some t).
+      { unfold last_i.
+        rewrite (@nth_error_last Segment (before ++ [t]) default_segment)
+          by (intro Hnil; apply app_eq_nil in Hnil;
+              destruct Hnil as [_ Hnil]; inversion Hnil).
+        f_equal. exact HlastSelf. }
+      destruct (embed_scurve_nth_embed
+                  sc (before ++ [t]) Hembed last_i t Hnth)
+        as [[[v hor] c] [_ Hemb]].
+      destruct HbTrace as [u [Hu Hub]].
+      assert (HuStrict : 1 < u).
+      { destruct (Rlt_dec 1 u) as [Hlt | Hnot]; [exact Hlt |].
+        exfalso. assert (HbBody : onSegment t b).
+        { exists u. split; [lra | exact Hub]. }
+        pose proof (segment_in_rect_or_endpoints t b HbBody) as HbBox.
+        unfold in_segment_rect_or_endpoints, in_closed_rect in HbBox.
+        destruct HbBox as [_ [_ HbTop]]. rewrite HbY in HbTop. lra. }
+      assert (HbLast : onLast t b).
+      { exists u. split; [lra | exact Hub]. }
+      destruct hor.
+      * pose proof (east_last_extension_bounds t v c b Hemb HbLast). lra.
+      * pose proof (w_end_relation t v c Hemb) as Hwest.
+        change (Rmin (fst (init t)) (fst (term t)) <= fst b) in HbTarget.
+        rewrite Rmin_right in HbTarget by lra. lra.
+    + assert (HlastWhole : last_segment (before ++ t :: s :: after') =
+                              last_segment (s :: after')).
+      { rewrite (last_app_nonnil before (t :: s :: after')) by discriminate.
+        change (last_segment ([t] ++ (s :: after')) =
+                last_segment (s :: after')).
+        apply last_app_nonnil. discriminate. }
+      rewrite HlastWhole in HpLast, HrootTrace.
+      assert (HpBarrier : p = term (last_segment (s :: after')))
+        by exact HpLast.
+      assert (HpBody : onSegment (last_segment (s :: after')) p).
+      { rewrite HpBarrier. apply onTerm. }
+      destruct after' as [|s' after''].
+      * cbn in HpBarrier, HpBody.
+        assert (HwholeConn : connected ((before ++ [t]) ++ [s])).
+        { replace ((before ++ [t]) ++ [s]) with
+              (before ++ [t] ++ [s]) by (rewrite app_assoc; reflexivity).
+          rewrite <- Hdecomp. exact (context_whole_connected l sub r Hctx). }
+        assert (HleftNE : before ++ [t] <> []).
+        { intros Hnil. apply app_eq_nil in Hnil. destruct Hnil as [_ Hnil].
+          discriminate. }
+        assert (Hjunction : term t = init s).
+        { pose proof (connected_app_junction
+                        (before ++ [t]) [s] HwholeConn HleftNE
+                        ltac:(discriminate)) as Hj.
+          rewrite last_app_nonnil in Hj by discriminate. cbn in Hj. exact Hj. }
+        destruct (classification_context_app_boundary_data
+                    l sub r (before ++ [t]) [s] Hctx
+                    ltac:(rewrite Hdecomp, app_assoc; reflexivity)
+                    HleftNE ltac:(discriminate))
+          as [ps1 [ps2 [Hemb1 [Hemb2 [Hdc Hjoin]]]]].
+        cbn in Hemb2. rewrite last_app_nonnil in Hemb1 by discriminate.
+        assert (HpT : onSegment t p).
+        { destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
+        pose proof (adjacent_not_intersect_except_junction
+                      ps1 ps2 t s p Hdc Hemb1 Hemb2 Hjunction HpT HpBody) as HpJoin.
+        apply (neq_init_term s).
+        rewrite <- Hjunction, <- HpJoin, HpBarrier. reflexivity.
+      * apply (Hrect (last_segment (s :: s' :: after'')) p).
+        -- unfold nonadjacent_sides. rewrite in_app_iff. right.
+           change (In (last_segment (s :: s' :: after'')) (s' :: after'')).
+           assert (HlastTail : last_segment (s :: s' :: after'') =
+                                 last_segment (s' :: after'')).
+           { change (last_segment ([s] ++ (s' :: after'')) =
+                     last_segment (s' :: after'')).
+             apply last_app_nonnil. discriminate. }
+           rewrite HlastTail. apply last_In. discriminate.
+        -- exact (segment_in_rect_or_endpoints _ _ HpBody).
+        -- apply segment_in_rect_or_endpoints.
+           destruct Hp as [-> | ->]; [apply onInit | apply onTerm].
+Qed.
+
+Lemma ordinary_initial_distinct_reverse_root_impossible :
+  forall l sub r t p side previous,
+    ClassificationContext l sub r ->
+    r <> [] ->
+    ~ initial_lid r ->
+    In t (nonadjacent_sides l r) ->
+    segment_x_ranges_overlap t (hd_segment r) ->
+    ry1 (rect_of [t]) < ry0 (rect_of [hd_segment r]) ->
+    endpoint_of_seg t p ->
+    fst (sub_right_anchor sub) < rx0 (rect_of [t]) ->
+    right_barrier_core side l sub r p ->
+    barrier_reverse_step l sub r side previous p ->
+    on_barrier_trace side (l ++ sub ++ r) p ->
+    t <> barrier_segment side (l ++ sub ++ r) ->
+    False.
+Proof.
+  intros l sub r t p side previous Hctx Hr HnotLid Ht Hover Hbelow Hp
+    HtRight Hcore Hreverse HrootTrace Hdistinct.
+  destruct (ordinary_initial_core_reaches_floor
+              l sub r t p side Hctx Hr HnotLid Hover Hbelow Hp Hcore)
+    as [b [HbTrace [HbY [Hbp [HbBoundary HbTarget]]]]].
+  unfold right_barrier_core in Hcore. cbn in Hcore.
+  destruct Hcore as [Hwhole [Hfalling _]].
+  assert (HpBarrierBody :
+      onSegment (barrier_segment side (l ++ sub ++ r)) p).
+  { destruct Hreverse; cbn.
+    - replace (hd_segment (l ++ sub ++ r)) with (hd_segment l).
+      + apply onInit.
+      + unfold hd_segment. now apply hd_app.
+    - replace (hd_segment (l ++ sub ++ r)) with (hd_segment l).
+      + apply onTerm.
+      + unfold hd_segment. now apply hd_app.
+    - replace (last_segment (l ++ sub ++ r)) with (last_segment r).
+      + apply onInit.
+      + symmetry. rewrite last_app_nonnil by
+          (intro Hnil; apply app_eq_nil in Hnil; tauto).
+        now apply last_app_nonnil.
+    - replace (last_segment (l ++ sub ++ r)) with (last_segment r).
+      + apply onTerm.
+      + symmetry. rewrite last_app_nonnil by
+          (intro Hnil; apply app_eq_nil in Hnil; tauto).
+        now apply last_app_nonnil. }
+  assert (HtWhole : In t (l ++ sub ++ r)) by now apply nonadjacent_sides_in_whole.
+  destruct (in_app_app (l ++ sub ++ r) t HtWhole)
+    as [before [after Hdecomp]].
+  destruct (context_sparse l sub r Hctx before t after Hdecomp)
+    as [_ Hrect].
+  rewrite Hdecomp in HrootTrace, HbTrace, HpBarrierBody, Hfalling, Hdistinct.
+  destruct side.
+  - cbn in HrootTrace, HbTrace, HpBarrierBody, Hfalling, Hdistinct.
+    destruct before as [|h before']; cbn in HrootTrace, HbTrace,
+      HpBarrierBody, Hfalling, Hdistinct.
+    + apply Hdistinct. reflexivity.
+    + destruct before' as [|h' before''].
+      * destruct (classification_context_app_boundary_data
+                    l sub r [h] (t :: after) Hctx
+                    ltac:(rewrite Hdecomp; reflexivity)
+                    ltac:(discriminate) ltac:(discriminate))
+          as [ps1 [ps2 [Hemb1 [Hemb2 [Hdc Hjoin]]]]].
+        cbn in Hemb1, Hjoin.
+        assert (HpT : onSegment t p).
+        { destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
+        pose proof (adjacent_not_intersect_except_junction
+                      ps1 ps2 h t p Hdc Hemb1 Hemb2 Hjoin
+                      HpBarrierBody HpT) as HpJoin.
+        assert (Hl' : l <> []).
+        { inversion Hreverse; assumption. }
+        assert (HheadEq : hd_segment l = h).
+        { assert (Hhd : hd_segment (l ++ sub ++ r) = hd_segment l).
+          { symmetry. unfold hd_segment. now apply hd_app. }
+          rewrite Hdecomp in Hhd. cbn in Hhd. symmetry. exact Hhd. }
+        inversion Hreverse.
+        -- subst p. apply (neq_init_term h). congruence.
+        -- subst p. rewrite HheadEq in H0.
+           assert (HpInitT : term h = init t) by exact Hjoin.
+           pose proof (f_equal fst HpInitT) as HpInitTX. cbn in HpInitTX.
+           assert (HbarEast : fst (init h) < fst (term h)).
+           { apply (proj2 (Hfalling (init h) (term h)
+                              ltac:(exists 0; split; [lra | reflexivity])
+                              ltac:(exists 1; split; [lra | reflexivity]))).
+             pose proof (s_end_relation h hor cc H0). lra. }
+           assert (Hps1 : ps1 = (s, hor, cc)).
+           { transitivity (primitive_segment h).
+             - now apply embed_primitive_segment.
+             - symmetry. now apply embed_primitive_segment. }
+           subst ps1.
+           destruct hor.
+           ++ inversion Hdc; subst.
+              ** pose proof (e_end_relation t s cx Hemb2) as Heast.
+                 change (Rmin (fst (init t)) (fst (term t)) <= fst b)
+                   in HbTarget.
+                 unfold Rmin in HbTarget.
+                 destruct Rle_dec; lra.
+              ** pose proof (e_end_relation t n cc Hemb2) as Heast.
+                 change (Rmin (fst (init t)) (fst (term t)) <= fst b)
+                   in HbTarget.
+                 unfold Rmin in HbTarget.
+                 destruct Rle_dec; lra.
+           ++ pose proof (w_end_relation h s cc H0). lra.
+      * apply (Hrect h p).
+        -- unfold nonadjacent_sides. rewrite in_app_iff. left. simpl. now left.
+        -- exact (segment_in_rect_or_endpoints h p HpBarrierBody).
+        -- apply segment_in_rect_or_endpoints.
+           destruct Hp as [-> | ->]; [apply onInit | apply onTerm].
+  - cbn in HrootTrace, HbTrace, HpBarrierBody, Hfalling, Hdistinct.
+    destruct after as [|s after']; cbn in HrootTrace, HbTrace,
+      HpBarrierBody, Hfalling, Hdistinct.
+    + apply Hdistinct. symmetry. now apply last_app_nonnil.
+    + assert (HlastWhole : last_segment (before ++ t :: s :: after') =
+                            last_segment (s :: after')).
+      { rewrite (last_app_nonnil before (t :: s :: after')) by discriminate.
+        change (last_segment ([t] ++ (s :: after')) =
+                last_segment (s :: after')).
+        apply last_app_nonnil. discriminate. }
+      try rewrite HlastWhole in HrootTrace.
+      try rewrite HlastWhole in HbTrace.
+      try rewrite HlastWhole in HpBarrierBody.
+      try rewrite HlastWhole in Hfalling.
+      try rewrite HlastWhole in Hdistinct.
+      destruct after' as [|s' after''].
+      * cbn in HrootTrace, HbTrace, HpBarrierBody, Hfalling, Hdistinct.
+        assert (HleftNE : before ++ [t] <> []).
+        { intro Hnil. apply app_eq_nil in Hnil. destruct Hnil as [_ Hnil].
+          discriminate. }
+        destruct (classification_context_app_boundary_data
+                    l sub r (before ++ [t]) [s] Hctx
+                    ltac:(rewrite Hdecomp, app_assoc; reflexivity)
+                    HleftNE ltac:(discriminate))
+          as [ps1 [ps2 [Hemb1 [Hemb2 [Hdc Hjoin]]]]].
+        rewrite last_app_nonnil in Hemb1, Hjoin by discriminate.
+        cbn in Hemb2, Hjoin.
+        assert (HpT : onSegment t p).
+        { destruct Hp as [-> | ->]; [apply onInit | apply onTerm]. }
+        pose proof (adjacent_not_intersect_except_junction
+                      ps1 ps2 t s p Hdc Hemb1 Hemb2 Hjoin
+                      HpT HpBarrierBody) as HpJoin.
+        assert (Hr' : r <> []).
+        { inversion Hreverse; assumption. }
+        assert (HlastEq : last_segment r = s).
+        { assert (Hlast : last_segment (l ++ sub ++ r) = last_segment r).
+          { rewrite last_app_nonnil by
+              (intro Hnil; apply app_eq_nil in Hnil;
+               destruct Hnil as [_ Hnil]; contradiction).
+            now apply last_app_nonnil. }
+          rewrite Hdecomp in Hlast. cbn in Hlast.
+          rewrite last_app_nonnil in Hlast by discriminate.
+          symmetry. exact Hlast. }
+        assert (HfallingS : forall x y,
+            onLastSegment s x -> onLastSegment s y ->
+            (fst x < fst y <-> snd y < snd x)).
+        { intros x y Hx Hy. apply Hfalling.
+          - cbn. rewrite HlastWhole. exact Hx.
+          - cbn. rewrite HlastWhole. exact Hy. }
+        inversion Hreverse.
+        -- subst p. rewrite HlastEq in H0.
+           assert (HpTermT : init s = term t) by (symmetry; exact Hjoin).
+           assert (HbarWest : fst (term s) < fst (init s)).
+           { apply (proj2 (HfallingS (term s) (init s)
+                              ltac:(exists 1; split; [lra | reflexivity])
+                              ltac:(exists 0; split; [lra | reflexivity]))).
+             pose proof (n_end_relation s hor cc H0). lra. }
+           assert (Hps2 : ps2 = (n, hor, cc)).
+           { transitivity (primitive_segment s).
+             - now apply embed_primitive_segment.
+             - symmetry. now apply embed_primitive_segment. }
+           subst ps2.
+           destruct hor.
+           ++ pose proof (e_end_relation s n cc H0). lra.
+           ++ inversion Hdc; subst.
+              ** pose proof (w_end_relation t n c Hemb1) as Hwest.
+                 change (Rmin (fst (init t)) (fst (term t)) <= fst b)
+                   in HbTarget.
+                 unfold Rmin in HbTarget. destruct Rle_dec; lra.
+              ** pose proof (w_end_relation t s cc Hemb1) as Hwest.
+                 change (Rmin (fst (init t)) (fst (term t)) <= fst b)
+                   in HbTarget.
+                 unfold Rmin in HbTarget. destruct Rle_dec; lra.
+        -- subst p. apply (neq_init_term s). congruence.
+      * apply (Hrect (last_segment (s :: s' :: after'')) p).
+        -- unfold nonadjacent_sides. rewrite in_app_iff. right.
+           change (In (last_segment (s :: s' :: after'')) (s' :: after'')).
+           assert (HlastTail : last_segment (s :: s' :: after'') =
+                                 last_segment (s' :: after'')).
+           { change (last_segment ([s] ++ (s' :: after'')) =
+                     last_segment (s' :: after'')).
+             apply last_app_nonnil. discriminate. }
+           rewrite HlastTail. apply last_In. discriminate.
+        -- exact (segment_in_rect_or_endpoints _ _ HpBarrierBody).
+        -- apply segment_in_rect_or_endpoints.
+           destruct Hp as [-> | ->]; [apply onInit | apply onTerm].
+Qed.
+
+Lemma ordinary_initial_gate_blocks_right_certificate : forall l sub r t p,
+  ClassificationContext l sub r ->
+  r <> [] ->
+  ~ initial_lid r ->
+  In t (nonadjacent_sides l r) ->
+  segment_x_ranges_overlap t (hd_segment r) ->
+  ry1 (rect_of [t]) < ry0 (rect_of [hd_segment r]) ->
+  endpoint_of_seg t p ->
+  fst (sub_right_anchor sub) < rx0 (rect_of [t]) ->
+  right_up_certificate l sub r p ->
+  False.
+Proof.
+  intros l sub r t p Hctx Hr HnotLid Ht Hover Hbelow Hp HtRight Hcertificate.
+  revert p Hp Hcertificate.
+  fix IH 3.
+  intros p Hp Hcertificate.
+  destruct Hcertificate as
+    [side root p Hcore Hseed HrootTrace Hposition
+    | side root previous p Hcore Hreverse Hprevious HrootTrace Hposition].
+  - destruct Hposition as [Hlevel | Hroot].
+    + exact (ordinary_initial_at_level_collision_impossible
+               l sub r t p side Hctx Hr HnotLid Ht Hover Hbelow Hp HtRight
+               Hcore Hlevel).
+    + subst root.
+      exact (ordinary_initial_extension_root_impossible
+               l sub r t p side Hctx Hr HnotLid Ht Hover Hbelow Hp HtRight
+               Hcore Hseed HrootTrace).
+  - destruct Hposition as [Hlevel | Hroot].
+    + exact (ordinary_initial_at_level_collision_impossible
+               l sub r t p side Hctx Hr HnotLid Ht Hover Hbelow Hp HtRight
+               Hcore Hlevel).
+    + subst root.
+      destruct (classic (t = barrier_segment side (l ++ sub ++ r)))
+        as [Hsame | Hdistinct].
+      * destruct Hp as [Hp | Hp].
+        -- subst p.
+           assert (Hother : term t = previous).
+           { exact (barrier_reverse_step_other_endpoint
+                      l sub r side previous (init t) t (term t)
+                      Hreverse Hsame (or_introl eq_refl) (or_intror eq_refl)
+                      (neq_init_term t)). }
+           rewrite <- Hother in Hprevious.
+           exact (IH (term t) (or_intror eq_refl) Hprevious).
+        -- subst p.
+           assert (Hother : init t = previous).
+           { exact (barrier_reverse_step_other_endpoint
+                      l sub r side previous (term t) t (init t)
+                      Hreverse Hsame (or_intror eq_refl) (or_introl eq_refl)
+                      (not_eq_sym (neq_init_term t))). }
+           rewrite <- Hother in Hprevious.
+           exact (IH (init t) (or_introl eq_refl) Hprevious).
+      * exact (ordinary_initial_distinct_reverse_root_impossible
+                 l sub r t p side previous Hctx Hr HnotLid Ht Hover Hbelow
+                 Hp HtRight Hcore Hreverse HrootTrace Hdistinct).
 Qed.
 
 (* 蓋でない左通常境界の下では、固定接続点までの空いた閉長方形と
@@ -1259,7 +2696,81 @@ Lemma classify_below_initial_not_up :
       ry1 (rect_of [t]) < ry0 (rect_of [hd_segment r]) ->
       endpoint_of_seg t p ->
       classify l sub r p <> RegUp.
-Admitted.
+Proof.
+  intros l sub r Hctx Hr HnotLid t p Ht Hover Hbelow Hp Hup.
+  destruct (ordinary_initial_boundary_data l sub r Hctx Hr HnotLid)
+    as [Heast Hjoin].
+  assert (HpY : snd p < snd (sub_right_anchor sub)).
+  { change (Rmax (snd (init t)) (snd (term t)) <
+            Rmin (snd (init (hd_segment r)))
+                 (snd (term (hd_segment r)))) in Hbelow.
+    assert (HpMax : snd p <= Rmax (snd (init t)) (snd (term t))).
+    { destruct Hp as [-> | ->]; [apply Rmax_l | apply Rmax_r]. }
+    pose proof (Rmin_l (snd (init (hd_segment r)))
+                       (snd (term (hd_segment r)))) as Hmin.
+    assert (HpInit : snd p < snd (init (hd_segment r))) by lra.
+    now rewrite Hjoin in HpInit. }
+  destruct (Rlt_dec (fst (sub_right_anchor sub))
+                    (rx0 (rect_of [t]))) as [HtRight | HtReaches].
+  - assert (HpRight : fst (sub_right_anchor sub) < fst p).
+    { assert (HpBox : in_segment_rect_or_endpoints t p).
+      { apply segment_in_rect_or_endpoints. destruct Hp as [-> | ->];
+          [apply onInit | apply onTerm]. }
+      unfold in_segment_rect_or_endpoints, in_closed_rect in HpBox.
+      destruct HpBox as [[Hpx _] _]. lra. }
+    pose proof (classify_up_has_up_path_invariant l sub r p Hctx Hup) as Hinv.
+    eapply (ordinary_initial_gate_blocks_right_certificate
+              l sub r t p Hctx Hr HnotLid Ht Hover Hbelow Hp HtRight).
+    exact (proj2 (proj2 Hinv) HpRight HpY).
+  - pose proof (context_sub_nonempty l sub r Hctx) as Hsub.
+    pose proof (context_sub_connected l sub r Hctx) as Hconn.
+    pose proof (context_sub_x_monotone l sub r Hctx) as Hmono.
+    destruct (x_monotone_rect_x_bounds sub Hsub Hconn Hmono)
+      as [HsubLeft HsubRight].
+    assert (HtAnchor :
+        rx0 (rect_of [t]) <= fst (sub_right_anchor sub)
+        <= rx1 (rect_of [t])).
+    { unfold segment_x_ranges_overlap in Hover.
+      destruct Hover as [_ HoverR].
+      change (Rmin (fst (init t)) (fst (term t)) <=
+              fst (sub_right_anchor sub) <=
+              Rmax (fst (init t)) (fst (term t))).
+      change (Rmin (fst (init (hd_segment r)))
+                   (fst (term (hd_segment r))) <=
+              Rmax (fst (init t)) (fst (term t))) in HoverR.
+      rewrite Rmin_left in HoverR by lra.
+      split.
+      - exact (Rnot_lt_le _ _ HtReaches).
+      - now rewrite <- Hjoin. }
+    destruct (segment_has_point_at_x t (fst (sub_right_anchor sub)) HtAnchor)
+      as [z [Hz Hzx]].
+    assert (HrightOn : onSegmentlist sub (sub_right_anchor sub)).
+    { unfold sub_right_anchor. exists (last_segment sub). split.
+      - apply last_In. exact Hsub.
+      - apply onTerm. }
+    assert (HzRange : in_sub_x_range sub z).
+    { unfold in_sub_x_range. rewrite Hzx, HsubLeft, HsubRight.
+      unfold sub_right_anchor.
+      pose proof (connected_x_monotone_endpoints sub Hsub Hconn Hmono).
+      lra. }
+    assert (HzBelow : below_sub_at_x sub z).
+    { exists (sub_right_anchor sub). split; [exact HrightOn |].
+      split; [exact Hzx |].
+      pose proof (segment_in_rect_or_endpoints t z Hz) as HzBox.
+      unfold in_segment_rect_or_endpoints, in_closed_rect in HzBox.
+      destruct HzBox as [_ [_ Hzy1]].
+      change (snd z <= Rmax (snd (init t)) (snd (term t))) in Hzy1.
+      change (Rmax (snd (init t)) (snd (term t)) <
+              Rmin (snd (init (hd_segment r)))
+                   (snd (term (hd_segment r)))) in Hbelow.
+      pose proof (Rmin_l (snd (init (hd_segment r)))
+                         (snd (term (hd_segment r)))) as Hmin.
+      assert (HzInit : snd z < snd (init (hd_segment r))) by lra.
+      now rewrite Hjoin in HzInit. }
+    pose proof (nonadjacent_below_sub_point_classified_down
+                  l sub r t p z Hctx Ht Hp Hz HzRange HzBelow).
+    congruence.
+Qed.
 
 Lemma strict_extension_above_or_below_sub : forall l sub r p,
   ClassificationContext l sub r ->
