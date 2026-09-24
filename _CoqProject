@@ -18,8 +18,8 @@ theories/Sparse/Sparsity.v
 theories/Sparse/ClassifyGeometry.v
 theories/Sparse/ClassifyDefinition.v
 theories/Sparse/ClassifySpec.v
-theories/Sparse/ClassifyInvariant.v
-theories/Sparse/ClassifyProof.v
+theories/Sparse/ClassifyProperties.v
+theories/Sparse/ClassifyCorrectness.v
 theories/Sparse/Classify.v
 theories/Sparse/Reconnect.v
 theories/Sparse/ReconnectSplit.v

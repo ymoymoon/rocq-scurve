@@ -1,4 +1,4 @@
-Require Export Sparse.ClassifyInvariant.
+Require Export Sparse.ClassifyProperties.
 Require Import Stdlib.Lists.List.
 Import ListNotations.
 From Stdlib Require Import Lra.
