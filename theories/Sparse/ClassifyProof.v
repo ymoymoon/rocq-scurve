@@ -1900,7 +1900,8 @@ Proof.
   intros p Hp Hcertificate.
   destruct Hcertificate as
     [side root p Hcore Hseed HrootTrace Hposition
-    | side root previous p Hcore Hreverse Hprevious HrootTrace Hposition].
+    | side root previous p Hcore Hreverse Hprevious HrootTrace Hposition
+    | side previous p Hpiece Hreverse Hprevious].
   - destruct Hposition as [Hlevel | Hroot].
     + exact (ordinary_terminal_at_level_collision_impossible
                l sub r t p side Hctx Hl HnotLid Ht Hover Hbelow Hp HtLeft
@@ -1936,7 +1937,8 @@ Proof.
       * exact (ordinary_terminal_distinct_reverse_root_impossible
                  l sub r t p side previous Hctx Hl HnotLid Ht Hover Hbelow
                  Hp HtLeft Hcore Hreverse HrootTrace Hdistinct).
-Qed.
+  - admit.
+Admitted.
 
 Lemma ordinary_initial_at_level_collision_impossible :
   forall l sub r t p side,
@@ -2557,7 +2559,8 @@ Proof.
   intros p Hp Hcertificate.
   destruct Hcertificate as
     [side root p Hcore Hseed HrootTrace Hposition
-    | side root previous p Hcore Hreverse Hprevious HrootTrace Hposition].
+    | side root previous p Hcore Hreverse Hprevious HrootTrace Hposition
+    | side previous p Hpiece Hreverse Hprevious].
   - destruct Hposition as [Hlevel | Hroot].
     + exact (ordinary_initial_at_level_collision_impossible
                l sub r t p side Hctx Hr HnotLid Ht Hover Hbelow Hp HtRight
@@ -2593,7 +2596,8 @@ Proof.
       * exact (ordinary_initial_distinct_reverse_root_impossible
                  l sub r t p side previous Hctx Hr HnotLid Ht Hover Hbelow
                  Hp HtRight Hcore Hreverse HrootTrace Hdistinct).
-Qed.
+  - admit.
+Admitted.
 
 (* 蓋でない左通常境界の下では、固定接続点までの空いた閉長方形と
    その外側から伸びる rising 障壁により Up 到達を排除する。 *)
