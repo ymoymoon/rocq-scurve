@@ -144,15 +144,9 @@ Proof.
 Qed.
 
 (* 端点間の分類順序により、旧長方形の軸方向の分離は移動後も保たれる。 *)
-Lemma operated_endpoint_rectangles_axis_separated :
+Lemma operated_endpoint_rectangles_axis_separated_from_spec :
   forall l sub r h i j s t s' t',
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     0 < h ->
     nth_error (l ++ sub ++ r) i = Some s ->
     nth_error (l ++ sub ++ r) j = Some t ->
@@ -168,7 +162,7 @@ Lemma operated_endpoint_rectangles_axis_separated :
     endpoint_rectangles_axis_separated s t ->
     endpoint_rectangles_axis_separated s' t'.
 Proof.
-  intros l sub r h i j s t s' t' Hne Hconn Hmono Hsparse Hwhole Hembedded Hext Hh
+  intros l sub r h i j s t s' t' Hspec Hh
     Hs Ht Hfar Hsinit Hsterm Htinit Htterm
     HsinitNotSub HstermNotSub HtinitNotSub HttermNotSub Haxis.
   assert (Horder :
@@ -187,7 +181,7 @@ Proof.
       [exact Hh | exact Hy |].
     exact (classified_nonadjacent_endpoint_order
              l sub r
-             (classify_spec l sub r Hne Hmono Hsparse Hembedded Hext)
+             Hspec
              i0 j0 u v pu pv Hu Hv Hfar0 Hoverlap Hpu Hpv
              HpvNotSub (Rlt_le _ _ Hy)). }
   unfold endpoint_rectangles_axis_separated in Haxis |- *.
@@ -283,6 +277,36 @@ Proof.
          apply Hold; now right].
 Qed.
 
+(* 旧 x 単調版は、分類仕様を一般版へ渡すだけで得られる。 *)
+Lemma operated_endpoint_rectangles_axis_separated :
+  forall l sub r h i j s t s' t',
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    0 < h ->
+    nth_error (l ++ sub ++ r) i = Some s ->
+    nth_error (l ++ sub ++ r) j = Some t ->
+    (S i < j \/ S j < i)%nat ->
+    init s' = operate_point l sub r h (init s) ->
+    term s' = operate_point l sub r h (term s) ->
+    init t' = operate_point l sub r h (init t) ->
+    term t' = operate_point l sub r h (term t) ->
+    ~ onSegmentlist sub (init s) ->
+    ~ onSegmentlist sub (term s) ->
+    ~ onSegmentlist sub (init t) ->
+    ~ onSegmentlist sub (term t) ->
+    endpoint_rectangles_axis_separated s t ->
+    endpoint_rectangles_axis_separated s' t'.
+Proof.
+  intros l sub r h i j s t s' t' Hne _ Hmono Hsparse _ Hembedded Hext.
+  eapply operated_endpoint_rectangles_axis_separated_from_spec.
+  exact (classify_spec l sub r Hne Hmono Hsparse Hembedded Hext).
+Qed.
+
 (* 延長線点と同じ x の旧セグメント点が与える分類順序から，
    延長線点は移動後の端点長方形にも入らない。 *)
 Lemma shifted_crossing_avoids_endpoint_rect :
@@ -365,21 +389,16 @@ Proof.
 Qed.
 
 (* 再接続後の先頭・末尾延長線は、各セグメントの端点長方形を避ける。 *)
-Lemma reconnect_preserves_extensions_avoid_rectangles :
-  forall ds l sub r h,
+Lemma reconnect_preserves_extensions_avoid_rectangles_from_spec :
+  forall l sub r h,
     sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     sparse_embedding (l ++ sub ++ r) ->
-    embed_listDir ds (l ++ sub ++ r) ->
-    extensions_disjoint (l ++ sub ++ r) ->
     extensions_avoid_segment_rectangles (ordinary_reconnect_split l sub r h).
 Proof.
-  intros ds l sub r h Hne Hconn Hmono Hh Hrec Hsparse Hembed Hext.
-  assert (Hwhole : connected (l ++ sub ++ r)).
-  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
+  intros l sub r h Hne Hspec Hh Hrec Hsparse.
   unfold extensions_avoid_segment_rectangles.
   intros l' s' r' Hsplit p Hextension Hp.
   assert (Hs' :
@@ -398,15 +417,13 @@ Proof.
   destruct (@nth_error_split Segment (l ++ sub ++ r) (length l') s Hs)
     as [oldl [oldr [HoldSplit HoldLen]]].
   destruct (Hsparse oldl s oldr HoldSplit) as [HoldExtension _].
-  pose proof (ordinary_reconnect_split_nth_spec
-                l sub r h (length l') s s'
-                Hne Hconn Hmono Hsparse Hwhole (ex_intro _ ds Hembed)
-                Hrec Hs Hs')
+  pose proof (ordinary_reconnect_split_nth_spec_basic
+                l sub r h (length l') s s' Hrec Hs Hs')
     as [_ [Hinit Hterm]].
   destruct Hextension as [[Hl' Hhead] | [Hr' Hlast]].
-  - destruct (reconnect_head_strict_extension_preimage
-                ds l sub r h p Hne Hconn Hmono Hsparse Hembed
-                Hext (Rlt_le _ _ (proj1 Hh)) Hhead)
+  - destruct (reconnect_head_strict_extension_preimage_from_spec
+                l sub r h p Hne Hsparse Hspec
+                (Rlt_le _ _ (proj1 Hh)) Hhead)
       as [q [Hq Hpoint]].
     rewrite Hpoint in Hp.
     eapply (shifted_crossing_avoids_endpoint_rect
@@ -425,14 +442,11 @@ Proof.
         now rewrite <- HoldSplit.
     + intros e He Hxe.
       exact (classified_head_segment_crossing_order
-               l sub r
-               (classify_spec l sub r Hne Hmono Hsparse
-                  (ex_intro _ ds Hembed) Hext)
-               s e q Hin He Hq Hxe).
+               l sub r Hspec s e q Hin He Hq Hxe).
     + exact Hp.
-  - destruct (reconnect_last_strict_extension_preimage
-                ds l sub r h p Hne Hconn Hmono Hsparse Hembed
-                Hext (Rlt_le _ _ (proj1 Hh)) Hlast)
+  - destruct (reconnect_last_strict_extension_preimage_from_spec
+                l sub r h p Hne Hsparse Hspec
+                (Rlt_le _ _ (proj1 Hh)) Hlast)
       as [q [Hq Hpoint]].
     rewrite Hpoint in Hp.
     eapply (shifted_crossing_avoids_endpoint_rect
@@ -454,11 +468,28 @@ Proof.
         now rewrite <- HoldSplit.
     + intros e He Hxe.
       exact (classified_last_segment_crossing_order
-               l sub r
-               (classify_spec l sub r Hne Hmono Hsparse
-                  (ex_intro _ ds Hembed) Hext)
-               s e q Hin He Hq Hxe).
+               l sub r Hspec s e q Hin He Hq Hxe).
     + exact Hp.
+Qed.
+
+Lemma reconnect_preserves_extensions_avoid_rectangles :
+  forall ds l sub r h,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    h_large h sub ->
+    all_reconnectable l sub r h (l ++ sub ++ r) ->
+    sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    extensions_avoid_segment_rectangles (ordinary_reconnect_split l sub r h).
+Proof.
+  intros ds l sub r h Hne _ Hmono Hh Hrec Hsparse Hembed Hext.
+  exact (reconnect_preserves_extensions_avoid_rectangles_from_spec
+           l sub r h Hne
+           (classify_spec l sub r Hne Hmono Hsparse
+              (ex_intro _ ds Hembed) Hext)
+           Hh Hrec Hsparse).
 Qed.
 
 (* 安全な蓋への置換は各位置の端点長方形と外側延長線を変えないので、
@@ -771,17 +802,6 @@ Definition endpoint_box_separated_from_sub
   \/ both_left_of_sub sub p q
   \/ both_right_of_sub sub p q.
 
-Lemma sub_rect_has_positive_width :
-  forall sub,
-    sub <> [] -> connected sub -> x_monotone_segs sub ->
-    rx0 (rect_of sub) < rx1 (rect_of sub).
-Proof.
-  intros sub Hne Hconn Hmono.
-  pose proof (connected_x_monotone_endpoints sub Hne Hconn Hmono) as Hx.
-  unfold rect_of; simpl.
-  rewrite Rmin_left, Rmax_right by lra. exact Hx.
-Qed.
-
 Lemma segment_rect_has_positive_width :
   forall s, rx0 (rect_of [s]) < rx1 (rect_of [s]).
 Proof.
@@ -808,18 +828,20 @@ Proof.
   - split; [apply Rmax_r | apply Rmax_lub; assumption].
 Qed.
 
-(* 左右の同じ側に厳密に固まらない二端点の閉 x 区間は共通する。 *)
+(* 左右の同じ側に厳密に固まらない二端点の閉 x 区間は共通する。
+   この区間の事実には sub の x 単調性を使わない。 *)
 Lemma nonhorizontal_sides_have_common_x :
   forall sub s,
-    sub <> [] -> connected sub -> x_monotone_segs sub ->
     ~ both_left_of_sub sub (init s) (term s) ->
     ~ both_right_of_sub sub (init s) (term s) ->
     exists x,
       rx0 (rect_of sub) <= x <= rx1 (rect_of sub)
       /\ rx0 (rect_of [s]) <= x <= rx1 (rect_of [s]).
 Proof.
-  intros sub s Hne Hconn Hmono Hleft Hright.
-  pose proof (sub_rect_has_positive_width sub Hne Hconn Hmono) as Hsub.
+  intros sub s Hleft Hright.
+  assert (Hsub : rx0 (rect_of sub) <= rx1 (rect_of sub)).
+  { unfold rect_of; simpl; unfold Rmin, Rmax;
+      repeat destruct Rle_dec; lra. }
   pose proof (segment_rect_has_positive_width s) as Hseg.
   assert (HcrossL : rx0 (rect_of sub) <= rx1 (rect_of [s])).
   { apply Rnot_lt_le. intro Hlt. apply Hleft.
@@ -931,22 +953,19 @@ Qed.
 
 (* x 範囲内の端点には classified_*_bbox を使う。範囲外の端点を
    含む場合は、端点長方形が sub を横切れば sparse に反する。 *)
-Lemma operated_nonadjacent_endpoints_separated :
+Lemma operated_nonadjacent_endpoints_separated_from_spec :
   forall l sub r h s,
     sub <> [] ->
     connected sub ->
-    x_monotone_segs sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     In s (nonadjacent_sides l r) ->
     endpoint_box_separated_from_sub sub
       (operate_point l sub r h (init s))
       (operate_point l sub r h (term s)).
 Proof.
-  intros l sub r h s Hne Hconn Hmono Hh Hsparse Hwhole Hembedded Hext Hs.
+  intros l sub r h s Hne Hconn Hh Hsparse Hspec Hs.
   destruct (classic (both_left_of_sub sub (init s) (term s)))
     as [Hleft | Hleft].
   - right; right; left. unfold both_left_of_sub in *.
@@ -956,11 +975,11 @@ Proof.
     + right; right; right. unfold both_right_of_sub in *.
       now rewrite !operate_point_fst.
     + destruct (nonhorizontal_sides_have_common_x
-                  sub s Hne Hconn Hmono Hleft Hright)
+                  sub s Hleft Hright)
         as [x [Hsubx Hsegx]].
       destruct (segment_has_point_at_x s x ltac:(lra))
         as [p [Hp Hpx]].
-      destruct (x_monotone_sub_has_point sub x Hne Hconn Hmono ltac:(lra))
+      destruct (connected_sub_has_point_at_x sub x Hne Hconn ltac:(lra))
         as [q [Hq Hqx]].
       assert (Hprange : in_sub_x_range sub p).
       { unfold in_sub_x_range. rewrite Hpx. lra. }
@@ -972,7 +991,7 @@ Proof.
         now apply segment_in_rect_or_endpoints. }
       pose proof (classified_segment_at_sub_x
                     l sub r
-                    (classify_spec l sub r Hne Hmono Hsparse Hembedded Hext)
+                    Hspec
                     s p Hs Hp Hprange) as [Hup Hdown].
       assert (Hy : snd q < snd p \/ snd p < snd q).
       { destruct (total_order_T (snd q) (snd p))
@@ -1003,6 +1022,28 @@ Proof.
         right; left. unfold both_below_of_sub, operate_point, shift.
         rewrite Hinit, Hterm. simpl.
         unfold h_large, rect_height in Hh. lra.
+Qed.
+
+(* 旧 x 単調版は、分類仕様を取って一般版へ渡すだけで得られる。 *)
+Lemma operated_nonadjacent_endpoints_separated :
+  forall l sub r h s,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    In s (nonadjacent_sides l r) ->
+    endpoint_box_separated_from_sub sub
+      (operate_point l sub r h (init s))
+      (operate_point l sub r h (term s)).
+Proof.
+  intros l sub r h s Hne Hconn Hmono Hh Hsparse _ Hembedded Hext Hs.
+  eapply operated_nonadjacent_endpoints_separated_from_spec;
+    [exact Hne | exact Hconn | exact Hh | exact Hsparse | | exact Hs].
+  exact (classify_spec l sub r Hne Hmono Hsparse Hembedded Hext).
 Qed.
 
 Lemma in_rect_or_endpoints_at_closed_bounds :
@@ -1174,6 +1215,52 @@ Qed.
 
 (* strict 延長線の基点分類と h_large から，移動後の
    延長線点が sub の閉長方形へ入らないことを導く。 *)
+Lemma classified_shifted_extension_avoids_sub_rect_from_spec :
+  forall l sub r h p q g,
+    sub <> [] ->
+    connected sub ->
+    @ClassificationSpec l sub r (classify l sub r) ->
+    h_large h sub ->
+    (onHead_extend_strict (l ++ sub ++ r) q
+     \/ onLast_extend_strict (l ++ sub ++ r) q) ->
+    (g = RegUp -> forall z,
+      onSegmentlist sub z ->
+      fst q = fst z -> snd q < snd z -> classify l sub r z = RegUp) ->
+    (g = RegDown -> forall z,
+      onSegmentlist sub z ->
+      fst q = fst z -> snd z < snd q -> classify l sub r z = RegDown) ->
+    (rx0 (rect_of sub) <= fst q <= rx1 (rect_of sub) ->
+      g = RegUp \/ g = RegDown) ->
+    p = shift h g q ->
+    ~ in_rect_or_endpoints_at sub p.
+Proof.
+  intros l sub r h p q g Hne Hconn Hspec Hh Hqextend
+    Habove Hbelow Hinside Hshift HpSub.
+  pose proof (in_rect_or_endpoints_at_closed_bounds sub p HpSub)
+    as [Hpx _].
+  pose proof (in_sub_rect_or_endpoints_bbox_y sub p Hne HpSub)
+    as Hpy.
+  assert (Hxpq : fst p = fst q).
+  { rewrite Hshift, shift_fst. reflexivity. }
+  destruct (connected_sub_has_point_at_x sub (fst p) Hne Hconn Hpx)
+    as [z [Hz Hxz]].
+  pose proof (bbox_of_bounds sub z Hz) as Hzy.
+  pose proof (classified_sub_fixed l sub r Hspec z Hz) as Hzfix.
+  destruct g.
+  - simpl in Hshift. subst p.
+    destruct (Hinside Hpx); discriminate.
+  - assert (Hqz : snd q < snd z).
+    { pose proof (f_equal snd Hshift) as Hyshift.
+      simpl in Hyshift. unfold h_large, rect_height in Hh. lra. }
+    pose proof (Habove eq_refl z Hz ltac:(lra) Hqz) as Hzup.
+    congruence.
+  - assert (Hzq : snd z < snd q).
+    { pose proof (f_equal snd Hshift) as Hyshift.
+      simpl in Hyshift. unfold h_large, rect_height in Hh. lra. }
+    pose proof (Hbelow eq_refl z Hz ltac:(lra) Hzq) as Hzdown.
+    congruence.
+Qed.
+
 Lemma classified_shifted_extension_avoids_sub_rect :
   forall l sub r h p q g,
     sub <> [] ->
@@ -1197,38 +1284,145 @@ Lemma classified_shifted_extension_avoids_sub_rect :
     p = shift h g q ->
     ~ in_rect_or_endpoints_at sub p.
 Proof.
-  intros l sub r h p q g Hne Hconn Hmono Hh Hsparse Hwhole Hembedded Hext Hqextend
-    Habove Hbelow Hinside Hshift HpSub.
-  pose proof (in_rect_or_endpoints_at_closed_bounds sub p HpSub)
-    as [Hpx _].
-  pose proof (in_sub_rect_or_endpoints_bbox_y sub p Hne HpSub)
-    as Hpy.
-  assert (Hxpq : fst p = fst q).
-  { rewrite Hshift, shift_fst. reflexivity. }
-  destruct (x_monotone_sub_has_point sub (fst p) Hne Hconn Hmono Hpx)
-    as [z [Hz Hxz]].
-  pose proof (bbox_of_bounds sub z Hz) as Hzy.
-  pose proof (classified_sub_fixed
-                l sub r
-                (classify_spec l sub r Hne Hmono Hsparse Hembedded Hext)
-                z Hz) as Hzfix.
-  destruct g.
-  - simpl in Hshift. subst p.
-    destruct (Hinside Hpx); discriminate.
-  - assert (Hqz : snd q < snd z).
-    { pose proof (f_equal snd Hshift) as Hyshift.
-      simpl in Hyshift. unfold h_large, rect_height in Hh. lra. }
-    pose proof (Habove eq_refl z Hz ltac:(lra) Hqz) as Hzup.
-    congruence.
-  - assert (Hzq : snd z < snd q).
-    { pose proof (f_equal snd Hshift) as Hyshift.
-      simpl in Hyshift. unfold h_large, rect_height in Hh. lra. }
-    pose proof (Hbelow eq_refl z Hz ltac:(lra) Hzq) as Hzdown.
-    congruence.
+  intros l sub r h p q g Hne Hconn Hmono Hh Hsparse _ Hembed Hext
+    Hqextend Habove Hbelow Hinside Hshift.
+  exact (classified_shifted_extension_avoids_sub_rect_from_spec
+           l sub r h p q g Hne Hconn
+           (classify_spec l sub r Hne Hmono Hsparse Hembed Hext)
+           Hh Hqextend Habove Hbelow Hinside Hshift).
 Qed.
 
 (* 延長線についても、十分大きな移動後に
    sub の長方形を避ける *)
+Lemma reconnect_extensions_avoid_sub_rect_from_spec :
+  forall l sub r h p,
+    sub <> [] ->
+    connected sub ->
+    @ClassificationSpec l sub r (classify l sub r) ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    ((l <> [] /\ onHead_extend_strict (ordinary_reconnect_split l sub r h) p)
+     \/ (r <> [] /\ onLast_extend_strict (ordinary_reconnect_split l sub r h) p)) ->
+    ~ in_rect_or_endpoints_at sub p.
+Proof.
+  intros l sub r h p Hne HconnSub Hspec Hh Hsparse Hextend.
+  destruct Hextend as [[Hl Hhead] | [Hr Hlast]].
+  - destruct (reconnect_head_strict_extension_preimage_from_spec
+                l sub r h p Hne Hsparse Hspec
+                (Rlt_le _ _ (proj1 Hh)) Hhead)
+      as [q [Hq Hshift]].
+    set (g := classify l sub r
+                (init (hd_segment (l ++ sub ++ r)))).
+    eapply (classified_shifted_extension_avoids_sub_rect_from_spec
+              l sub r h p q g Hne HconnSub Hspec Hh).
+    + now left.
+    + intros Hg z [s [Hs Hz]] Hx Hy. exfalso.
+      assert (Hin : In s (l ++ sub ++ r)).
+      { rewrite !in_app_iff. right; left; exact Hs. }
+      pose proof (proj1
+        (classified_head_segment_crossing_order
+           l sub r
+           Hspec
+           s z q Hin Hz Hq ltac:(symmetry; exact Hx)) Hy)
+        as [HinitOrder _].
+      change
+        (classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegUp)
+        in Hg.
+      rewrite Hg in HinitOrder.
+      pose proof (region_at_or_above_RegUp_inv _ HinitOrder) as HinitUp.
+      pose proof (classified_sub_fixed
+                    l sub r
+                    Hspec
+                    (init s)
+                    ltac:(exists s; split; [exact Hs | apply onInit]))
+        as HinitFix.
+      congruence.
+    + intros Hg z [s [Hs Hz]] Hx Hy. exfalso.
+      assert (Hin : In s (l ++ sub ++ r)).
+      { rewrite !in_app_iff. right; left; exact Hs. }
+      pose proof (proj2
+        (classified_head_segment_crossing_order
+           l sub r
+           Hspec
+           s z q Hin Hz Hq ltac:(symmetry; exact Hx)) Hy)
+        as [HinitOrder _].
+      change
+        (classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegDown)
+        in Hg.
+      rewrite Hg in HinitOrder.
+      pose proof (RegDown_at_or_above_inv _ HinitOrder) as HinitDown.
+      pose proof (classified_sub_fixed
+                    l sub r
+                    Hspec
+                    (init s)
+                    ltac:(exists s; split; [exact Hs | apply onInit]))
+        as HinitFix.
+      congruence.
+    + intros Hx.
+      exact (classified_head_extension_at_sub_x
+               l sub r
+               Hspec
+               Hl q Hq Hx).
+    + exact Hshift.
+  - destruct (reconnect_last_strict_extension_preimage_from_spec
+                l sub r h p Hne Hsparse Hspec
+                (Rlt_le _ _ (proj1 Hh)) Hlast)
+      as [q [Hq Hshift]].
+    set (g := classify l sub r
+                (term (last_segment (l ++ sub ++ r)))).
+    eapply (classified_shifted_extension_avoids_sub_rect_from_spec
+              l sub r h p q g Hne HconnSub Hspec Hh).
+    + now right.
+    + intros Hg z [s [Hs Hz]] Hx Hy. exfalso.
+      assert (Hin : In s (l ++ sub ++ r)).
+      { rewrite !in_app_iff. right; left; exact Hs. }
+      pose proof (proj1
+        (classified_last_segment_crossing_order
+           l sub r
+           Hspec
+           s z q Hin Hz Hq ltac:(symmetry; exact Hx)) Hy)
+        as [HinitOrder _].
+      change
+        (classify l sub r (term (last_segment (l ++ sub ++ r))) = RegUp)
+        in Hg.
+      rewrite Hg in HinitOrder.
+      pose proof (region_at_or_above_RegUp_inv _ HinitOrder) as HinitUp.
+      pose proof (classified_sub_fixed
+                    l sub r
+                    Hspec
+                    (init s)
+                    ltac:(exists s; split; [exact Hs | apply onInit]))
+        as HinitFix.
+      congruence.
+    + intros Hg z [s [Hs Hz]] Hx Hy. exfalso.
+      assert (Hin : In s (l ++ sub ++ r)).
+      { rewrite !in_app_iff. right; left; exact Hs. }
+      pose proof (proj2
+        (classified_last_segment_crossing_order
+           l sub r
+           Hspec
+           s z q Hin Hz Hq ltac:(symmetry; exact Hx)) Hy)
+        as [HinitOrder _].
+      change
+        (classify l sub r (term (last_segment (l ++ sub ++ r))) = RegDown)
+        in Hg.
+      rewrite Hg in HinitOrder.
+      pose proof (RegDown_at_or_above_inv _ HinitOrder) as HinitDown.
+      pose proof (classified_sub_fixed
+                    l sub r
+                    Hspec
+                    (init s)
+                    ltac:(exists s; split; [exact Hs | apply onInit]))
+        as HinitFix.
+      congruence.
+    + intros Hx.
+      exact (classified_last_extension_at_sub_x
+               l sub r
+               Hspec
+               Hr q Hq Hx).
+    + exact Hshift.
+Qed.
+
 Lemma reconnect_extensions_avoid_sub_rect :
   forall ds l sub r h p,
     connected (l ++ sub ++ r) ->
@@ -1241,137 +1435,13 @@ Lemma reconnect_extensions_avoid_sub_rect :
      \/ (r <> [] /\ onLast_extend_strict (ordinary_reconnect_split l sub r h) p)) ->
     ~ in_rect_or_endpoints_at sub p.
 Proof.
-  intros ds l sub r h p Hconn Hws Hh Hsparse Hembed Hext Hextend.
-  destruct Hws as [Hne [Hmono _]].
-  assert (HconnSub : connected sub).
-  { eapply connected_middle. exact Hconn. }
-  destruct Hextend as [[Hl Hhead] | [Hr Hlast]].
-  - destruct (reconnect_head_strict_extension_preimage
-                ds l sub r h p Hne HconnSub Hmono Hsparse Hembed
-                Hext (Rlt_le _ _ (proj1 Hh)) Hhead)
-      as [q [Hq Hshift]].
-    set (g := classify l sub r
-                (init (hd_segment (l ++ sub ++ r)))).
-    eapply (classified_shifted_extension_avoids_sub_rect
-              l sub r h p q g Hne HconnSub Hmono Hh Hsparse Hconn
-              (ex_intro _ ds Hembed) Hext).
-    + now left.
-    + intros Hg z [s [Hs Hz]] Hx Hy. exfalso.
-      assert (Hin : In s (l ++ sub ++ r)).
-      { rewrite !in_app_iff. right; left; exact Hs. }
-      pose proof (proj1
-        (classified_head_segment_crossing_order
-           l sub r
+  intros ds l sub r h p Hwhole [Hne [Hmono _]] Hh Hsparse Hembed Hext Hextend.
+  exact (reconnect_extensions_avoid_sub_rect_from_spec
+           l sub r h p Hne
+           (connected_middle _ _ _ Hwhole)
            (classify_spec l sub r Hne Hmono Hsparse
               (ex_intro _ ds Hembed) Hext)
-           s z q Hin Hz Hq ltac:(symmetry; exact Hx)) Hy)
-        as [HinitOrder _].
-      change
-        (classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegUp)
-        in Hg.
-      rewrite Hg in HinitOrder.
-      pose proof (region_at_or_above_RegUp_inv _ HinitOrder) as HinitUp.
-      pose proof (classified_sub_fixed
-                    l sub r
-                    (classify_spec l sub r Hne Hmono Hsparse
-                       (ex_intro _ ds Hembed) Hext)
-                    (init s)
-                    ltac:(exists s; split; [exact Hs | apply onInit]))
-        as HinitFix.
-      congruence.
-    + intros Hg z [s [Hs Hz]] Hx Hy. exfalso.
-      assert (Hin : In s (l ++ sub ++ r)).
-      { rewrite !in_app_iff. right; left; exact Hs. }
-      pose proof (proj2
-        (classified_head_segment_crossing_order
-           l sub r
-           (classify_spec l sub r Hne Hmono Hsparse
-              (ex_intro _ ds Hembed) Hext)
-           s z q Hin Hz Hq ltac:(symmetry; exact Hx)) Hy)
-        as [HinitOrder _].
-      change
-        (classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegDown)
-        in Hg.
-      rewrite Hg in HinitOrder.
-      pose proof (RegDown_at_or_above_inv _ HinitOrder) as HinitDown.
-      pose proof (classified_sub_fixed
-                    l sub r
-                    (classify_spec l sub r Hne Hmono Hsparse
-                       (ex_intro _ ds Hembed) Hext)
-                    (init s)
-                    ltac:(exists s; split; [exact Hs | apply onInit]))
-        as HinitFix.
-      congruence.
-    + intros Hx.
-      exact (classified_head_extension_at_sub_x
-               l sub r
-               (classify_spec l sub r Hne Hmono Hsparse
-                  (ex_intro _ ds Hembed) Hext)
-               Hl q Hq Hx).
-    + exact Hshift.
-  - destruct (reconnect_last_strict_extension_preimage
-                ds l sub r h p Hne HconnSub Hmono Hsparse Hembed
-                Hext (Rlt_le _ _ (proj1 Hh)) Hlast)
-      as [q [Hq Hshift]].
-    set (g := classify l sub r
-                (term (last_segment (l ++ sub ++ r)))).
-    eapply (classified_shifted_extension_avoids_sub_rect
-              l sub r h p q g Hne HconnSub Hmono Hh Hsparse Hconn
-              (ex_intro _ ds Hembed) Hext).
-    + now right.
-    + intros Hg z [s [Hs Hz]] Hx Hy. exfalso.
-      assert (Hin : In s (l ++ sub ++ r)).
-      { rewrite !in_app_iff. right; left; exact Hs. }
-      pose proof (proj1
-        (classified_last_segment_crossing_order
-           l sub r
-           (classify_spec l sub r Hne Hmono Hsparse
-              (ex_intro _ ds Hembed) Hext)
-           s z q Hin Hz Hq ltac:(symmetry; exact Hx)) Hy)
-        as [HinitOrder _].
-      change
-        (classify l sub r (term (last_segment (l ++ sub ++ r))) = RegUp)
-        in Hg.
-      rewrite Hg in HinitOrder.
-      pose proof (region_at_or_above_RegUp_inv _ HinitOrder) as HinitUp.
-      pose proof (classified_sub_fixed
-                    l sub r
-                    (classify_spec l sub r Hne Hmono Hsparse
-                       (ex_intro _ ds Hembed) Hext)
-                    (init s)
-                    ltac:(exists s; split; [exact Hs | apply onInit]))
-        as HinitFix.
-      congruence.
-    + intros Hg z [s [Hs Hz]] Hx Hy. exfalso.
-      assert (Hin : In s (l ++ sub ++ r)).
-      { rewrite !in_app_iff. right; left; exact Hs. }
-      pose proof (proj2
-        (classified_last_segment_crossing_order
-           l sub r
-           (classify_spec l sub r Hne Hmono Hsparse
-              (ex_intro _ ds Hembed) Hext)
-           s z q Hin Hz Hq ltac:(symmetry; exact Hx)) Hy)
-        as [HinitOrder _].
-      change
-        (classify l sub r (term (last_segment (l ++ sub ++ r))) = RegDown)
-        in Hg.
-      rewrite Hg in HinitOrder.
-      pose proof (RegDown_at_or_above_inv _ HinitOrder) as HinitDown.
-      pose proof (classified_sub_fixed
-                    l sub r
-                    (classify_spec l sub r Hne Hmono Hsparse
-                       (ex_intro _ ds Hembed) Hext)
-                    (init s)
-                    ltac:(exists s; split; [exact Hs | apply onInit]))
-        as HinitFix.
-      congruence.
-    + intros Hx.
-      exact (classified_last_extension_at_sub_x
-               l sub r
-               (classify_spec l sub r Hne Hmono Hsparse
-                  (ex_intro _ ds Hembed) Hext)
-               Hr q Hq Hx).
-    + exact Hshift.
+           Hh Hsparse Hextend).
 Qed.
 
 (* 全域疎性とは別に、固定した sub 全体の長方形から左右を退避させる。 *)

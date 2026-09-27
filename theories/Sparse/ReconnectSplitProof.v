@@ -492,6 +492,65 @@ Proof.
   exact (conj (conj Hix Hiy) (conj Htx Hty)).
 Qed.
 
+(* x 単調性の代わりに、sub 全体の端点長方形への包含を使う版。 *)
+Lemma sub_member_endpoint_bounds_from_containment :
+  forall sub t,
+    sub_contained_in_endpoint_rect sub ->
+    In t sub ->
+    (rx0 (rect_of sub) <= fst (init t) <= rx1 (rect_of sub)
+     /\ ry0 (bbox_of sub) <= snd (init t) <= ry1 (bbox_of sub))
+    /\
+    (rx0 (rect_of sub) <= fst (term t) <= rx1 (rect_of sub)
+     /\ ry0 (bbox_of sub) <= snd (term t) <= ry1 (bbox_of sub)).
+Proof.
+  intros sub t Hcontained Ht.
+  assert (HinitOn : onSegmentlist sub (init t)).
+  { exists t. split; [exact Ht | apply onInit]. }
+  assert (HtermOn : onSegmentlist sub (term t)).
+  { exists t. split; [exact Ht | apply onTerm]. }
+  pose proof (Hcontained _ HinitOn) as Hix.
+  pose proof (Hcontained _ HtermOn) as Htx.
+  pose proof (bbox_of_bounds sub (init t) HinitOn) as Hiy.
+  pose proof (bbox_of_bounds sub (term t) HtermOn) as Hty.
+  exact (conj (conj (proj1 Hix) Hiy) (conj (proj1 Htx) Hty)).
+Qed.
+
+Lemma endpoint_box_separated_from_sub_separates_member_prepared :
+  forall sub outside inside,
+    sub <> [] ->
+    sub_contained_in_endpoint_rect sub ->
+    In inside sub ->
+    endpoint_box_separated_from_sub sub (init outside) (term outside) ->
+    endpoint_rectangles_axis_separated outside inside.
+Proof.
+  intros sub outside inside Hsub Hcontained Hinside Hsep.
+  destruct (sub_member_endpoint_bounds_from_containment
+              sub inside Hcontained Hinside)
+    as [[[Hix0 Hix1] [Hiy0 Hiy1]] [[Htx0 Htx1] [Hty0 Hty1]]].
+  unfold endpoint_rectangles_axis_separated.
+  destruct Hsep as [Habove | [Hbelow | [Hleft | Hright]]].
+  - right; right; left.
+    unfold both_above_of_sub in Habove. destruct Habove as [Ha Hb].
+    change (Rmax (snd (init inside)) (snd (term inside)) <
+            Rmin (snd (init outside)) (snd (term outside))).
+    apply Rmax_lub_lt; apply Rmin_glb_lt; lra.
+  - right; right; right.
+    unfold both_below_of_sub in Hbelow. destruct Hbelow as [Ha Hb].
+    change (Rmax (snd (init outside)) (snd (term outside)) <
+            Rmin (snd (init inside)) (snd (term inside))).
+    apply Rmax_lub_lt; apply Rmin_glb_lt; lra.
+  - right; left.
+    unfold both_left_of_sub in Hleft. destruct Hleft as [Ha Hb].
+    change (Rmax (fst (init outside)) (fst (term outside)) <
+            Rmin (fst (init inside)) (fst (term inside))).
+    apply Rmax_lub_lt; apply Rmin_glb_lt; lra.
+  - left.
+    unfold both_right_of_sub in Hright. destruct Hright as [Ha Hb].
+    change (Rmax (fst (init inside)) (fst (term inside)) <
+            Rmin (fst (init outside)) (fst (term outside))).
+    apply Rmax_lub_lt; apply Rmin_glb_lt; lra.
+Qed.
+
 (* sub 全体から上下左右に離れた端点長方形は、sub の各セグメントの
    端点長方形とも同じ軸方向に厳密分離する。 *)
 Lemma endpoint_box_separated_from_sub_separates_member :
@@ -625,6 +684,33 @@ Proof.
   eapply operated_nonadjacent_endpoints_separated; eauto.
 Qed.
 
+Lemma ordinary_nonadjacent_vs_sub_member_separated_prepared :
+  forall l sub r h old outside inside,
+    PreparedGeometry l sub r ->
+    connected sub ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    In old (nonadjacent_sides l r) ->
+    In inside sub ->
+    init outside = operate_point l sub r h (init old) ->
+    term outside = operate_point l sub r h (term old) ->
+    endpoint_rectangles_axis_separated outside inside.
+Proof.
+  intros l sub r h old outside inside Hgeometry Hconn Hh Hsparse
+    Hembedded Hext Hold Hinside Hinit Hterm.
+  eapply endpoint_box_separated_from_sub_separates_member_prepared.
+  - exact (prepared_sub_nonempty l sub r Hgeometry).
+  - exact (prepared_sub_contained l sub r Hgeometry).
+  - exact Hinside.
+  - rewrite Hinit, Hterm.
+    eapply operated_nonadjacent_endpoints_separated_from_spec;
+      [exact (prepared_sub_nonempty l sub r Hgeometry)
+      | exact Hconn | exact Hh | exact Hsparse | | exact Hold].
+    exact (classify_spec_prepared l sub r Hgeometry Hsparse Hembedded Hext).
+Qed.
+
 (* 左右の接続境界を含まない場合は、外部同士・外部と sub・sub 同士の
    三種類だけであり、既存の端点順序保存と固定性から分離が従う。 *)
 Lemma ordinary_nonboundary_far_rectangles_separated :
@@ -712,8 +798,121 @@ Proof.
                 Hsparse HoldS HoldT Hfar)).
 Qed.
 
+(* 境界を含まない三場合は、prepared 分類仕様と端点長方形の包含だけで処理する。 *)
+Lemma ordinary_nonboundary_far_rectangles_separated_prepared :
+  forall ds l sub r h i j old_s old_t ordinary_s ordinary_t,
+    PreparedGeometry l sub r ->
+    connected sub ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    nth_error (l ++ sub ++ r) i = Some old_s ->
+    nth_error (l ++ sub ++ r) j = Some old_t ->
+    nth_error (ordinary_reconnect_split l sub r h) i = Some ordinary_s ->
+    nth_error (ordinary_reconnect_split l sub r h) j = Some ordinary_t ->
+    (S i < j \/ S j < i)%nat ->
+    ~ split_boundary_occurrence l sub r i old_s ->
+    ~ split_boundary_occurrence l sub r j old_t ->
+    endpoint_rectangles_axis_separated ordinary_s ordinary_t.
+Proof.
+  intros ds l sub r h i j old_s old_t ordinary_s ordinary_t
+    Hgeometry Hconn Hh Hsparse Hembed Hext
+    HoldS HoldT HordinaryS HordinaryT Hfar HnotS HnotT.
+  assert (Hspec : @ClassificationSpec l sub r (classify l sub r)).
+  { exact (classify_spec_prepared l sub r Hgeometry Hsparse
+             (ex_intro _ ds Hembed) Hext). }
+  assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
+  { exact (operate_endpoints_reconnectable_from_spec
+             l sub r h Hspec Hh). }
+  pose proof (ordinary_reconnect_split_nth_spec_basic
+                l sub r h i old_s ordinary_s Hrec HoldS HordinaryS)
+    as [_ [HinitS HtermS]].
+  pose proof (ordinary_reconnect_split_nth_spec_basic
+                l sub r h j old_t ordinary_t Hrec HoldT HordinaryT)
+    as [_ [HinitT HtermT]].
+  pose proof (split_occurrence_nonboundary
+                l sub r i old_s
+                (nth_error_split_occurrence l sub r i old_s HoldS) HnotS)
+    as [HoutsideS | HinsideS];
+  pose proof (split_occurrence_nonboundary
+                l sub r j old_t
+                (nth_error_split_occurrence l sub r j old_t HoldT) HnotT)
+    as [HoutsideT | HinsideT].
+  - pose proof (sparse_far_rectangles_axis_separated
+                  (l ++ sub ++ r) i j old_s old_t
+                  Hsparse HoldS HoldT Hfar) as HoldSep.
+    eapply operated_endpoint_rectangles_axis_separated_from_spec;
+      [exact Hspec | exact (proj1 Hh) | exact HoldS | exact HoldT |
+       exact Hfar | exact HinitS | exact HtermS | exact HinitT |
+       exact HtermT | | | | | exact HoldSep].
+    + exact (nonadjacent_endpoint_not_on_sub
+               l sub r old_s (init old_s) Hsparse HoutsideS
+               (or_introl eq_refl)).
+    + exact (nonadjacent_endpoint_not_on_sub
+               l sub r old_s (term old_s) Hsparse HoutsideS
+               (or_intror eq_refl)).
+    + exact (nonadjacent_endpoint_not_on_sub
+               l sub r old_t (init old_t) Hsparse HoutsideT
+               (or_introl eq_refl)).
+    + exact (nonadjacent_endpoint_not_on_sub
+               l sub r old_t (term old_t) Hsparse HoutsideT
+               (or_intror eq_refl)).
+  - eapply (same_boxes_preserve_axis_separation
+              ordinary_s old_t ordinary_s ordinary_t).
+    + split; reflexivity.
+    + eapply ordinary_sub_member_same_box; eauto.
+    + exact (ordinary_nonadjacent_vs_sub_member_separated_prepared
+               l sub r h old_s ordinary_s old_t Hgeometry Hconn Hh Hsparse
+               (ex_intro _ ds Hembed) Hext HoutsideS HinsideT
+               HinitS HtermS).
+  - eapply (same_boxes_preserve_axis_separation
+              old_s ordinary_t ordinary_s ordinary_t).
+    + eapply ordinary_sub_member_same_box; eauto.
+    + split; reflexivity.
+    + apply endpoint_rectangles_axis_separated_sym.
+      exact (ordinary_nonadjacent_vs_sub_member_separated_prepared
+               l sub r h old_t ordinary_t old_s Hgeometry Hconn Hh Hsparse
+               (ex_intro _ ds Hembed) Hext HoutsideT HinsideS
+               HinitT HtermT).
+  - exact (same_boxes_preserve_axis_separation
+             old_s old_t ordinary_s ordinary_t
+             (ordinary_sub_member_same_box
+                l sub r h old_s ordinary_s HinsideS HinitS HtermS)
+             (ordinary_sub_member_same_box
+                l sub r h old_t ordinary_t HinsideT HinitT HtermT)
+             (sparse_far_rectangles_axis_separated
+                (l ++ sub ++ r) i j old_s old_t
+                Hsparse HoldS HoldT Hfar)).
+Qed.
+
 (* 非隣接出現の二端点について、上側の端点が sub 上でなければ、
    分類順序と正の移動量が元の厳密な上下順序を保存する。 *)
+Lemma operate_preserves_far_endpoint_vertical_order_from_spec :
+  forall l sub r h i j s t ps pt,
+    @ClassificationSpec l sub r (classify l sub r) ->
+    0 < h ->
+    nth_error (l ++ sub ++ r) i = Some s ->
+    nth_error (l ++ sub ++ r) j = Some t ->
+    (S i < j \/ S j < i)%nat ->
+    segment_x_ranges_overlap s t ->
+    endpoint_of_seg s ps ->
+    endpoint_of_seg t pt ->
+    ~ onSegmentlist sub pt ->
+    snd ps < snd pt ->
+    snd (operate_point l sub r h ps) < snd (operate_point l sub r h pt).
+Proof.
+  intros l sub r h i j s t ps pt Hspec Hh
+    Hs Ht Hfar Hoverlap Hps Hpt HptNotSub Hy.
+  unfold operate_point.
+  eapply shift_preserves_strict_vertical_order; [exact Hh | exact Hy |].
+  exact (classified_nonadjacent_endpoint_order
+           l sub r
+           Hspec
+           i j s t ps pt Hs Ht Hfar Hoverlap Hps Hpt
+           HptNotSub (Rlt_le _ _ Hy)).
+Qed.
+
 Lemma operate_preserves_far_endpoint_vertical_order :
   forall l sub r h i j s t ps pt,
     sub <> [] ->
@@ -732,15 +931,9 @@ Lemma operate_preserves_far_endpoint_vertical_order :
     snd ps < snd pt ->
     snd (operate_point l sub r h ps) < snd (operate_point l sub r h pt).
 Proof.
-  intros l sub r h i j s t ps pt Hsub Hmono Hsparse Hembed Hext Hh
-    Hs Ht Hfar Hoverlap Hps Hpt HptNotSub Hy.
-  unfold operate_point.
-  eapply shift_preserves_strict_vertical_order; [exact Hh | exact Hy |].
-  exact (classified_nonadjacent_endpoint_order
-           l sub r
-           (classify_spec l sub r Hsub Hmono Hsparse Hembed Hext)
-           i j s t ps pt Hs Ht Hfar Hoverlap Hps Hpt
-           HptNotSub (Rlt_le _ _ Hy)).
+  intros l sub r h i j s t ps pt Hne Hmono Hsparse Hembed Hext.
+  eapply operate_preserves_far_endpoint_vertical_order_from_spec.
+  exact (classify_spec l sub r Hne Hmono Hsparse Hembed Hext).
 Qed.
 
 Lemma nth_error_sub_in_split : forall (l sub r : list Segment) k s,
@@ -968,15 +1161,57 @@ Proof.
     simpl in Hk |- *. lia.
 Qed.
 
-Lemma ordinary_terminal_boundary_far_rectangles_separated :
+
+(* x 単調な sub も、境界証明に必要な厳密な内部 x 分離を満たす。 *)
+Lemma x_monotone_inner_segment_left_x : forall sub k s,
+  sub <> [] -> connected sub -> x_monotone_segs sub ->
+  nth_error sub k = Some s -> (0 < k)%nat ->
+  rx0 (rect_of sub) < rx0 (rect_of [s]).
+Proof.
+  intros sub k s Hne Hconn Hmono Hnth Hk.
+  pose proof (connected_x_monotone_endpoints sub Hne Hconn Hmono) as Hends.
+  pose proof (x_monotone_nth_init_after_head sub k s Hconn Hmono Hnth Hk)
+    as Hfirst.
+  pose proof (Hmono s (nth_error_In _ _ Hnth)) as Heast.
+  change (fst (init s) < fst (term s)) in Heast.
+  change (Rmin (fst (init (hd_segment sub)))
+               (fst (term (last_segment sub))) <
+          Rmin (fst (init s)) (fst (term s))).
+  rewrite Rmin_left by lra.
+  rewrite Rmin_left by lra.
+  exact Hfirst.
+Qed.
+
+Lemma x_monotone_inner_segment_right_x : forall sub k s,
+  sub <> [] -> connected sub -> x_monotone_segs sub ->
+  nth_error sub k = Some s -> (S k < length sub)%nat ->
+  rx1 (rect_of [s]) < rx1 (rect_of sub).
+Proof.
+  intros sub k s Hne Hconn Hmono Hnth Hk.
+  pose proof (connected_x_monotone_endpoints sub Hne Hconn Hmono) as Hends.
+  assert (Hk' : (k < length sub - 1)%nat) by lia.
+  pose proof (x_monotone_nth_term_before_last sub k s Hconn Hmono Hnth Hk')
+    as Hlast.
+  pose proof (Hmono s (nth_error_In _ _ Hnth)) as Heast.
+  change (fst (init s) < fst (term s)) in Heast.
+  change (Rmax (fst (init s)) (fst (term s)) <
+          Rmax (fst (init (hd_segment sub)))
+               (fst (term (last_segment sub)))).
+  rewrite Rmax_right by lra.
+  rewrite Rmax_right by lra.
+  exact Hlast.
+Qed.
+
+Lemma ordinary_terminal_boundary_far_rectangles_separated_core :
   forall ds l sub r h j other ordinary_b ordinary_o,
     sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
+    @ClassificationSpec l sub r (classify l sub r) ->
+    fst (init (hd_segment sub)) < fst (term (last_segment sub)) ->
+    (forall k s, nth_error sub k = Some s -> (0 < k)%nat ->
+       rx0 (rect_of sub) < rx0 (rect_of [s])) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
-    extensions_disjoint (l ++ sub ++ r) ->
     l <> [] ->
     nth_error (l ++ sub ++ r) j = Some other ->
     nth_error (ordinary_reconnect_split l sub r h) (length l - 1) =
@@ -988,23 +1223,19 @@ Lemma ordinary_terminal_boundary_far_rectangles_separated :
     endpoint_rectangles_axis_separated ordinary_b ordinary_o.
 Proof.
   intros ds l sub r h j other ordinary_b ordinary_o
-    Hsub Hconn Hmono Hh Hsparse Hembed Hext Hl
+    Hsub Hspec HsubX Hinner Hh Hsparse Hembed Hl
     Hother HordinaryB HordinaryO Hfar HnotLidB HnotLidO.
   set (b := last_segment l).
   assert (Hb : nth_error (l ++ sub ++ r) (length l - 1) = Some b).
   { unfold b. now apply nth_error_left_boundary_in_split. }
-  assert (Hwhole : connected (l ++ sub ++ r)).
-  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
   assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
-  { eapply operate_endpoints_reconnectable; eauto. }
-  pose proof (ordinary_reconnect_split_nth_spec
+  { exact (operate_endpoints_reconnectable_from_spec l sub r h Hspec Hh). }
+  pose proof (ordinary_reconnect_split_nth_spec_basic
                 l sub r h (length l - 1) b ordinary_b
-                Hsub Hconn Hmono Hsparse Hwhole (ex_intro _ ds Hembed) Hrec
-                Hb HordinaryB) as [_ [HinitB HtermB]].
-  pose proof (ordinary_reconnect_split_nth_spec
+                Hrec Hb HordinaryB) as [_ [HinitB HtermB]].
+  pose proof (ordinary_reconnect_split_nth_spec_basic
                 l sub r h j other ordinary_o
-                Hsub Hconn Hmono Hsparse Hwhole (ex_intro _ ds Hembed) Hrec
-                Hother HordinaryO) as [_ [HinitO HtermO]].
+                Hrec Hother HordinaryO) as [_ [HinitO HtermO]].
   assert (HnotTerminal : ~ terminal_lid l).
   { intro Hlid. apply HnotLidB. left. now split. }
   assert (HeastB : fst (init b) < fst (term b)).
@@ -1035,9 +1266,8 @@ Proof.
         In t (nonadjacent_sides l r) ->
         endpoint_rectangles_axis_separated ordinary_b t').
   { intros k t t' Ht Ht' Hfar' Hin.
-    pose proof (ordinary_reconnect_split_nth_spec
-                  l sub r h k t t' Hsub Hconn Hmono Hsparse Hwhole
-                  (ex_intro _ ds Hembed) Hrec Ht Ht') as [_ [HinitT HtermT]].
+    pose proof (ordinary_reconnect_split_nth_spec_basic
+                  l sub r h k t t' Hrec Ht Ht') as [_ [HinitT HtermT]].
     pose proof (sparse_far_rectangles_axis_separated
                   (l ++ sub ++ r) (length l - 1) k b t
                   Hsparse Hb Ht Hfar') as Hsep.
@@ -1085,10 +1315,9 @@ Proof.
                 pose proof (Rmax_l (snd (init t)) (snd (term t)));
                 pose proof (Rmax_r (snd (init t)) (snd (term t)));
                 pose proof (Rmin_l (snd (init b)) (snd (term b))); lra. }
-            exact (operate_preserves_far_endpoint_vertical_order
+            exact (operate_preserves_far_endpoint_vertical_order_from_spec
                      l sub r h k (length l - 1) t b p (init b)
-                     Hsub Hmono Hsparse (ex_intro _ ds Hembed) Hext
-                     (proj1 Hh) Ht Hb HfarRev HoverlapRev Hp
+                     Hspec (proj1 Hh) Ht Hb HfarRev HoverlapRev Hp
                      (or_introl eq_refl) HouterNotSub Hy). }
           assert (HtoFixed : forall p,
               endpoint_of_seg t p ->
@@ -1102,9 +1331,8 @@ Proof.
               destruct Hp as [-> | ->];
               pose proof (Rmax_l (snd (init t)) (snd (term t)));
               pose proof (Rmax_r (snd (init t)) (snd (term t))); lra. }
-            pose proof (operated_endpoint_below_terminal_stays_below
-                          l sub r h p Hsub Hmono Hsparse
-                          (ex_intro _ ds Hembed) Hext (Rlt_le _ _ (proj1 Hh))
+            pose proof (operated_endpoint_below_terminal_stays_below_from_spec
+                          l sub r h p Hspec (Rlt_le _ _ (proj1 Hh))
                           Hl HnotTerminal HpWhole HpBelow) as Hop.
             change (snd (operate_point l sub r h p) <
                     Rmin (snd (init b)) (snd (term b))) in Hop.
@@ -1133,10 +1361,9 @@ Proof.
                 pose proof (Rmax_r (snd (init b)) (snd (term b)));
                 pose proof (Rmin_l (snd (init t)) (snd (term t)));
                 pose proof (Rmin_r (snd (init t)) (snd (term t))); lra. }
-            exact (operate_preserves_far_endpoint_vertical_order
+            exact (operate_preserves_far_endpoint_vertical_order_from_spec
                      l sub r h (length l - 1) k b t pb pt
-                     Hsub Hmono Hsparse (ex_intro _ ds Hembed) Hext
-                     (proj1 Hh) Hb Ht Hfar' Hoverlap Hpb Hpt HptNotSub Hy). }
+                     Hspec (proj1 Hh) Hb Ht Hfar' Hoverlap Hpb Hpt HptNotSub Hy). }
           apply Rmax_lub_lt; apply Rmin_glb_lt;
             apply HfromBoundary; [now left | now left | now left | now right |
                                   now right | now left | now right | now right]. }
@@ -1147,16 +1374,17 @@ Proof.
     now apply split_left_outer_in_nonadjacent with (i := j).
   - exfalso. subst j. lia.
   - assert (Hkpos : (0 < k)%nat) by (subst j; destruct Hfar; lia).
-    assert (Hafter : fst (init (hd_segment sub)) < fst (init other)).
-    { eapply x_monotone_nth_init_after_head; eauto. }
+    pose proof (Hinner k other HnthSub Hkpos) as Hafter.
     right; left.
     change (Rmax (fst (init ordinary_b)) (fst (term ordinary_b)) <
             Rmin (fst (init ordinary_o)) (fst (term ordinary_o))).
     rewrite HinitB, HtermB, HinitO, HtermO, !operate_point_fst.
-    pose proof (Hmono other (nth_error_In _ _ HnthSub)) as HeastO.
-    change (fst (init other) < fst (term other)) in HeastO.
     pose proof (f_equal fst Hjoin) as HjoinX.
-    rewrite Rmax_right, Rmin_left by lra. lra.
+    unfold rect_of in Hafter; simpl in Hafter.
+    rewrite Rmin_left in Hafter by lra.
+    change (fst (init (hd_segment sub)) <
+            Rmin (fst (init other)) (fst (term other))) in Hafter.
+    rewrite Rmax_right by lra. lra.
   - assert (HnotInitial : ~ initial_lid r).
     { intro Hlid. apply HnotLidO. right. now split. }
     assert (HeastO : fst (init (hd_segment r)) < fst (term (hd_segment r))).
@@ -1175,7 +1403,6 @@ Proof.
     { now apply last_app_nonnil. }
     assert (HjoinR : term (last_segment sub) = init (hd_segment r)).
     { now rewrite <- Hlast. }
-    pose proof (connected_x_monotone_endpoints sub Hsub Hconn Hmono) as HsubX.
     right; left.
     change (Rmax (fst (init ordinary_b)) (fst (term ordinary_b)) <
             Rmin (fst (init ordinary_o)) (fst (term ordinary_o))).
@@ -1187,15 +1414,71 @@ Proof.
     now apply split_right_outer_in_nonadjacent with (k := k).
 Qed.
 
-Lemma ordinary_initial_boundary_far_rectangles_separated :
+Lemma ordinary_terminal_boundary_far_rectangles_separated_prepared :
+  forall ds l sub r h j other ordinary_b ordinary_o,
+    sub <> [] -> connected sub -> PreparedGeometry l sub r ->
+    h_large h sub -> sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) -> l <> [] ->
+    nth_error (l ++ sub ++ r) j = Some other ->
+    nth_error (ordinary_reconnect_split l sub r h) (length l - 1) =
+      Some ordinary_b ->
+    nth_error (ordinary_reconnect_split l sub r h) j = Some ordinary_o ->
+    (S (length l - 1) < j \/ S j < length l - 1)%nat ->
+    ~ reconnect_split_lid_index l sub r (length l - 1) ->
+    ~ reconnect_split_lid_index l sub r j ->
+    endpoint_rectangles_axis_separated ordinary_b ordinary_o.
+Proof.
+  intros ds l sub r h j other ordinary_b ordinary_o
+    Hsub Hconn Hgeometry Hh Hsparse Hembed Hext Hl
+    Hother HordinaryB HordinaryO Hfar HnotLidB HnotLidO.
+  eapply (ordinary_terminal_boundary_far_rectangles_separated_core
+            ds l sub r h j other ordinary_b ordinary_o); eauto.
+  - exact (classify_spec_prepared l sub r Hgeometry Hsparse
+             (ex_intro _ ds Hembed) Hext).
+  - exact (prepared_sub_x_order l sub r Hgeometry).
+  - intros k s Hnth Hk.
+    exact (prepared_inner_segment_left_x l sub r k s Hgeometry Hnth Hk).
+Qed.
+
+Lemma ordinary_terminal_boundary_far_rectangles_separated :
+  forall ds l sub r h j other ordinary_b ordinary_o,
+    sub <> [] -> connected sub -> x_monotone_segs sub ->
+    h_large h sub -> sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) -> l <> [] ->
+    nth_error (l ++ sub ++ r) j = Some other ->
+    nth_error (ordinary_reconnect_split l sub r h) (length l - 1) =
+      Some ordinary_b ->
+    nth_error (ordinary_reconnect_split l sub r h) j = Some ordinary_o ->
+    (S (length l - 1) < j \/ S j < length l - 1)%nat ->
+    ~ reconnect_split_lid_index l sub r (length l - 1) ->
+    ~ reconnect_split_lid_index l sub r j ->
+    endpoint_rectangles_axis_separated ordinary_b ordinary_o.
+Proof.
+  intros ds l sub r h j other ordinary_b ordinary_o
+    Hsub Hconn Hmono Hh Hsparse Hembed Hext Hl
+    Hother HordinaryB HordinaryO Hfar HnotLidB HnotLidO.
+  eapply (ordinary_terminal_boundary_far_rectangles_separated_core
+            ds l sub r h j other ordinary_b ordinary_o); eauto.
+  - exact (classify_spec l sub r Hsub Hmono Hsparse
+             (ex_intro _ ds Hembed) Hext).
+  - exact (connected_x_monotone_endpoints sub Hsub Hconn Hmono).
+  - intros k s Hnth Hk.
+    exact (x_monotone_inner_segment_left_x sub k s
+             Hsub Hconn Hmono Hnth Hk).
+Qed.
+
+Lemma ordinary_initial_boundary_far_rectangles_separated_core :
   forall ds l sub r h j other ordinary_b ordinary_o,
     sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
+    @ClassificationSpec l sub r (classify l sub r) ->
+    fst (init (hd_segment sub)) < fst (term (last_segment sub)) ->
+    (forall k s, nth_error sub k = Some s -> (S k < length sub)%nat ->
+       rx1 (rect_of [s]) < rx1 (rect_of sub)) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
-    extensions_disjoint (l ++ sub ++ r) ->
     r <> [] ->
     nth_error (l ++ sub ++ r) j = Some other ->
     nth_error (ordinary_reconnect_split l sub r h)
@@ -1208,24 +1491,20 @@ Lemma ordinary_initial_boundary_far_rectangles_separated :
     endpoint_rectangles_axis_separated ordinary_b ordinary_o.
 Proof.
   intros ds l sub r h j other ordinary_b ordinary_o
-    Hsub Hconn Hmono Hh Hsparse Hembed Hext Hr
+    Hsub Hspec HsubX Hinner Hh Hsparse Hembed Hr
     Hother HordinaryB HordinaryO Hfar HnotLidB HnotLidO.
   set (b := hd_segment r).
   assert (Hb :
       nth_error (l ++ sub ++ r) (length l + length sub) = Some b).
   { unfold b. now apply nth_error_right_boundary_in_split. }
-  assert (Hwhole : connected (l ++ sub ++ r)).
-  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
   assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
-  { eapply operate_endpoints_reconnectable; eauto. }
-  pose proof (ordinary_reconnect_split_nth_spec
+  { exact (operate_endpoints_reconnectable_from_spec l sub r h Hspec Hh). }
+  pose proof (ordinary_reconnect_split_nth_spec_basic
                 l sub r h (length l + length sub) b ordinary_b
-                Hsub Hconn Hmono Hsparse Hwhole (ex_intro _ ds Hembed) Hrec
-                Hb HordinaryB) as [_ [HinitB HtermB]].
-  pose proof (ordinary_reconnect_split_nth_spec
+                Hrec Hb HordinaryB) as [_ [HinitB HtermB]].
+  pose proof (ordinary_reconnect_split_nth_spec_basic
                 l sub r h j other ordinary_o
-                Hsub Hconn Hmono Hsparse Hwhole (ex_intro _ ds Hembed) Hrec
-                Hother HordinaryO) as [_ [HinitO HtermO]].
+                Hrec Hother HordinaryO) as [_ [HinitO HtermO]].
   assert (HnotInitial : ~ initial_lid r).
   { intro Hlid. apply HnotLidB. right. now split. }
   assert (HeastB : fst (init b) < fst (term b)).
@@ -1259,9 +1538,8 @@ Proof.
         In t (nonadjacent_sides l r) ->
         endpoint_rectangles_axis_separated ordinary_b t').
   { intros k t t' Ht Ht' Hfar' Hin.
-    pose proof (ordinary_reconnect_split_nth_spec
-                  l sub r h k t t' Hsub Hconn Hmono Hsparse Hwhole
-                  (ex_intro _ ds Hembed) Hrec Ht Ht') as [_ [HinitT HtermT]].
+    pose proof (ordinary_reconnect_split_nth_spec_basic
+                  l sub r h k t t' Hrec Ht Ht') as [_ [HinitT HtermT]].
     pose proof (sparse_far_rectangles_axis_separated
                   (l ++ sub ++ r) (length l + length sub) k b t
                   Hsparse Hb Ht Hfar') as Hsep.
@@ -1310,10 +1588,9 @@ Proof.
                 pose proof (Rmax_l (snd (init t)) (snd (term t)));
                 pose proof (Rmax_r (snd (init t)) (snd (term t)));
                 pose proof (Rmin_r (snd (init b)) (snd (term b))); lra. }
-            exact (operate_preserves_far_endpoint_vertical_order
+            exact (operate_preserves_far_endpoint_vertical_order_from_spec
                      l sub r h k (length l + length sub) t b p (term b)
-                     Hsub Hmono Hsparse (ex_intro _ ds Hembed) Hext
-                     (proj1 Hh) Ht Hb HfarRev HoverlapRev Hp
+                     Hspec (proj1 Hh) Ht Hb HfarRev HoverlapRev Hp
                      (or_intror eq_refl) HouterNotSub Hy). }
           assert (HtoFixed : forall p,
               endpoint_of_seg t p ->
@@ -1327,9 +1604,8 @@ Proof.
               destruct Hp as [-> | ->];
                 pose proof (Rmax_l (snd (init t)) (snd (term t)));
                 pose proof (Rmax_r (snd (init t)) (snd (term t))); lra. }
-            pose proof (operated_endpoint_below_initial_stays_below
-                          l sub r h p Hsub Hmono Hsparse
-                          (ex_intro _ ds Hembed) Hext (Rlt_le _ _ (proj1 Hh))
+            pose proof (operated_endpoint_below_initial_stays_below_from_spec
+                          l sub r h p Hspec (Rlt_le _ _ (proj1 Hh))
                           Hr HnotInitial HpWhole HpBelow) as Hop.
             change (snd (operate_point l sub r h p) <
                     Rmin (snd (init b)) (snd (term b))) in Hop.
@@ -1358,10 +1634,9 @@ Proof.
                 pose proof (Rmax_r (snd (init b)) (snd (term b)));
                 pose proof (Rmin_l (snd (init t)) (snd (term t)));
                 pose proof (Rmin_r (snd (init t)) (snd (term t))); lra. }
-            exact (operate_preserves_far_endpoint_vertical_order
+            exact (operate_preserves_far_endpoint_vertical_order_from_spec
                      l sub r h (length l + length sub) k b t pb pt
-                     Hsub Hmono Hsparse (ex_intro _ ds Hembed) Hext
-                     (proj1 Hh) Hb Ht Hfar' Hoverlap Hpb Hpt HptNotSub Hy). }
+                     Hspec (proj1 Hh) Hb Ht Hfar' Hoverlap Hpb Hpt HptNotSub Hy). }
           apply Rmax_lub_lt; apply Rmin_glb_lt;
             apply HfromBoundary; [now left | now left | now left | now right |
                                   now right | now left | now right | now right]. }
@@ -1386,7 +1661,6 @@ Proof.
     { symmetry. unfold hd_segment. now apply hd_app. }
     assert (HjoinL : term (last_segment l) = init (hd_segment sub)).
     { now rewrite <- Hhd. }
-    pose proof (connected_x_monotone_endpoints sub Hsub Hconn Hmono) as HsubX.
     left.
     change (Rmax (fst (init ordinary_o)) (fst (term ordinary_o)) <
             Rmin (fst (init ordinary_b)) (fst (term ordinary_b))).
@@ -1394,25 +1668,84 @@ Proof.
     pose proof (f_equal fst HjoinL) as HjoinLX.
     pose proof (f_equal fst Hjoin) as HjoinX.
     rewrite Rmax_right, Rmin_left by lra. lra.
-  - assert (HkBefore : (k < length sub - 1)%nat).
+  - assert (HkBefore : (S k < length sub)%nat).
     { subst j. destruct Hfar; lia. }
-    assert (Hbefore : fst (term other) < fst (term (last_segment sub))).
-    { eapply x_monotone_nth_term_before_last; eauto. }
+    pose proof (Hinner k other HnthSub HkBefore) as Hbefore.
     left.
     change (Rmax (fst (init ordinary_o)) (fst (term ordinary_o)) <
             Rmin (fst (init ordinary_b)) (fst (term ordinary_b))).
     rewrite HinitB, HtermB, HinitO, HtermO, !operate_point_fst.
-    pose proof (Hmono other (nth_error_In _ _ HnthSub)) as HeastO.
-    change (fst (init other) < fst (term other)) in HeastO.
     pose proof (f_equal fst Hjoin) as HjoinX.
-    rewrite Rmax_right, Rmin_left by lra. lra.
+    unfold rect_of in Hbefore; simpl in Hbefore.
+    replace (Rmax (fst (init (hd_segment sub)))
+                  (fst (term (last_segment sub))))
+      with (fst (term (last_segment sub))) in Hbefore
+      by (symmetry; apply Rmax_right; lra).
+    change (Rmax (fst (init other)) (fst (term other)) <
+            fst (term (last_segment sub))) in Hbefore.
+    rewrite Rmin_left by lra. lra.
   - exfalso. subst j. lia.
   - apply (Hexternal j other ordinary_o Hother HordinaryO Hfar).
     now apply split_right_outer_in_nonadjacent with (k := k).
 Qed.
 
-(* 残る本質的な枝：sub に隣接する非蓋セグメントと、二つ以上離れた
-   出現との垂直分離を、固定接続点を含めて保存する。 *)
+Lemma ordinary_initial_boundary_far_rectangles_separated_prepared :
+  forall ds l sub r h j other ordinary_b ordinary_o,
+    sub <> [] -> connected sub -> PreparedGeometry l sub r ->
+    h_large h sub -> sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) -> r <> [] ->
+    nth_error (l ++ sub ++ r) j = Some other ->
+    nth_error (ordinary_reconnect_split l sub r h)
+      (length l + length sub) = Some ordinary_b ->
+    nth_error (ordinary_reconnect_split l sub r h) j = Some ordinary_o ->
+    (S (length l + length sub) < j \/
+     S j < length l + length sub)%nat ->
+    ~ reconnect_split_lid_index l sub r (length l + length sub) ->
+    ~ reconnect_split_lid_index l sub r j ->
+    endpoint_rectangles_axis_separated ordinary_b ordinary_o.
+Proof.
+  intros ds l sub r h j other ordinary_b ordinary_o
+    Hsub Hconn Hgeometry Hh Hsparse Hembed Hext Hr
+    Hother HordinaryB HordinaryO Hfar HnotLidB HnotLidO.
+  eapply (ordinary_initial_boundary_far_rectangles_separated_core
+            ds l sub r h j other ordinary_b ordinary_o); eauto.
+  - exact (classify_spec_prepared l sub r Hgeometry Hsparse
+             (ex_intro _ ds Hembed) Hext).
+  - exact (prepared_sub_x_order l sub r Hgeometry).
+  - intros k s Hnth Hk.
+    exact (prepared_inner_segment_right_x l sub r k s Hgeometry Hnth Hk).
+Qed.
+
+Lemma ordinary_initial_boundary_far_rectangles_separated :
+  forall ds l sub r h j other ordinary_b ordinary_o,
+    sub <> [] -> connected sub -> x_monotone_segs sub ->
+    h_large h sub -> sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) -> r <> [] ->
+    nth_error (l ++ sub ++ r) j = Some other ->
+    nth_error (ordinary_reconnect_split l sub r h)
+      (length l + length sub) = Some ordinary_b ->
+    nth_error (ordinary_reconnect_split l sub r h) j = Some ordinary_o ->
+    (S (length l + length sub) < j \/
+     S j < length l + length sub)%nat ->
+    ~ reconnect_split_lid_index l sub r (length l + length sub) ->
+    ~ reconnect_split_lid_index l sub r j ->
+    endpoint_rectangles_axis_separated ordinary_b ordinary_o.
+Proof.
+  intros ds l sub r h j other ordinary_b ordinary_o
+    Hsub Hconn Hmono Hh Hsparse Hembed Hext Hr
+    Hother HordinaryB HordinaryO Hfar HnotLidB HnotLidO.
+  eapply (ordinary_initial_boundary_far_rectangles_separated_core
+            ds l sub r h j other ordinary_b ordinary_o); eauto.
+  - exact (classify_spec l sub r Hsub Hmono Hsparse
+             (ex_intro _ ds Hembed) Hext).
+  - exact (connected_x_monotone_endpoints sub Hsub Hconn Hmono).
+  - intros k s Hnth Hk.
+    exact (x_monotone_inner_segment_right_x sub k s
+             Hsub Hconn Hmono Hnth Hk).
+Qed.
+
 Lemma ordinary_boundary_far_rectangles_separated :
   forall ds l sub r h i j old_s old_t ordinary_s ordinary_t,
     sub <> [] ->
@@ -1504,6 +1837,277 @@ Proof.
                Hsub Hconn Hmono Hh Hsparse Hembed Hext
                HoldS HoldT HordinaryS HordinaryT Hfar
                HboundaryS HboundaryT).
+Qed.
+
+(* 添字ごとの閉長方形分離と延長線回避を全域 sparse に変換する。 *)
+Lemma indexed_far_rectangles_give_sparse_embedding :
+  forall ls,
+    (forall i j s t,
+      nth_error ls i = Some s ->
+      nth_error ls j = Some t ->
+      (S i < j \/ S j < i)%nat ->
+      endpoint_rectangles_axis_separated s t) ->
+    extensions_avoid_segment_rectangles ls ->
+    sparse_embedding ls.
+Proof.
+  intros ls Hfar Hext.
+  apply geometric_sparse_embedding; [|exact Hext].
+  unfold segment_rectangles_separated.
+  intros left s right Hsplit t Hin p Hp.
+  destruct (split_nonadjacent_nth_errors ls left s right t Hsplit Hin)
+    as [i [j [Hs [Ht Hij]]]].
+  exact (axis_separated_boxes_avoid s t (Hfar i j s t Hs Ht Hij) p Hp).
+Qed.
+
+(* 内部 sub セグメントの厳密な x 分離により、境界枝も x 単調性なしで扱う。 *)
+Lemma ordinary_boundary_far_rectangles_separated_prepared :
+  forall ds l sub r h i j old_s old_t ordinary_s ordinary_t,
+    PreparedGeometry l sub r ->
+    connected sub ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    nth_error (l ++ sub ++ r) i = Some old_s ->
+    nth_error (l ++ sub ++ r) j = Some old_t ->
+    nth_error (ordinary_reconnect_split l sub r h) i = Some ordinary_s ->
+    nth_error (ordinary_reconnect_split l sub r h) j = Some ordinary_t ->
+    (S i < j \/ S j < i)%nat ->
+    (split_boundary_occurrence l sub r i old_s
+     \/ split_boundary_occurrence l sub r j old_t) ->
+    endpoint_rectangles_axis_separated ordinary_s ordinary_t.
+Proof.
+  intros ds l sub r h i j old_s old_t ordinary_s ordinary_t
+    Hgeometry Hconn Hh Hsparse Hembed Hext
+    HoldS HoldT HordinaryS HordinaryT Hfar Hboundary.
+  assert (HnotLid : forall k, ~ reconnect_split_lid_index l sub r k).
+  { intros k [[Hlid _] | [Hlid _]].
+    - exact (prepared_no_terminal_lid l sub r Hgeometry Hlid).
+    - exact (prepared_no_initial_lid l sub r Hgeometry Hlid). }
+  destruct Hboundary as [HboundaryS | HboundaryT].
+  - destruct HboundaryS as [[Hl [Hi Hs]] | [Hr [Hi Hs]]].
+    + subst i old_s.
+      exact (ordinary_terminal_boundary_far_rectangles_separated_prepared
+               ds l sub r h j old_t ordinary_s ordinary_t
+               (prepared_sub_nonempty l sub r Hgeometry)
+               Hconn Hgeometry Hh Hsparse Hembed Hext Hl
+               HoldT HordinaryS HordinaryT Hfar
+               (HnotLid _) (HnotLid _)).
+    + subst i old_s.
+      exact (ordinary_initial_boundary_far_rectangles_separated_prepared
+               ds l sub r h j old_t ordinary_s ordinary_t
+               (prepared_sub_nonempty l sub r Hgeometry)
+               Hconn Hgeometry Hh Hsparse Hembed Hext Hr
+               HoldT HordinaryS HordinaryT Hfar
+               (HnotLid _) (HnotLid _)).
+  - apply endpoint_rectangles_axis_separated_sym.
+    destruct HboundaryT as [[Hl [Hj Ht]] | [Hr [Hj Ht]]].
+    + subst j old_t.
+      exact (ordinary_terminal_boundary_far_rectangles_separated_prepared
+               ds l sub r h i old_s ordinary_t ordinary_s
+               (prepared_sub_nonempty l sub r Hgeometry)
+               Hconn Hgeometry Hh Hsparse Hembed Hext Hl
+               HoldS HordinaryT HordinaryS ltac:(tauto)
+               (HnotLid _) (HnotLid _)).
+    + subst j old_t.
+      exact (ordinary_initial_boundary_far_rectangles_separated_prepared
+               ds l sub r h i old_s ordinary_t ordinary_s
+               (prepared_sub_nonempty l sub r Hgeometry)
+               Hconn Hgeometry Hh Hsparse Hembed Hext Hr
+               HoldS HordinaryT HordinaryS ltac:(tauto)
+               (HnotLid _) (HnotLid _)).
+Qed.
+
+(* strict 延長線の順序証明を、prepared 分類へ輸送する残りの枝。 *)
+Lemma ordinary_extensions_avoid_rectangles_prepared :
+  forall ds l sub r h,
+    PreparedGeometry l sub r ->
+    connected sub ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    extensions_avoid_segment_rectangles
+      (ordinary_reconnect_split l sub r h).
+Proof.
+  intros ds l sub r h Hgeometry Hconn Hh Hsparse Hembed Hext.
+  assert (Hspec : @ClassificationSpec l sub r (classify l sub r)).
+  { exact (classify_spec_prepared l sub r Hgeometry Hsparse
+             (ex_intro _ ds Hembed) Hext). }
+  assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
+  { exact (operate_endpoints_reconnectable_from_spec
+             l sub r h Hspec Hh). }
+  exact (reconnect_preserves_extensions_avoid_rectangles_from_spec
+           l sub r h (prepared_sub_nonempty l sub r Hgeometry)
+           Hspec Hh Hrec Hsparse).
+Qed.
+
+(* prepared 条件の下で、非境界枝は Qed、境界と延長線だけ上記へ還元。 *)
+Lemma prepared_no_lid_preserves_sparse_embedding :
+  forall ds l sub r h,
+    PreparedGeometry l sub r ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    sparse_embedding (ordinary_reconnect_split l sub r h).
+Proof.
+  intros ds l sub r h Hgeometry Hh Hsparse Hembed Hext.
+  assert (Hconn : connected sub).
+  { eapply connected_middle.
+    exact (embed_listDir_connected ds _ Hembed). }
+  apply indexed_far_rectangles_give_sparse_embedding.
+  - intros i j s t Hs Ht Hfar.
+    assert (Hlen :
+        length (l ++ sub ++ r) =
+        length (ordinary_reconnect_split l sub r h)).
+    { symmetry. apply ordinary_reconnect_split_length. }
+    destruct (nth_error_exists_at_equal_length
+                (l ++ sub ++ r) (ordinary_reconnect_split l sub r h)
+                i s Hlen Hs) as [old_s HoldS].
+    destruct (nth_error_exists_at_equal_length
+                (l ++ sub ++ r) (ordinary_reconnect_split l sub r h)
+                j t Hlen Ht) as [old_t HoldT].
+    destruct (classic (split_boundary_occurrence l sub r i old_s))
+      as [HboundaryS | HboundaryS].
+    + exact (ordinary_boundary_far_rectangles_separated_prepared
+               ds l sub r h i j old_s old_t s t
+               Hgeometry Hconn Hh Hsparse Hembed Hext
+               HoldS HoldT Hs Ht Hfar (or_introl HboundaryS)).
+    + destruct (classic (split_boundary_occurrence l sub r j old_t))
+        as [HboundaryT | HboundaryT].
+      * exact (ordinary_boundary_far_rectangles_separated_prepared
+                 ds l sub r h i j old_s old_t s t
+                 Hgeometry Hconn Hh Hsparse Hembed Hext
+                 HoldS HoldT Hs Ht Hfar (or_intror HboundaryT)).
+      * exact (ordinary_nonboundary_far_rectangles_separated_prepared
+                 ds l sub r h i j old_s old_t s t
+                 Hgeometry Hconn Hh Hsparse Hembed Hext
+                 HoldS HoldT Hs Ht Hfar HboundaryS HboundaryT).
+  - exact (ordinary_extensions_avoid_rectangles_prepared
+             ds l sub r h Hgeometry Hconn Hh Hsparse Hembed Hext).
+Qed.
+
+(* 既存の延長線非交差証明は x 単調枝でそのまま使える。非単調枝では
+   prepared 分類の延長線順序へ輸送する補題を別途要する。 *)
+Lemma ordinary_extensions_disjoint_prepared :
+  forall ds l sub r h,
+    PreparedGeometry l sub r ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    extensions_disjoint (ordinary_reconnect_split l sub r h).
+Proof.
+  intros ds l sub r h Hgeometry Hh Hsparse Hembed Hext.
+  assert (Hspec : @ClassificationSpec l sub r (classify l sub r)).
+  { exact (classify_spec_prepared l sub r Hgeometry Hsparse
+             (ex_intro _ ds Hembed) Hext). }
+  assert (HheadSlope :
+      l <> [] -> reconnect_init_slope_after l sub r h (hd_segment l)).
+  { intros Hl. unfold reconnect_init_slope_after, operate_point.
+    exact (classified_head_init_slope_reconnectable
+             l sub r Hspec h (Rlt_le _ _ (proj1 Hh)) Hl). }
+  assert (HlastSlope :
+      r <> [] -> reconnect_term_slope_after l sub r h (last_segment r)).
+  { intros Hr. unfold reconnect_term_slope_after, operate_point.
+    exact (classified_last_term_slope_reconnectable
+             l sub r Hspec h (Rlt_le _ _ (proj1 Hh)) Hr). }
+  intros p Hhead Hlast.
+  destruct (reconnect_head_extension_preimage_from_spec
+              l sub r h p
+              (prepared_sub_nonempty l sub r Hgeometry)
+              Hspec HheadSlope Hhead)
+    as [ph [Hph HshiftHead]].
+  destruct (reconnect_last_extension_preimage_from_spec
+              l sub r h p
+              (prepared_sub_nonempty l sub r Hgeometry)
+              Hspec Hsparse HlastSlope Hlast)
+    as [pl [Hpl HshiftLast]].
+  assert (Hx : fst ph = fst pl).
+  { assert (HheadX : fst p = fst ph).
+    { rewrite HshiftHead, shift_fst. reflexivity. }
+    assert (HlastX : fst p = fst pl).
+    { rewrite HshiftLast, shift_fst. reflexivity. }
+    lra. }
+  assert (Hneq : ph <> pl).
+  { intro Heq. subst pl. exact (Hext ph Hph Hpl). }
+  pose proof (classified_head_last_extension_order
+                l sub r Hspec ph pl Hph Hpl Hx)
+    as [HorderHeadLast HorderLastHead].
+  destruct (total_order_T (snd ph) (snd pl)) as [[Hlt | Heq] | Hgt].
+  - pose proof (shift_preserves_strict_vertical_order
+                  h ph pl
+                  (classify l sub r (init (hd_segment (l ++ sub ++ r))))
+                  (classify l sub r (term (last_segment (l ++ sub ++ r))))
+                  (proj1 Hh) Hlt (HorderHeadLast Hlt)) as Hshifted.
+    rewrite <- HshiftHead, <- HshiftLast in Hshifted. lra.
+  - apply Hneq. destruct ph as [xh yh], pl as [xl yl].
+    simpl in Hx, Heq |- *. f_equal; lra.
+  - pose proof (shift_preserves_strict_vertical_order
+                  h pl ph
+                  (classify l sub r (term (last_segment (l ++ sub ++ r))))
+                  (classify l sub r (init (hd_segment (l ++ sub ++ r))))
+                  (proj1 Hh) Hgt (HorderLastHead Hgt)) as Hshifted.
+    rewrite <- HshiftLast, <- HshiftHead in Hshifted. lra.
+Qed.
+
+(* sub 長方形周りの局所疎性。x 単調枝は既存証明を再利用し、
+   非単調枝の側面・延長線の回避は独立した未解決事項として残す。 *)
+Lemma ordinary_sparse_around_prepared :
+  forall ds l sub r h,
+    PreparedGeometry l sub r ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    sparse_around
+      (reconnect_segs l sub r h l) sub
+      (reconnect_segs l sub r h r).
+Proof.
+  intros ds l sub r h Hgeometry Hh Hsparse Hembed Hext.
+  assert (Hne : sub <> []).
+  { exact (prepared_sub_nonempty l sub r Hgeometry). }
+  assert (Hconn : connected sub).
+  { eapply connected_middle.
+    exact (embed_listDir_connected ds _ Hembed). }
+  assert (Hspec : @ClassificationSpec l sub r (classify l sub r)).
+  { exact (classify_spec_prepared l sub r Hgeometry Hsparse
+             (ex_intro _ ds Hembed) Hext). }
+  assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
+  { exact (operate_endpoints_reconnectable_from_spec
+             l sub r h Hspec Hh). }
+  split.
+  - intros p Hextend.
+    apply (reconnect_extensions_avoid_sub_rect_from_spec
+             l sub r h p Hne Hconn Hspec Hh Hsparse).
+    destruct Hextend as [[Hl Hhead] | [Hr Hlast]].
+    + left. split.
+      * intro Hnil. apply Hl.
+        apply length_zero_iff_nil.
+        rewrite (reconnect_segs_length l sub r h l).
+        now rewrite Hnil.
+      * exact Hhead.
+    + right. split.
+      * intro Hnil. apply Hr.
+        apply length_zero_iff_nil.
+        rewrite (reconnect_segs_length l sub r h r).
+        now rewrite Hnil.
+      * exact Hlast.
+  - intros s' p Hs' Hp.
+    unfold reconnect_segs in Hs'.
+    rewrite nonadjacent_sides_map in Hs'.
+    apply in_map_iff in Hs'.
+    destruct Hs' as [s [Heq Hs]]. subst s'.
+    apply (separated_endpoint_box_avoids_sub sub
+             (reconnect_one l sub r h s) p Hne).
+    + rewrite (reconnect_one_init _ _ _ _ _
+                 (Hrec s (nonadjacent_sides_in_whole l sub r s Hs))).
+      rewrite (reconnect_one_term _ _ _ _ _
+                 (Hrec s (nonadjacent_sides_in_whole l sub r s Hs))).
+      exact (operated_nonadjacent_endpoints_separated_from_spec
+               l sub r h s Hne Hconn Hh Hsparse Hspec Hs).
+    + exact Hp.
 Qed.
 
 (* 戻る蓋は safe reconnect の blocker 回避、通常セグメントは分類順序を

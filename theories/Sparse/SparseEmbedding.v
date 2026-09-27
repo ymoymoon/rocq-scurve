@@ -329,6 +329,129 @@ Lemma AdmissibleDirs_has_sparse_embedding :
       /\ extensions_disjoint ls.
 Admitted.
 
+(* 選んだ同一の分割埋め込みが、全域疎性と非 x 単調の作業条件を満たす。 *)
+Record PreparedSparseEmbedding
+    (ds1 sub_ds ds2 : list Direction)
+    (l sub r : list Segment) : Prop := {
+  prepared_left_embed : embed_listDir ds1 l;
+  prepared_sub_embed : embed_listDir sub_ds sub;
+  prepared_right_embed : embed_listDir ds2 r;
+  prepared_whole_embed :
+    embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub ++ r);
+  prepared_whole_sparse : sparse_embedding (l ++ sub ++ r);
+  prepared_extensions_disjoint : extensions_disjoint (l ++ sub ++ r);
+  prepared_geometry : PreparedGeometry l sub r
+}.
+
+(* 存在は任意の疎な埋め込みの回転ではなく、++-- 用に証人を選ぶ。
+   +-+ は片側三角形の局所疎性が必要なので、ここでは扱わない。 *)
+Lemma AdmissibleDirs_has_prepared_PPMM :
+  forall ds1 ds2,
+    AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) ->
+    exists l sub r,
+      PreparedSparseEmbedding ds1 [Plus; Plus; Minus; Minus] ds2 l sub r.
+Admitted.
+
+(* prepared 証人から、sub を固定して両側を再接続する。
+   全域疎性と局所疎性を両方結論に残す。 *)
+Lemma embed_sparsely_prepared :
+  forall ds1 sub_ds ds2 l sub r,
+    PreparedSparseEmbedding ds1 sub_ds ds2 l sub r ->
+    exists l' r',
+      embed_listDir ds1 l'
+      /\ embed_listDir sub_ds sub
+      /\ embed_listDir ds2 r'
+      /\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l' ++ sub ++ r')
+      /\ sparse_embedding (l' ++ sub ++ r')
+      /\ ~ close (l' ++ sub ++ r')
+      /\ sparse_around l' sub r'.
+Proof.
+  intros ds1 sub_ds ds2 l sub r Hprepared.
+  destruct Hprepared as [Hl Hsub Hr Hwhole Hsparse Hext Hgeometry].
+  destruct (choose_h sub) as [h Hh].
+  set (l' := reconnect_segs l sub r h l).
+  set (r' := reconnect_segs l sub r h r).
+  assert (Hspec : @ClassificationSpec l sub r (classify l sub r)).
+  { exact (classify_spec_prepared l sub r Hgeometry Hsparse
+             (ex_intro _ (ds1 ++ sub_ds ++ ds2) Hwhole) Hext). }
+  assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
+  { exact (operate_endpoints_reconnectable_from_spec
+             l sub r h Hspec Hh). }
+  assert (Hleft : embed_listDir ds1 l').
+  { unfold l'. eapply reconnects_list_preserves_embed; [|exact Hl].
+    apply reconnect_segs_reconnects_after.
+    intros s Hs. apply Hrec. apply in_or_app. left. exact Hs. }
+  assert (Hright : embed_listDir ds2 r').
+  { unfold r'. eapply reconnects_list_preserves_embed; [|exact Hr].
+    apply reconnect_segs_reconnects_after.
+    intros s Hs. apply Hrec. rewrite in_app_iff. right.
+    apply in_or_app. right. exact Hs. }
+  assert (Hwhole' :
+      embed_listDir (ds1 ++ sub_ds ++ ds2) (l' ++ sub ++ r')).
+  { change (embed_listDir (ds1 ++ sub_ds ++ ds2)
+              (ordinary_reconnect_split l sub r h)).
+    exact (prepared_ordinary_reconnect_preserves_embed
+             (ds1 ++ sub_ds ++ ds2) l sub r h
+             Hgeometry Hh Hsparse Hwhole Hext). }
+  assert (Hsparse' : sparse_embedding (l' ++ sub ++ r')).
+  { change (sparse_embedding (ordinary_reconnect_split l sub r h)).
+    exact (prepared_no_lid_preserves_sparse_embedding
+             (ds1 ++ sub_ds ++ ds2) l sub r h
+             Hgeometry Hh Hsparse Hwhole Hext). }
+  assert (Hext' : extensions_disjoint (l' ++ sub ++ r')).
+  { change (extensions_disjoint (ordinary_reconnect_split l sub r h)).
+    exact (ordinary_extensions_disjoint_prepared
+             (ds1 ++ sub_ds ++ ds2) l sub r h
+             Hgeometry Hh Hsparse Hwhole Hext). }
+  assert (Hnonempty : l' ++ sub ++ r' <> []).
+  { intro Hnil. apply app_eq_nil in Hnil as [_ Htail].
+    apply app_eq_nil in Htail as [Hsubnil _].
+    exact (prepared_sub_nonempty l sub r Hgeometry Hsubnil). }
+  assert (Hopen : ~ close (l' ++ sub ++ r')).
+  { exact (sparse_extensions_open _ _ Hnonempty Hwhole' Hsparse' Hext'). }
+  assert (Haround : sparse_around l' sub r').
+  { exact (ordinary_sparse_around_prepared
+             (ds1 ++ sub_ds ++ ds2) l sub r h
+             Hgeometry Hh Hsparse Hwhole Hext). }
+  exists l', r'.
+  split; [exact Hleft |].
+  split; [exact Hsub |].
+  split; [exact Hright |].
+  split; [exact Hwhole' |].
+  split; [exact Hsparse' |].
+  split; [exact Hopen | exact Haround].
+Qed.
+
+(* ++-- の候補が prepared 条件を満たせば、選択した埋め込みで
+   x 単調性を使わずに全域疎性を得られる。 *)
+Lemma embed_sparsely_PPMM_prepared :
+  forall ds1 ds2,
+    AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) ->
+    exists l sub r,
+      embed_listDir ds1 l
+      /\ embed_listDir [Plus; Plus; Minus; Minus] sub
+      /\ embed_listDir ds2 r
+      /\ embed_listDir (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2)
+           (l ++ sub ++ r)
+      /\ sparse_embedding (l ++ sub ++ r)
+      /\ ~ close (l ++ sub ++ r)
+      /\ sparse_around l sub r.
+Proof.
+  intros ds1 ds2 Hadm.
+  destruct (AdmissibleDirs_has_prepared_PPMM ds1 ds2 Hadm)
+    as [l [sub [r Hprepared]]].
+  destruct (embed_sparsely_prepared ds1
+              [Plus; Plus; Minus; Minus] ds2 l sub r Hprepared)
+    as [l' [r' [Hl' [Hsub [Hr' [Hwhole [Hsparse [Hopen Haround]]]]]]]].
+  exists l', sub, r'.
+  split; [exact Hl' |].
+  split; [exact Hsub |].
+  split; [exact Hr' |].
+  split; [exact Hwhole |].
+  split; [exact Hsparse |].
+  split; [exact Hopen | exact Haround].
+Qed.
+
 (* 疎な初期埋め込みを回転して sub を x 単調にし、再接続後の局所疎性と
    開性を得る。全域 sparse 性はこの結論に含めない。 *)
 Lemma embed_sparsely_xmono :

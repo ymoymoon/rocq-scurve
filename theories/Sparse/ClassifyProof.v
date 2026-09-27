@@ -954,6 +954,25 @@ Proof.
   - now apply last_classification_preserves_term_slope.
 Qed.
 
+(* 非 x 単調な prepared 埋め込みでの分類仕様。旧 x 単調枝は既存証明を
+   そのまま利用し、残る証明書の上下伝播だけを今後置き換える。 *)
+Lemma classify_spec_prepared :
+  forall l sub r,
+    PreparedGeometry l sub r ->
+    sparse_embedding (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    @ClassificationSpec l sub r (classify l sub r).
+Proof.
+  intros l sub r Hgeometry Hsparse Hembed Hext.
+  destruct (classic (x_monotone_segs sub)) as [Hmono | Hnonmono].
+  - exact (classify_spec l sub r
+             (prepared_sub_nonempty l sub r Hgeometry)
+             Hmono Hsparse Hembed Hext).
+  - (* 旧 certificate の x 単調性依存を、縦方向の gap 回避へ差し替える。 *)
+    admit.
+Admitted.
+
 (* 分類された端点の上下移動。 *)
 
 Lemma shift_preserves_strict_vertical_order :

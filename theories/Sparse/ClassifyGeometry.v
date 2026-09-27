@@ -91,6 +91,162 @@ Definition below_sub_at_x (sub : list Segment) (p : Point) : Prop :=
     /\ fst p = fst q
     /\ snd p < snd q.
 
+(* 同じ x の二つの sub 点の間に p が入らない。sub 自身の点には要求しない。 *)
+Definition avoids_sub_vertical_gap (sub : list Segment) (p : Point) : Prop :=
+  ~ exists qlo qhi,
+      onSegmentlist sub qlo /\ onSegmentlist sub qhi
+      /\ fst p = fst qlo /\ fst p = fst qhi
+      /\ snd qlo < snd p < snd qhi.
+
+Definition external_points_avoid_sub_vertical_gap
+    (l sub r : list Segment) : Prop :=
+  forall p,
+    onSegmentlist (l ++ r) p ->
+    ~ onSegmentlist sub p ->
+    avoids_sub_vertical_gap sub p.
+
+(* sub の全点は、全体の始点・終点という二つの出現を除き、
+   その両端を対角線とする開長方形の内部にある。 *)
+Definition sub_strictly_inside_endpoint_rect (sub : list Segment) : Prop :=
+  forall i s p,
+    nth_error sub i = Some s ->
+    onSegment s p ->
+    (i = 0%nat -> p <> init s) ->
+    (S i = length sub -> p <> term s) ->
+    in_rect (rect_of sub) p.
+
+(* x 単調性の代わりに、構成時に選ぶ具体的な埋め込みへ要求する幾何条件。 *)
+Record PreparedGeometry (l sub r : list Segment) : Prop := {
+  prepared_sub_nonempty : sub <> [];
+  prepared_sub_strictly_inside : sub_strictly_inside_endpoint_rect sub;
+  prepared_sub_x_order :
+    fst (init (hd_segment sub)) < fst (term (last_segment sub));
+  prepared_external_no_gap : external_points_avoid_sub_vertical_gap l sub r;
+  prepared_no_terminal_lid : ~ terminal_lid l;
+  prepared_no_initial_lid : ~ initial_lid r
+}.
+
+(* 開内部条件は端点長方形への閉包含を含意する。二つの全体端点だけを別扱いする。 *)
+Lemma prepared_sub_contained : forall l sub r,
+  PreparedGeometry l sub r -> sub_contained_in_endpoint_rect sub.
+Proof.
+  intros l sub r Hgeometry p [s [Hin Hon]].
+  destruct (In_nth_error sub s Hin) as [i Hnth].
+  pose proof (prepared_sub_strictly_inside l sub r Hgeometry) as Hstrict.
+  destruct (classic (p = init (hd_segment sub))) as [Hfirst | Hfirst].
+  - subst p. unfold in_rect_or_endpoints_at, in_closed_rect, rect_of; simpl.
+    split; split;
+      pose proof (Rmin_l (fst (init (hd_segment sub)))
+                          (fst (term (last_segment sub))));
+      pose proof (Rmax_l (fst (init (hd_segment sub)))
+                          (fst (term (last_segment sub))));
+      pose proof (Rmin_l (snd (init (hd_segment sub)))
+                          (snd (term (last_segment sub))));
+      pose proof (Rmax_l (snd (init (hd_segment sub)))
+                          (snd (term (last_segment sub)))); lra.
+  - destruct (classic (p = term (last_segment sub))) as [Hlast | Hlast].
+    + subst p. unfold in_rect_or_endpoints_at, in_closed_rect, rect_of; simpl.
+      split; split;
+        pose proof (Rmin_r (fst (init (hd_segment sub)))
+                            (fst (term (last_segment sub))));
+        pose proof (Rmax_r (fst (init (hd_segment sub)))
+                            (fst (term (last_segment sub))));
+        pose proof (Rmin_r (snd (init (hd_segment sub)))
+                            (snd (term (last_segment sub))));
+        pose proof (Rmax_r (snd (init (hd_segment sub)))
+                            (snd (term (last_segment sub)))); lra.
+    + assert (HnotFirst : i = 0%nat -> p <> init s).
+      { intros Hi Hp. subst i. destruct sub as [|a tail]; [discriminate |].
+        simpl in Hnth. inversion Hnth; subst s. apply Hfirst. exact Hp. }
+      assert (HnotLast : S i = length sub -> p <> term s).
+      { intros Hi Hp. apply Hlast. rewrite Hp.
+        assert (Hidx : i = (length sub - 1)%nat) by lia.
+        subst i.
+        assert (HlastNth :
+          nth_error sub (length sub - 1) = Some (last_segment sub)).
+        { unfold last_segment. apply nth_error_last.
+          exact (prepared_sub_nonempty l sub r Hgeometry). }
+        rewrite Hnth in HlastNth. now inversion HlastNth. }
+      pose proof (Hstrict i s p Hnth Hon HnotFirst HnotLast) as Hinside.
+      unfold in_rect_or_endpoints_at, in_closed_rect.
+      unfold in_rect in Hinside. destruct Hinside as [[Hx0 Hx1] [Hy0 Hy1]].
+      split; split; lra.
+Qed.
+
+(* 最初以外の部分セグメントは、全体の左端 x に戻らない。 *)
+Lemma prepared_inner_segment_left_x : forall l sub r k s,
+  PreparedGeometry l sub r ->
+  nth_error sub k = Some s ->
+  (0 < k)%nat ->
+  rx0 (rect_of sub) < rx0 (rect_of [s]).
+Proof.
+  intros l sub r k s Hgeometry Hnth Hk.
+  pose proof (prepared_sub_strictly_inside l sub r Hgeometry) as Hstrict.
+  pose proof (prepared_sub_x_order l sub r Hgeometry) as Horder.
+  assert (Hne : sub <> []).
+  { exact (prepared_sub_nonempty l sub r Hgeometry). }
+  assert (Hdistinct : init s <> term s).
+  { exact (neq_init_term s). }
+  assert (Hinit : in_rect (rect_of sub) (init s)).
+  { apply (Hstrict k s (init s) Hnth (onInit s)).
+    - intro Hzero. exfalso. lia.
+    - intros HlastEq. exact Hdistinct. }
+  assert (HtermX : rx0 (rect_of sub) < fst (term s)).
+  { destruct (Nat.eq_dec (S k) (length sub)) as [Hlast | Hnotlast].
+    - assert (Hindex : k = (length sub - 1)%nat) by lia.
+      subst k.
+      assert (HlastNth :
+          nth_error sub (length sub - 1) = Some (last_segment sub)).
+      { unfold last_segment. now apply nth_error_last. }
+      rewrite Hnth in HlastNth. inversion HlastNth; subst s.
+      unfold rect_of. simpl.
+      rewrite Rmin_left by lra. exact Horder.
+    - pose proof (Hstrict k s (term s) Hnth (onTerm s)) as Hinside.
+      assert (Hfirst : k = 0%nat -> term s <> init s).
+      { intros Hzero Heq. apply Hdistinct. symmetry. exact Heq. }
+      assert (Hlast' : S k = length sub -> term s <> term s).
+      { intro Heq. exfalso. contradiction. }
+      specialize (Hinside Hfirst Hlast').
+      exact (proj1 (proj1 Hinside)). }
+  unfold in_rect in Hinit. destruct Hinit as [[HinitX _] _].
+  unfold rect_of at 2. simpl.
+  apply Rmin_glb_lt; assumption.
+Qed.
+
+(* 最後以外の部分セグメントは、全体の右端 x に戻らない。 *)
+Lemma prepared_inner_segment_right_x : forall l sub r k s,
+  PreparedGeometry l sub r ->
+  nth_error sub k = Some s ->
+  (S k < length sub)%nat ->
+  rx1 (rect_of [s]) < rx1 (rect_of sub).
+Proof.
+  intros l sub r k s Hgeometry Hnth Hk.
+  pose proof (prepared_sub_strictly_inside l sub r Hgeometry) as Hstrict.
+  pose proof (prepared_sub_x_order l sub r Hgeometry) as Horder.
+  assert (Hdistinct : init s <> term s).
+  { exact (neq_init_term s). }
+  assert (Hterm : in_rect (rect_of sub) (term s)).
+  { apply (Hstrict k s (term s) Hnth (onTerm s)).
+    - intros Hzero Heq. apply Hdistinct. symmetry. exact Heq.
+    - intro Hlast. exfalso. lia. }
+  assert (HinitX : fst (init s) < rx1 (rect_of sub)).
+  { destruct (Nat.eq_dec k 0) as [Hzero | Hnonzero].
+    - subst k. destruct sub as [|first rest]; [discriminate |].
+      simpl in Hnth. inversion Hnth; subst s.
+      simpl in Horder. unfold rect_of. simpl.
+      unfold Rmax. destruct Rle_dec; lra.
+    - pose proof (Hstrict k s (init s) Hnth (onInit s)) as Hinside.
+      assert (Hfirst : k = 0%nat -> init s <> init s).
+      { intro Heq. exfalso. contradiction. }
+      assert (Hlast' : S k = length sub -> init s <> term s).
+      { intros HlastEq. exact Hdistinct. }
+      specialize (Hinside Hfirst Hlast').
+      exact (proj2 (proj1 Hinside)). }
+  unfold in_rect in Hterm. destruct Hterm as [[_ HtermX] _].
+  unfold rect_of at 1. simpl.
+  apply Rmax_lub_lt; assumption.
+Qed.
+
 (* [p] と同じ x にある sub 上の全ての点より、[p] が厳密に上にある。
    全称形にしておくと、sub 上への到達時には [q := p] で直ちに矛盾する。 *)
 Definition strictly_above_sub_at_x
@@ -99,6 +255,48 @@ Definition strictly_above_sub_at_x
     onSegmentlist sub q ->
     fst p = fst q ->
     snd q < snd p.
+
+Definition strictly_below_sub_at_x
+    (sub : list Segment) (p : Point) : Prop :=
+  forall q,
+    onSegmentlist sub q ->
+    fst p = fst q ->
+    snd p < snd q.
+
+(* 外部点では、存在形の上下判定は全ての同じ x の sub 点に通用する。 *)
+Lemma no_gap_above_all : forall sub p,
+  ~ onSegmentlist sub p ->
+  avoids_sub_vertical_gap sub p ->
+  above_sub_at_x sub p ->
+  strictly_above_sub_at_x sub p.
+Proof.
+  intros sub p Houtside Hgap [qlo [Hlo [Hxlo Hylo]]] qhi Hhi Hxhi.
+  destruct (total_order_T (snd qhi) (snd p)) as [[Hlt | Heq] | Hgt].
+  - exact Hlt.
+  - exfalso. apply Houtside.
+    destruct p as [xp yp], qhi as [xq yq]; simpl in *.
+    assert (xp = xq) by lra. assert (yp = yq) by lra. subst.
+    exact Hhi.
+  - exfalso. apply Hgap.
+    exists qlo, qhi. repeat split; assumption.
+Qed.
+
+Lemma no_gap_below_all : forall sub p,
+  ~ onSegmentlist sub p ->
+  avoids_sub_vertical_gap sub p ->
+  below_sub_at_x sub p ->
+  strictly_below_sub_at_x sub p.
+Proof.
+  intros sub p Houtside Hgap [qhi [Hhi [Hxhi Hyhi]]] qlo Hlo Hxlo.
+  destruct (total_order_T (snd p) (snd qlo)) as [[Hlt | Heq] | Hgt].
+  - exact Hlt.
+  - exfalso. apply Houtside.
+    destruct p as [xp yp], qlo as [xq yq]; simpl in *.
+    assert (xp = xq) by lra. assert (yp = yq) by lra. subst.
+    exact Hlo.
+  - exfalso. apply Hgap.
+    exists qlo, qhi. repeat split; assumption.
+Qed.
 
 Lemma strictly_above_sub_at_x_not_on_sub : forall sub p,
   strictly_above_sub_at_x sub p ->
@@ -313,6 +511,61 @@ Proof.
                   ltac:(rewrite <- surjective_pairing; apply onInit)
                   ltac:(lra) (proj1 Hx) (proj2 Hx)) as [y [Hon _]].
       exists (x, y). split; [exact Hon | reflexivity].
+Qed.
+
+(* 連結した二つの x 区間の和は、両外端を結ぶ区間を覆う。 *)
+Lemma x_interval_bridge : forall a b c x,
+  Rmin a c <= x <= Rmax a c ->
+  Rmin a b <= x <= Rmax a b \/
+  Rmin b c <= x <= Rmax b c.
+Proof.
+  intros a b c x Hx.
+  unfold Rmin, Rmax in *.
+  repeat destruct Rle_dec; lra.
+Qed.
+
+(* x 単調でなくても、連結な列の両端間の各 x には sub 上の点がある。 *)
+Lemma connected_sub_has_point_at_x :
+  forall sub x,
+    sub <> [] ->
+    connected sub ->
+    rx0 (rect_of sub) <= x <= rx1 (rect_of sub) ->
+    exists q, onSegmentlist sub q /\ fst q = x.
+Proof.
+  intros sub x Hne.
+  destruct sub as [|a tail]; [contradiction|].
+  clear Hne. revert a x.
+  induction tail as [|b tail IH]; intros a x Hconn Hx.
+  - destruct (segment_has_point_at_x a x Hx) as [q [Hon Hqx]].
+    exists q. split; [exists a; split; [now left | exact Hon] | exact Hqx].
+  - assert (Hab : term a = init b).
+    { apply (Hconn 0%nat a b); reflexivity. }
+    assert (HconnTail : connected (b :: tail)).
+    { intros i s1 s2 H1 H2.
+      apply (Hconn (S i) s1 s2); simpl; assumption. }
+    assert (Hlast :
+        last_segment (a :: b :: tail) = last_segment (b :: tail)).
+    { change (last_segment ([a] ++ b :: tail) = last_segment (b :: tail)).
+      apply last_app_nonnil. discriminate. }
+    assert (Hbetween :
+        Rmin (fst (init a)) (fst (term (last_segment (b :: tail)))) <= x <=
+        Rmax (fst (init a)) (fst (term (last_segment (b :: tail))))).
+    { unfold rect_of in Hx. simpl in Hx. rewrite Hlast in Hx.
+      exact Hx. }
+    destruct (x_interval_bridge
+                (fst (init a)) (fst (term a))
+                (fst (term (last_segment (b :: tail)))) x Hbetween)
+      as [Ha | Htail].
+    + destruct (segment_has_point_at_x a x Ha) as [q [Hon Hqx]].
+      exists q. split; [exists a; split; [now left | exact Hon] | exact Hqx].
+    + assert (HxTail :
+        rx0 (rect_of (b :: tail)) <= x <=
+        rx1 (rect_of (b :: tail))).
+      { unfold rect_of. simpl. rewrite <- Hab. exact Htail. }
+      destruct (IH b x HconnTail HxTail) as [q [[s [Hs Hon]] Hqx]].
+      exists q. split.
+      * exists s. split; [now right | exact Hon].
+      * exact Hqx.
 Qed.
 
 Lemma x_monotone_sub_has_point :

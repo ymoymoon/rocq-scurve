@@ -36,6 +36,32 @@ Definition in_rect_or_endpoints (old new : list Segment) : Prop :=
   forall p, onSegmentlist new p ->
     in_rect_or_endpoints_at old p.
 
+(* sub の端点長方形が sub 全体を含む。x 単調性は要求しない。 *)
+Definition sub_contained_in_endpoint_rect (sub : list Segment) : Prop :=
+  forall p, onSegmentlist sub p -> in_rect_or_endpoints_at sub p.
+
+(* 全体が端点長方形内なら、各部分セグメントの閉長方形もその x 範囲内。 *)
+Lemma contained_sub_segment_x_bounds : forall sub s,
+  sub_contained_in_endpoint_rect sub ->
+  In s sub ->
+  rx0 (rect_of sub) <= rx0 (rect_of [s])
+  /\ rx1 (rect_of [s]) <= rx1 (rect_of sub).
+Proof.
+  intros sub s Hcontained Hs.
+  assert (Hi : onSegmentlist sub (init s)).
+  { exists s. split; [exact Hs | apply onInit]. }
+  assert (Ht : onSegmentlist sub (term s)).
+  { exists s. split; [exact Hs | apply onTerm]. }
+  pose proof (Hcontained _ Hi) as Hinit.
+  pose proof (Hcontained _ Ht) as Hterm.
+  unfold in_rect_or_endpoints_at, in_closed_rect in Hinit, Hterm.
+  destruct Hinit as [Hinit _], Hterm as [Hterm _].
+  unfold rect_of in *; simpl in *.
+  change (last_segment [s]) with s.
+  unfold Rmin, Rmax in *.
+  repeat destruct Rle_dec; lra.
+Qed.
+
 (* [Segment.v] の基本契約を、閉長方形の表現へ読み替える。 *)
 Lemma segment_in_rect_or_endpoints :
   forall s p, onSegment s p -> in_segment_rect_or_endpoints s p.

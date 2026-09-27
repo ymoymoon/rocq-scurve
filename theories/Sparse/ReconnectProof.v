@@ -411,6 +411,35 @@ Proof.
 Qed.
 
 (* 再接続後の先頭延長線は，旧先頭延長線の一律な上下移動である。 *)
+Lemma reconnect_head_extension_preimage_from_spec :
+  forall l sub r h p,
+    sub <> [] ->
+    @ClassificationSpec l sub r (classify l sub r) ->
+    (l <> [] -> reconnect_init_slope_after l sub r h (hd_segment l)) ->
+    onHead_extend (ordinary_reconnect_split l sub r h) p ->
+    exists q,
+      onHead_extend (l ++ sub ++ r) q
+      /\ p = shift h
+          (classify l sub r (init (hd_segment (l ++ sub ++ r)))) q.
+Proof.
+  intros l sub r h p Hne Hspec Hslope Hp.
+  destruct l as [|a l'].
+  - destruct sub as [|b sub']; [contradiction|].
+    assert (Hfix : classify [] (b :: sub') r (init b) = RegFix).
+    { apply (classified_sub_fixed [] (b :: sub') r Hspec).
+      apply onSegmentlist_init_hd. discriminate. }
+    exists p. split.
+    + exact Hp.
+    + simpl in Hfix |- *. now rewrite Hfix.
+  - simpl in Hp |- *.
+    apply (reconnect_one_head_extension_preimage
+             (a :: l') sub r h a p).
+    + discriminate.
+    + reflexivity.
+    + now apply Hslope; discriminate.
+    + exact Hp.
+Qed.
+
 Lemma reconnect_head_extension_preimage :
   forall l sub r h p,
     sub <> [] ->
@@ -427,37 +456,19 @@ Lemma reconnect_head_extension_preimage :
       /\ p = shift h
           (classify l sub r (init (hd_segment (l ++ sub ++ r)))) q.
 Proof.
-  intros l sub r h p Hne Hconn Hmono Hsparse Hwhole Hembedded Hext Hslope Hp.
-  destruct l as [|a l'].
-  - destruct sub as [|b sub']; [contradiction|].
-    assert (Hfix : classify [] (b :: sub') r (init b) = RegFix).
-    { apply (classified_sub_fixed
-               [] (b :: sub') r
-               (classify_spec [] (b :: sub') r
-                  ltac:(discriminate) Hmono Hsparse Hembedded Hext)).
-      apply onSegmentlist_init_hd. discriminate. }
-    exists p. split.
-    + exact Hp.
-    + simpl in Hfix |- *. now rewrite Hfix.
-  - simpl in Hp |- *.
-    apply (reconnect_one_head_extension_preimage
-             (a :: l') sub r h a p).
-    + discriminate.
-    + reflexivity.
-    + now apply Hslope; discriminate.
-    + exact Hp.
+  intros l sub r h p Hne _ Hmono Hsparse _ Hembedded Hext Hslope Hp.
+  exact (reconnect_head_extension_preimage_from_spec
+           l sub r h p Hne
+           (classify_spec l sub r Hne Hmono Hsparse Hembedded Hext)
+           Hslope Hp).
 Qed.
 
 (* 再接続後の末尾延長線の移動前の像。 *)
-Lemma reconnect_last_extension_preimage :
+Lemma reconnect_last_extension_preimage_from_spec :
   forall l sub r h p,
     sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
     (r <> [] -> reconnect_term_slope_after l sub r h (last_segment r)) ->
     onLast_extend (ordinary_reconnect_split l sub r h) p ->
     exists q,
@@ -465,7 +476,7 @@ Lemma reconnect_last_extension_preimage :
       /\ p = shift h
           (classify l sub r (term (last_segment (l ++ sub ++ r)))) q.
 Proof.
-  intros l sub r h p Hne Hconn Hmono Hsparse Hwhole Hembedded Hext Hslope Hp.
+  intros l sub r h p Hne Hspec Hsparse Hslope Hp.
   destruct r as [|a r'].
   - assert (HoldLast : last_segment (l ++ sub ++ []) = last_segment sub).
     { rewrite app_nil_r. apply last_app_nonnil. exact Hne. }
@@ -474,9 +485,7 @@ Proof.
     { unfold ordinary_reconnect_split, reconnect_segs. simpl. rewrite app_nil_r.
       apply last_app_nonnil. exact Hne. }
     assert (Hfix : classify l sub [] (term (last_segment sub)) = RegFix).
-    { apply (classified_sub_fixed
-               l sub []
-               (classify_spec l sub [] Hne Hmono Hsparse Hembedded Hext)).
+    { apply (classified_sub_fixed l sub [] Hspec).
       apply onSegmentlist_term_last. exact Hne. }
     exists p. split.
     + unfold onLast_extend in *. now rewrite HnewLast in Hp; rewrite HoldLast.
@@ -519,16 +528,36 @@ Proof.
     + exact Hp.
 Qed.
 
-(* 再接続後の strict 先頭延長線点は，移動前の strict
-   延長線点を先頭の分類どおりに動かしたものである。 *)
-Lemma reconnect_head_strict_extension_preimage :
-  forall ds l sub r h p,
+Lemma reconnect_last_extension_preimage :
+  forall l sub r h p,
     sub <> [] ->
     connected sub ->
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
-    embed_listDir ds (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
     extensions_disjoint (l ++ sub ++ r) ->
+    (r <> [] -> reconnect_term_slope_after l sub r h (last_segment r)) ->
+    onLast_extend (ordinary_reconnect_split l sub r h) p ->
+    exists q,
+      onLast_extend (l ++ sub ++ r) q
+      /\ p = shift h
+          (classify l sub r (term (last_segment (l ++ sub ++ r)))) q.
+Proof.
+  intros l sub r h p Hne _ Hmono Hsparse _ Hembedded Hext Hslope Hp.
+  exact (reconnect_last_extension_preimage_from_spec
+           l sub r h p Hne
+           (classify_spec l sub r Hne Hmono Hsparse Hembedded Hext)
+           Hsparse Hslope Hp).
+Qed.
+
+(* 再接続後の strict 先頭延長線点は，移動前の strict
+   延長線点を先頭の分類どおりに動かしたものである。 *)
+Lemma reconnect_head_strict_extension_preimage_from_spec :
+  forall l sub r h p,
+    sub <> [] ->
+    sparse_embedding (l ++ sub ++ r) ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     0 <= h ->
     onHead_extend_strict (ordinary_reconnect_split l sub r h) p ->
     exists q,
@@ -536,17 +565,11 @@ Lemma reconnect_head_strict_extension_preimage :
       /\ p = shift h
           (classify l sub r (init (hd_segment (l ++ sub ++ r)))) q.
 Proof.
-  intros ds l sub r h p Hne Hconn Hmono Hsparse Hembed Hext Hh Hstrict.
-  assert (Hwhole : connected (l ++ sub ++ r)).
-  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
+  intros l sub r h p Hne Hsparse Hspec Hh Hstrict.
   destruct l as [|a l'].
   - destruct sub as [|b sub']; [contradiction|].
     assert (Hfix : classify [] (b :: sub') r (init b) = RegFix).
-    { apply (classified_sub_fixed
-               [] (b :: sub') r
-               (classify_spec [] (b :: sub') r
-                  ltac:(discriminate) Hmono Hsparse
-                  (ex_intro _ ds Hembed) Hext)).
+    { apply (classified_sub_fixed [] (b :: sub') r Hspec).
       apply onSegmentlist_init_hd. discriminate. }
     exists p. split.
     + exact Hstrict.
@@ -554,9 +577,10 @@ Proof.
   - simpl in Hstrict |- *.
     destruct Hstrict as [t [Ht Hpoint]].
     change (point (reconnect_one (a :: l') sub r h a) t = p) in Hpoint.
-    pose proof (reconnect_head_init_slope_after
-                  ds (a :: l') sub r h Hne Hconn Hmono Hsparse Hembed Hext Hh
-                  ltac:(discriminate)) as Hslope.
+    pose proof (classified_head_init_slope_reconnectable
+                  (a :: l') sub r Hspec h Hh ltac:(discriminate))
+      as Hslope.
+    change (reconnect_init_slope_after (a :: l') sub r h a) in Hslope.
     simpl in Hslope.
     assert (Hrec : reconnectable_after (a :: l') sub r h a).
     { unfold reconnectable_after.
@@ -604,8 +628,7 @@ Proof.
       symmetry. exact Htranslated.
 Qed.
 
-(* 再接続後の strict 末尾延長線点の移動前の像。 *)
-Lemma reconnect_last_strict_extension_preimage :
+Lemma reconnect_head_strict_extension_preimage :
   forall ds l sub r h p,
     sub <> [] ->
     connected sub ->
@@ -614,15 +637,33 @@ Lemma reconnect_last_strict_extension_preimage :
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     0 <= h ->
+    onHead_extend_strict (ordinary_reconnect_split l sub r h) p ->
+    exists q,
+      onHead_extend_strict (l ++ sub ++ r) q
+      /\ p = shift h
+          (classify l sub r (init (hd_segment (l ++ sub ++ r)))) q.
+Proof.
+  intros ds l sub r h p Hne _ Hmono Hsparse Hembed Hext Hh Hstrict.
+  exact (reconnect_head_strict_extension_preimage_from_spec
+           l sub r h p Hne Hsparse
+           (classify_spec l sub r Hne Hmono Hsparse
+              (ex_intro _ ds Hembed) Hext) Hh Hstrict).
+Qed.
+
+(* 再接続後の strict 末尾延長線点の移動前の像。 *)
+Lemma reconnect_last_strict_extension_preimage_from_spec :
+  forall l sub r h p,
+    sub <> [] ->
+    sparse_embedding (l ++ sub ++ r) ->
+    @ClassificationSpec l sub r (classify l sub r) ->
+    0 <= h ->
     onLast_extend_strict (ordinary_reconnect_split l sub r h) p ->
     exists q,
       onLast_extend_strict (l ++ sub ++ r) q
       /\ p = shift h
           (classify l sub r (term (last_segment (l ++ sub ++ r)))) q.
 Proof.
-  intros ds l sub r h p Hne Hconn Hmono Hsparse Hembed Hext Hh Hstrict.
-  assert (Hwhole : connected (l ++ sub ++ r)).
-  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
+  intros l sub r h p Hne Hsparse Hspec Hh Hstrict.
   destruct r as [|a r'].
   - assert (HoldLast : last_segment (l ++ sub ++ []) = last_segment sub).
     { rewrite app_nil_r. apply last_app_nonnil. exact Hne. }
@@ -631,10 +672,7 @@ Proof.
     { unfold ordinary_reconnect_split, reconnect_segs. simpl. rewrite app_nil_r.
       apply last_app_nonnil. exact Hne. }
     assert (Hfix : classify l sub [] (term (last_segment sub)) = RegFix).
-    { apply (classified_sub_fixed
-               l sub []
-               (classify_spec l sub [] Hne Hmono Hsparse
-                  (ex_intro _ ds Hembed) Hext)).
+    { apply (classified_sub_fixed l sub [] Hspec).
       apply onSegmentlist_term_last. exact Hne. }
     exists p. split.
     + unfold onLast_extend_strict in *. now rewrite HnewLast in Hstrict;
@@ -666,10 +704,11 @@ Proof.
     unfold onLast_extend_strict in Hstrict.
     rewrite HnewLast in Hstrict.
     destruct Hstrict as [t [Ht Hpoint]].
-    pose proof (reconnect_last_term_slope_after
-                  ds l sub (a :: r') h Hne Hconn Hmono Hsparse Hembed Hext Hh
-                  ltac:(discriminate)) as Hslope.
+    pose proof (classified_last_term_slope_reconnectable
+                  l sub (a :: r') Hspec h Hh ltac:(discriminate))
+      as Hslope.
     set (s := last_segment (a :: r')).
+    change (reconnect_term_slope_after l sub (a :: r') h s) in Hslope.
     change (reconnect_term_slope_after l sub (a :: r') h s) in Hslope.
     change (point (reconnect_one l sub (a :: r') h s) t = p) in Hpoint.
     assert (Hrec : reconnectable_after l sub (a :: r') h s).
@@ -724,6 +763,28 @@ Proof.
       rewrite shift_as_translation. unfold v in Htranslated.
       rewrite translate_seg_point in Htranslated. simpl in Htranslated.
       symmetry. exact Htranslated.
+Qed.
+
+Lemma reconnect_last_strict_extension_preimage :
+  forall ds l sub r h p,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    0 <= h ->
+    onLast_extend_strict (ordinary_reconnect_split l sub r h) p ->
+    exists q,
+      onLast_extend_strict (l ++ sub ++ r) q
+      /\ p = shift h
+          (classify l sub r (term (last_segment (l ++ sub ++ r)))) q.
+Proof.
+  intros ds l sub r h p Hne _ Hmono Hsparse Hembed Hext Hh Hstrict.
+  exact (reconnect_last_strict_extension_preimage_from_spec
+           l sub r h p Hne Hsparse
+           (classify_spec l sub r Hne Hmono Hsparse
+              (ex_intro _ ds Hembed) Hext) Hh Hstrict).
 Qed.
 
 Lemma all_reconnectable_mono :
@@ -831,6 +892,25 @@ Proof.
   lra.
 Qed.
 
+Lemma operated_endpoint_below_terminal_stays_below_from_spec :
+  forall l sub r h p,
+    @ClassificationSpec l sub r (classify l sub r) ->
+    0 <= h ->
+    l <> [] ->
+    ~ terminal_lid l ->
+    endpoint_of (l ++ sub ++ r) p ->
+    snd p < ry0 (rect_of [last_segment l]) ->
+    snd (operate_point l sub r h p) < ry0 (rect_of [last_segment l]).
+Proof.
+  intros l sub r h p Hspec Hh Hl HnotLid Hp Hbelow.
+  unfold operate_point.
+  pose proof (classified_below_terminal_not_up
+                l sub r Hspec Hl HnotLid p Hp Hbelow) as HnotUp.
+  pose proof (shift_not_up_nonincreasing
+                h (classify l sub r p) p Hh HnotUp).
+  lra.
+Qed.
+
 (* r 先頭についての双対。 *)
 Lemma operated_endpoint_below_initial_stays_below :
   forall l sub r h p,
@@ -857,25 +937,38 @@ Proof.
   lra.
 Qed.
 
+Lemma operated_endpoint_below_initial_stays_below_from_spec :
+  forall l sub r h p,
+    @ClassificationSpec l sub r (classify l sub r) ->
+    0 <= h ->
+    r <> [] ->
+    ~ initial_lid r ->
+    endpoint_of (l ++ sub ++ r) p ->
+    snd p < ry0 (rect_of [hd_segment r]) ->
+    snd (operate_point l sub r h p) < ry0 (rect_of [hd_segment r]).
+Proof.
+  intros l sub r h p Hspec Hh Hr HnotLid Hp Hbelow.
+  unfold operate_point.
+  pose proof (classified_below_initial_not_up
+                l sub r Hspec Hr HnotLid p Hp Hbelow) as HnotUp.
+  pose proof (shift_not_up_nonincreasing
+                h (classify l sub r p) p Hh HnotUp).
+  lra.
+Qed.
+
 (* 十分大きい移動では、各セグメントの二端点の y 座標は一致しない。 *)
-Lemma operation_height_safe :
+Lemma operation_height_safe_from_spec :
   forall l sub r h s,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
     In s (l ++ sub ++ r) ->
     snd (operate_point l sub r h (init s)) <>
     snd (operate_point l sub r h (term s)).
 Proof.
-  intros l sub r h s Hne Hconn Hmono Hh Hsparse Hwhole Hembedded Hext Hs.
+  intros l sub r h s Hspec Hh Hs.
   pose proof (classified_segment_endpoints_monotone
                 l sub r
-                (classify_spec l sub r Hne Hmono Hsparse Hembedded Hext)
+                Hspec
                 s Hs) as [HinitTerm HtermInit].
   destruct (total_order_T (snd (init s)) (snd (term s)))
     as [[Hlt | Heq] | Hgt].
@@ -894,7 +987,39 @@ Proof.
     unfold operate_point. lra.
 Qed.
 
+Lemma operation_height_safe :
+  forall l sub r h s,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    In s (l ++ sub ++ r) ->
+    snd (operate_point l sub r h (init s)) <>
+    snd (operate_point l sub r h (term s)).
+Proof.
+  intros l sub r h s Hne _ Hmono Hh Hsparse _ Hembedded Hext Hs.
+  eapply operation_height_safe_from_spec;
+    [| exact Hh | exact Hs].
+  exact (classify_spec l sub r Hne Hmono Hsparse Hembedded Hext).
+Qed.
+
 (* 一つのセグメントについて、分類された両端点を元の向きで再接続できる。 *)
+Lemma operate_endpoints_reconnectable_from_spec :
+  forall l sub r h,
+    @ClassificationSpec l sub r (classify l sub r) ->
+    h_large h sub ->
+    all_reconnectable l sub r h (l ++ sub ++ r).
+Proof.
+  intros l sub r h Hspec Hh s Hs.
+  unfold reconnectable_after, reconnectable. split.
+  - rewrite !operate_point_fst. apply neq_init_term_x.
+  - eapply operation_height_safe_from_spec; eauto.
+Qed.
+
 Lemma operate_one_endpoints_reconnectable :
   forall l sub r h s,
     sub <> [] ->
@@ -1520,14 +1645,8 @@ Proof.
 Qed.
 
 (* split の同じ位置にある新旧セグメントは向きと operate 後の端点を共有する。 *)
-Lemma ordinary_reconnect_split_nth_spec :
+Lemma ordinary_reconnect_split_nth_spec_basic :
   forall l sub r h i s s',
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     nth_error (l ++ sub ++ r) i = Some s ->
     nth_error (ordinary_reconnect_split l sub r h) i = Some s' ->
@@ -1535,8 +1654,7 @@ Lemma ordinary_reconnect_split_nth_spec :
     /\ init s' = operate_point l sub r h (init s)
     /\ term s' = operate_point l sub r h (term s).
 Proof.
-  intros l sub r h i s s' Hne Hconn Hmono Hsparse Hwhole Hembedded
-    Hrec Hold Hnew.
+  intros l sub r h i s s' Hrec Hold Hnew.
   destruct (Nat.lt_ge_cases i (length l)) as [Hil | Hil].
   - assert (Holdl : nth_error l i = Some s).
     { rewrite <- (nth_error_app1 l (sub ++ r) Hil). exact Hold. }
@@ -1594,29 +1712,41 @@ Proof.
         -- apply reconnect_one_term. exact (Hrec s Hs).
 Qed.
 
-(* 固定した sub との接続点を含め、再接続後も全体が同じ向き列を埋め込む。 *)
-Lemma ordinary_reconnect_split_preserves_embed :
-  forall l sub r h ds,
+(* 従来の呼び出し形は保持し、端点仕様の実際の依存は上の基本補題に集約。 *)
+Lemma ordinary_reconnect_split_nth_spec :
+  forall l sub r h i s s',
     sub <> [] ->
+    connected sub ->
     x_monotone_segs sub ->
     sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    all_reconnectable l sub r h (l ++ sub ++ r) ->
+    nth_error (l ++ sub ++ r) i = Some s ->
+    nth_error (ordinary_reconnect_split l sub r h) i = Some s' ->
+    orn_seg s' = orn_seg s
+    /\ init s' = operate_point l sub r h (init s)
+    /\ term s' = operate_point l sub r h (term s).
+Proof.
+  intros l sub r h i s s' _ _ _ _ _ _ Hrec Hold Hnew.
+  exact (ordinary_reconnect_split_nth_spec_basic
+           l sub r h i s s' Hrec Hold Hnew).
+Qed.
+
+(* 固定した sub との接続点を含め、再接続後も全体が同じ向き列を埋め込む。 *)
+Lemma ordinary_reconnect_split_preserves_embed_basic :
+  forall l sub r h ds,
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
     embed_listDir ds (ordinary_reconnect_split l sub r h).
 Proof.
-  intros l sub r h ds Hne Hmono Hsparse Hrec Hembed.
-  assert (Hconn : connected sub).
-  { apply connected_middle with (l := l) (r := r).
-    now apply embed_listDir_connected with (ds := ds). }
-  assert (Hwhole : connected (l ++ sub ++ r)).
-  { exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed). }
+  intros l sub r h ds Hrec Hembed.
   eapply embed_scurve_transfer; [exact Hembed | | |].
   - unfold ordinary_reconnect_split. repeat rewrite length_app.
     rewrite !reconnect_segs_length. reflexivity.
   - intros i s s' Hold Hnew.
-    exact (proj1 (ordinary_reconnect_split_nth_spec
-                    l sub r h i s s' Hne Hconn Hmono Hsparse Hwhole
-                    (ex_intro _ ds Hembed) Hrec Hold Hnew)).
+    exact (proj1 (ordinary_reconnect_split_nth_spec_basic
+                    l sub r h i s s' Hrec Hold Hnew)).
   - intros i s1 s2 H1 H2.
     assert (Hlen :
         length (ordinary_reconnect_split l sub r h) = length (l ++ sub ++ r)).
@@ -1630,17 +1760,49 @@ Proof.
     2: exfalso; apply (proj2 (nth_error_Some _ _) Hi); exact E1.
     destruct (nth_error (l ++ sub ++ r) (S i)) as [old2 |] eqn:E2.
     2: exfalso; apply (proj2 (nth_error_Some _ _) HSi); exact E2.
-    pose proof (ordinary_reconnect_split_nth_spec
-                  l sub r h i old1 s1 Hne Hconn Hmono Hsparse Hwhole
-                  (ex_intro _ ds Hembed) Hrec E1 H1)
+    pose proof (ordinary_reconnect_split_nth_spec_basic
+                  l sub r h i old1 s1 Hrec E1 H1)
       as [_ [_ Hterm]].
-    pose proof (ordinary_reconnect_split_nth_spec
-                  l sub r h (S i) old2 s2 Hne Hconn Hmono Hsparse Hwhole
-                  (ex_intro _ ds Hembed) Hrec E2 H2)
+    pose proof (ordinary_reconnect_split_nth_spec_basic
+                  l sub r h (S i) old2 s2 Hrec E2 H2)
       as [_ [Hinit _]].
     rewrite Hterm, Hinit.
     f_equal. exact (embed_listDir_connected ds (l ++ sub ++ r) Hembed
                       i old1 old2 E1 E2).
+Qed.
+
+Lemma ordinary_reconnect_split_preserves_embed :
+  forall l sub r h ds,
+    sub <> [] ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    all_reconnectable l sub r h (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    embed_listDir ds (ordinary_reconnect_split l sub r h).
+Proof.
+  intros l sub r h ds _ _ _ Hrec Hembed.
+  exact (ordinary_reconnect_split_preserves_embed_basic
+           l sub r h ds Hrec Hembed).
+Qed.
+
+(* prepared 条件では、分類仕様を介して x 単調性なしに通常再接続できる。 *)
+Lemma prepared_ordinary_reconnect_preserves_embed :
+  forall ds l sub r h,
+    PreparedGeometry l sub r ->
+    h_large h sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    embed_listDir ds (l ++ sub ++ r) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    embed_listDir ds (ordinary_reconnect_split l sub r h).
+Proof.
+  intros ds l sub r h Hgeometry Hh Hsparse Hembed Hext.
+  assert (Hspec : @ClassificationSpec l sub r (classify l sub r)).
+  { exact (classify_spec_prepared l sub r Hgeometry Hsparse
+             (ex_intro _ ds Hembed) Hext). }
+  apply ordinary_reconnect_split_preserves_embed_basic.
+  - exact (operate_endpoints_reconnectable_from_spec
+             l sub r h Hspec Hh).
+  - exact Hembed.
 Qed.
 
 Lemma ordinary_reconnect_split_length : forall l sub r h,

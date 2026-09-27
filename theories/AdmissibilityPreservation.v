@@ -438,7 +438,26 @@ Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
 		/\ embed_listDir (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) (l ++ [seg1; seg2; seg3; seg4] ++ r)
 		/\ ~ close (l ++ [seg1; seg2; seg3; seg4] ++ r)
 		/\ sparse_around l [seg1; seg2; seg3; seg4] r.
-Proof. Admitted.
+Proof.
+  intro Hadm.
+  destruct (embed_sparsely_PPMM_prepared ds1 ds2 Hadm)
+    as [l [sub [r [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]]].
+  pose proof (embedding_listDir_length_consis _ _ Hsub) as Hlen.
+  destruct sub as [|seg1 [|seg2 [|seg3 [|seg4 [|seg5 rest]]]]];
+    simpl in Hlen; try lia.
+  exists l, r, seg1, seg2, seg3, seg4.
+  assert (Hslope :
+      reconnect_slope_pair (init seg1) (term seg4) Plus Minus
+        (slope_init seg1) (slope_term seg4)).
+  { (* 指定両端傾きをもつ二セグメントの存在は、ここで別途必要。 *)
+    admit. }
+  split; [exact Hslope |].
+  split; [exact Hl |].
+  split; [exact Hsub |].
+  split; [exact Hr |].
+  split; [exact Hwhole |].
+  split; [exact Hopen | exact Haround].
+Admitted.
 
 (* embed_sparsely_listDir_PPMM の Minus 版． *)
 Lemma embed_sparsely_listDir_MMPP (ds1 ds2 : list Direction) :
