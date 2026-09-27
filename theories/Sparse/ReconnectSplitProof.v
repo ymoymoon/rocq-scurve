@@ -687,6 +687,7 @@ Qed.
 Lemma ordinary_nonadjacent_vs_sub_member_separated_prepared :
   forall l sub r h old outside inside,
     PreparedGeometry l sub r ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     connected sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
@@ -698,7 +699,7 @@ Lemma ordinary_nonadjacent_vs_sub_member_separated_prepared :
     term outside = operate_point l sub r h (term old) ->
     endpoint_rectangles_axis_separated outside inside.
 Proof.
-  intros l sub r h old outside inside Hgeometry Hconn Hh Hsparse
+  intros l sub r h old outside inside Hgeometry Hspec Hconn Hh Hsparse
     Hembedded Hext Hold Hinside Hinit Hterm.
   eapply endpoint_box_separated_from_sub_separates_member_prepared.
   - exact (prepared_sub_nonempty l sub r Hgeometry).
@@ -708,7 +709,7 @@ Proof.
     eapply operated_nonadjacent_endpoints_separated_from_spec;
       [exact (prepared_sub_nonempty l sub r Hgeometry)
       | exact Hconn | exact Hh | exact Hsparse | | exact Hold].
-    exact (classify_spec_prepared l sub r Hgeometry Hsparse Hembedded Hext).
+    exact Hspec.
 Qed.
 
 (* 左右の接続境界を含まない場合は、外部同士・外部と sub・sub 同士の
@@ -802,6 +803,7 @@ Qed.
 Lemma ordinary_nonboundary_far_rectangles_separated_prepared :
   forall ds l sub r h i j old_s old_t ordinary_s ordinary_t,
     PreparedGeometry l sub r ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     connected sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
@@ -817,11 +819,8 @@ Lemma ordinary_nonboundary_far_rectangles_separated_prepared :
     endpoint_rectangles_axis_separated ordinary_s ordinary_t.
 Proof.
   intros ds l sub r h i j old_s old_t ordinary_s ordinary_t
-    Hgeometry Hconn Hh Hsparse Hembed Hext
+    Hgeometry Hspec Hconn Hh Hsparse Hembed Hext
     HoldS HoldT HordinaryS HordinaryT Hfar HnotS HnotT.
-  assert (Hspec : @ClassificationSpec l sub r (classify l sub r)).
-  { exact (classify_spec_prepared l sub r Hgeometry Hsparse
-             (ex_intro _ ds Hembed) Hext). }
   assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
   { exact (operate_endpoints_reconnectable_from_spec
              l sub r h Hspec Hh). }
@@ -863,7 +862,7 @@ Proof.
     + split; reflexivity.
     + eapply ordinary_sub_member_same_box; eauto.
     + exact (ordinary_nonadjacent_vs_sub_member_separated_prepared
-               l sub r h old_s ordinary_s old_t Hgeometry Hconn Hh Hsparse
+               l sub r h old_s ordinary_s old_t Hgeometry Hspec Hconn Hh Hsparse
                (ex_intro _ ds Hembed) Hext HoutsideS HinsideT
                HinitS HtermS).
   - eapply (same_boxes_preserve_axis_separation
@@ -872,7 +871,7 @@ Proof.
     + split; reflexivity.
     + apply endpoint_rectangles_axis_separated_sym.
       exact (ordinary_nonadjacent_vs_sub_member_separated_prepared
-               l sub r h old_t ordinary_t old_s Hgeometry Hconn Hh Hsparse
+               l sub r h old_t ordinary_t old_s Hgeometry Hspec Hconn Hh Hsparse
                (ex_intro _ ds Hembed) Hext HoutsideT HinsideS
                HinitT HtermT).
   - exact (same_boxes_preserve_axis_separation
@@ -933,7 +932,7 @@ Lemma operate_preserves_far_endpoint_vertical_order :
 Proof.
   intros l sub r h i j s t ps pt Hne Hmono Hsparse Hembed Hext.
   eapply operate_preserves_far_endpoint_vertical_order_from_spec.
-  exact (classify_spec l sub r Hne Hmono Hsparse Hembed Hext).
+  exact (classify_spec_x_monotone l sub r Hne Hmono Hsparse Hembed Hext).
 Qed.
 
 Lemma nth_error_sub_in_split : forall (l sub r : list Segment) k s,
@@ -1417,6 +1416,7 @@ Qed.
 Lemma ordinary_terminal_boundary_far_rectangles_separated_prepared :
   forall ds l sub r h j other ordinary_b ordinary_o,
     sub <> [] -> connected sub -> PreparedGeometry l sub r ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     h_large h sub -> sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) -> l <> [] ->
@@ -1430,12 +1430,10 @@ Lemma ordinary_terminal_boundary_far_rectangles_separated_prepared :
     endpoint_rectangles_axis_separated ordinary_b ordinary_o.
 Proof.
   intros ds l sub r h j other ordinary_b ordinary_o
-    Hsub Hconn Hgeometry Hh Hsparse Hembed Hext Hl
+    Hsub Hconn Hgeometry Hspec Hh Hsparse Hembed Hext Hl
     Hother HordinaryB HordinaryO Hfar HnotLidB HnotLidO.
   eapply (ordinary_terminal_boundary_far_rectangles_separated_core
             ds l sub r h j other ordinary_b ordinary_o); eauto.
-  - exact (classify_spec_prepared l sub r Hgeometry Hsparse
-             (ex_intro _ ds Hembed) Hext).
   - exact (prepared_sub_x_order l sub r Hgeometry).
   - intros k s Hnth Hk.
     exact (prepared_inner_segment_left_x l sub r k s Hgeometry Hnth Hk).
@@ -1461,7 +1459,7 @@ Proof.
     Hother HordinaryB HordinaryO Hfar HnotLidB HnotLidO.
   eapply (ordinary_terminal_boundary_far_rectangles_separated_core
             ds l sub r h j other ordinary_b ordinary_o); eauto.
-  - exact (classify_spec l sub r Hsub Hmono Hsparse
+  - exact (classify_spec_x_monotone l sub r Hsub Hmono Hsparse
              (ex_intro _ ds Hembed) Hext).
   - exact (connected_x_monotone_endpoints sub Hsub Hconn Hmono).
   - intros k s Hnth Hk.
@@ -1692,6 +1690,7 @@ Qed.
 Lemma ordinary_initial_boundary_far_rectangles_separated_prepared :
   forall ds l sub r h j other ordinary_b ordinary_o,
     sub <> [] -> connected sub -> PreparedGeometry l sub r ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     h_large h sub -> sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) -> r <> [] ->
@@ -1706,12 +1705,10 @@ Lemma ordinary_initial_boundary_far_rectangles_separated_prepared :
     endpoint_rectangles_axis_separated ordinary_b ordinary_o.
 Proof.
   intros ds l sub r h j other ordinary_b ordinary_o
-    Hsub Hconn Hgeometry Hh Hsparse Hembed Hext Hr
+    Hsub Hconn Hgeometry Hspec Hh Hsparse Hembed Hext Hr
     Hother HordinaryB HordinaryO Hfar HnotLidB HnotLidO.
   eapply (ordinary_initial_boundary_far_rectangles_separated_core
             ds l sub r h j other ordinary_b ordinary_o); eauto.
-  - exact (classify_spec_prepared l sub r Hgeometry Hsparse
-             (ex_intro _ ds Hembed) Hext).
   - exact (prepared_sub_x_order l sub r Hgeometry).
   - intros k s Hnth Hk.
     exact (prepared_inner_segment_right_x l sub r k s Hgeometry Hnth Hk).
@@ -1738,7 +1735,7 @@ Proof.
     Hother HordinaryB HordinaryO Hfar HnotLidB HnotLidO.
   eapply (ordinary_initial_boundary_far_rectangles_separated_core
             ds l sub r h j other ordinary_b ordinary_o); eauto.
-  - exact (classify_spec l sub r Hsub Hmono Hsparse
+  - exact (classify_spec_x_monotone l sub r Hsub Hmono Hsparse
              (ex_intro _ ds Hembed) Hext).
   - exact (connected_x_monotone_endpoints sub Hsub Hconn Hmono).
   - intros k s Hnth Hk.
@@ -1863,6 +1860,7 @@ Qed.
 Lemma ordinary_boundary_far_rectangles_separated_prepared :
   forall ds l sub r h i j old_s old_t ordinary_s ordinary_t,
     PreparedGeometry l sub r ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     connected sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
@@ -1878,7 +1876,7 @@ Lemma ordinary_boundary_far_rectangles_separated_prepared :
     endpoint_rectangles_axis_separated ordinary_s ordinary_t.
 Proof.
   intros ds l sub r h i j old_s old_t ordinary_s ordinary_t
-    Hgeometry Hconn Hh Hsparse Hembed Hext
+    Hgeometry Hspec Hconn Hh Hsparse Hembed Hext
     HoldS HoldT HordinaryS HordinaryT Hfar Hboundary.
   assert (HnotLid : forall k, ~ reconnect_split_lid_index l sub r k).
   { intros k [[Hlid _] | [Hlid _]].
@@ -1890,14 +1888,14 @@ Proof.
       exact (ordinary_terminal_boundary_far_rectangles_separated_prepared
                ds l sub r h j old_t ordinary_s ordinary_t
                (prepared_sub_nonempty l sub r Hgeometry)
-               Hconn Hgeometry Hh Hsparse Hembed Hext Hl
+               Hconn Hgeometry Hspec Hh Hsparse Hembed Hext Hl
                HoldT HordinaryS HordinaryT Hfar
                (HnotLid _) (HnotLid _)).
     + subst i old_s.
       exact (ordinary_initial_boundary_far_rectangles_separated_prepared
                ds l sub r h j old_t ordinary_s ordinary_t
                (prepared_sub_nonempty l sub r Hgeometry)
-               Hconn Hgeometry Hh Hsparse Hembed Hext Hr
+               Hconn Hgeometry Hspec Hh Hsparse Hembed Hext Hr
                HoldT HordinaryS HordinaryT Hfar
                (HnotLid _) (HnotLid _)).
   - apply endpoint_rectangles_axis_separated_sym.
@@ -1906,14 +1904,14 @@ Proof.
       exact (ordinary_terminal_boundary_far_rectangles_separated_prepared
                ds l sub r h i old_s ordinary_t ordinary_s
                (prepared_sub_nonempty l sub r Hgeometry)
-               Hconn Hgeometry Hh Hsparse Hembed Hext Hl
+               Hconn Hgeometry Hspec Hh Hsparse Hembed Hext Hl
                HoldS HordinaryT HordinaryS ltac:(tauto)
                (HnotLid _) (HnotLid _)).
     + subst j old_t.
       exact (ordinary_initial_boundary_far_rectangles_separated_prepared
                ds l sub r h i old_s ordinary_t ordinary_s
                (prepared_sub_nonempty l sub r Hgeometry)
-               Hconn Hgeometry Hh Hsparse Hembed Hext Hr
+               Hconn Hgeometry Hspec Hh Hsparse Hembed Hext Hr
                HoldS HordinaryT HordinaryS ltac:(tauto)
                (HnotLid _) (HnotLid _)).
 Qed.
@@ -1922,6 +1920,7 @@ Qed.
 Lemma ordinary_extensions_avoid_rectangles_prepared :
   forall ds l sub r h,
     PreparedGeometry l sub r ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     connected sub ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
@@ -1930,10 +1929,7 @@ Lemma ordinary_extensions_avoid_rectangles_prepared :
     extensions_avoid_segment_rectangles
       (ordinary_reconnect_split l sub r h).
 Proof.
-  intros ds l sub r h Hgeometry Hconn Hh Hsparse Hembed Hext.
-  assert (Hspec : @ClassificationSpec l sub r (classify l sub r)).
-  { exact (classify_spec_prepared l sub r Hgeometry Hsparse
-             (ex_intro _ ds Hembed) Hext). }
+  intros ds l sub r h Hgeometry Hspec Hconn Hh Hsparse Hembed Hext.
   assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
   { exact (operate_endpoints_reconnectable_from_spec
              l sub r h Hspec Hh). }
@@ -1946,13 +1942,14 @@ Qed.
 Lemma prepared_no_lid_preserves_sparse_embedding :
   forall ds l sub r h,
     PreparedGeometry l sub r ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     sparse_embedding (ordinary_reconnect_split l sub r h).
 Proof.
-  intros ds l sub r h Hgeometry Hh Hsparse Hembed Hext.
+  intros ds l sub r h Hgeometry Hspec Hh Hsparse Hembed Hext.
   assert (Hconn : connected sub).
   { eapply connected_middle.
     exact (embed_listDir_connected ds _ Hembed). }
@@ -1972,20 +1969,20 @@ Proof.
       as [HboundaryS | HboundaryS].
     + exact (ordinary_boundary_far_rectangles_separated_prepared
                ds l sub r h i j old_s old_t s t
-               Hgeometry Hconn Hh Hsparse Hembed Hext
+               Hgeometry Hspec Hconn Hh Hsparse Hembed Hext
                HoldS HoldT Hs Ht Hfar (or_introl HboundaryS)).
     + destruct (classic (split_boundary_occurrence l sub r j old_t))
         as [HboundaryT | HboundaryT].
       * exact (ordinary_boundary_far_rectangles_separated_prepared
                  ds l sub r h i j old_s old_t s t
-                 Hgeometry Hconn Hh Hsparse Hembed Hext
+                 Hgeometry Hspec Hconn Hh Hsparse Hembed Hext
                  HoldS HoldT Hs Ht Hfar (or_intror HboundaryT)).
       * exact (ordinary_nonboundary_far_rectangles_separated_prepared
                  ds l sub r h i j old_s old_t s t
-                 Hgeometry Hconn Hh Hsparse Hembed Hext
+                 Hgeometry Hspec Hconn Hh Hsparse Hembed Hext
                  HoldS HoldT Hs Ht Hfar HboundaryS HboundaryT).
   - exact (ordinary_extensions_avoid_rectangles_prepared
-             ds l sub r h Hgeometry Hconn Hh Hsparse Hembed Hext).
+             ds l sub r h Hgeometry Hspec Hconn Hh Hsparse Hembed Hext).
 Qed.
 
 (* 既存の延長線非交差証明は x 単調枝でそのまま使える。非単調枝では
@@ -1993,16 +1990,14 @@ Qed.
 Lemma ordinary_extensions_disjoint_prepared :
   forall ds l sub r h,
     PreparedGeometry l sub r ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     extensions_disjoint (ordinary_reconnect_split l sub r h).
 Proof.
-  intros ds l sub r h Hgeometry Hh Hsparse Hembed Hext.
-  assert (Hspec : @ClassificationSpec l sub r (classify l sub r)).
-  { exact (classify_spec_prepared l sub r Hgeometry Hsparse
-             (ex_intro _ ds Hembed) Hext). }
+  intros ds l sub r h Hgeometry Hspec Hh Hsparse Hembed Hext.
   assert (HheadSlope :
       l <> [] -> reconnect_init_slope_after l sub r h (hd_segment l)).
   { intros Hl. unfold reconnect_init_slope_after, operate_point.
@@ -2057,6 +2052,7 @@ Qed.
 Lemma ordinary_sparse_around_prepared :
   forall ds l sub r h,
     PreparedGeometry l sub r ->
+    @ClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
@@ -2065,15 +2061,12 @@ Lemma ordinary_sparse_around_prepared :
       (reconnect_segs l sub r h l) sub
       (reconnect_segs l sub r h r).
 Proof.
-  intros ds l sub r h Hgeometry Hh Hsparse Hembed Hext.
+  intros ds l sub r h Hgeometry Hspec Hh Hsparse Hembed Hext.
   assert (Hne : sub <> []).
   { exact (prepared_sub_nonempty l sub r Hgeometry). }
   assert (Hconn : connected sub).
   { eapply connected_middle.
     exact (embed_listDir_connected ds _ Hembed). }
-  assert (Hspec : @ClassificationSpec l sub r (classify l sub r)).
-  { exact (classify_spec_prepared l sub r Hgeometry Hsparse
-             (ex_intro _ ds Hembed) Hext). }
   assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
   { exact (operate_endpoints_reconnectable_from_spec
              l sub r h Hspec Hh). }

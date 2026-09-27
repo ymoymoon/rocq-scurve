@@ -769,6 +769,30 @@ Proof.
 	auto.
 Qed.
 
+(* 分割長が既知なら、抽出した方向列の埋め込みは元の分割に一致する。 *)
+Lemma embed_listDir_split_known : forall ds1 ds2 l r,
+  embed_listDir (ds1 ++ ds2) (l ++ r) ->
+  length ds1 = length l ->
+  embed_listDir ds1 l /\ embed_listDir ds2 r.
+Proof.
+  intros ds1 ds2 l r Hembed Hlength.
+  destruct (embed_split2 ds1 ds2 (l ++ r) Hembed)
+    as [l' [r' [Heq [Hl Hr]]]].
+  assert (Hlen : length l' = length l).
+  { pose proof (embedding_listDir_length_consis ds1 l' Hl).
+    lia. }
+  assert (Hparts : l' = l /\ r' = r).
+  { clear Hl Hr Hembed Hlength. revert l' r' Hlen Heq.
+    induction l as [|s l IH]; intros l' r' Hlen Heq.
+    - destruct l' as [|s' l']; simpl in Hlen; try discriminate.
+      simpl in Heq. split; [reflexivity | symmetry; exact Heq].
+    - destruct l' as [|s' l']; simpl in Hlen; try discriminate.
+      simpl in Heq. injection Heq as Hhead Htail. subst s'.
+      destruct (IH l' r' ltac:(lia) Htail) as [-> ->].
+      split; reflexivity. }
+  destruct Hparts as [-> ->]. now split.
+Qed.
+
 Lemma embed_nonnil :
   forall ds ls, embed_listDir ds ls -> ds <> [] -> ls <> [].
 Proof.
@@ -794,15 +818,90 @@ Proof.
   auto.
 Qed.
 
-(*  (orn_seg としての)向き列が同じで、長さが同じで、連結なら、同じ ds の埋め込み」 *)
-Lemma embed_scurve_transfer : forall ds ls ls',
+(* 元の scurve 証人を保つには、Plus/Minus だけでなく各 primitive の一致が必要。 *)
+Lemma embed_scurve_transfer_same_primitive : forall ds ls ls',
   embed_listDir ds ls ->
   length ls' = length ls ->
   (forall i s s', nth_error ls i = Some s -> nth_error ls' i = Some s' ->
-                  orn_seg s' = orn_seg s) ->
+                  primitive_segment s' = primitive_segment s) ->
   connected ls' ->
   embed_listDir ds ls'.
-Admitted.
+Proof.
+  intros ds ls ls' [sc [Hdir Hembed]] Hlength Hprimitive Hconnected.
+  assert (Hrel : Forall2
+      (fun s s' => primitive_segment s' = primitive_segment s) ls ls').
+  { clear Hconnected Hembed Hdir sc. revert ls' Hlength Hprimitive.
+    induction ls as [|s ls IH]; intros ls' Hlength Hprimitive;
+      destruct ls' as [|s' ls']; simpl in Hlength; try discriminate.
+    - constructor.
+    - constructor.
+      + apply (Hprimitive 0%nat s s'); reflexivity.
+      + apply IH; [lia |].
+        intros i t t' Ht Ht'.
+        apply (Hprimitive (S i) t t'); simpl; assumption. }
+  exists sc. split; [exact Hdir |].
+  clear Hdir Hlength Hprimitive. revert ls' Hrel Hconnected.
+  induction Hembed as
+      [|ps s Hps|ps lp A s1 s2 tail Hps Htail IH Hjoin];
+    intros ls' Hrel Hconnected.
+  - inversion Hrel; subst. constructor.
+  - inversion Hrel as [|old new oldtail newtail Hfirst Hrest]; subst.
+    inversion Hrest; subst.
+    apply EmbedScurveSigle.
+    assert (HpsEq : ps = primitive_segment s).
+    { eapply embed_unique; eauto using primitive_segment_embed. }
+    rewrite HpsEq, <- Hfirst. apply primitive_segment_embed.
+  - inversion Hrel as [|old new oldtail newtail Hfirst Hrest]; subst.
+    inversion Hrest as [|old2 new2 oldtail2 newtail2 Hsecond HtailRel]; subst.
+    eapply EmbedScurveCons with (A := A).
+    + assert (HpsEq : ps = primitive_segment s1).
+      { eapply embed_unique; eauto using primitive_segment_embed. }
+      rewrite HpsEq, <- Hfirst. apply primitive_segment_embed.
+    + apply IH; [constructor; assumption |].
+      intros i a b Ha Hb.
+      apply (Hconnected (S i) a b); simpl; assumption.
+    + exact (Hconnected 0%nat _ _ eq_refl eq_refl).
+Qed.
+
+(* x/y の進行方向と Plus/Minus が一致すれば primitive の八分類も一致する。 *)
+Lemma same_primitive_of_axis_orders : forall old new,
+  (fst (init old) < fst (term old) <-> fst (init new) < fst (term new)) ->
+  (snd (init old) < snd (term old) <-> snd (init new) < snd (term new)) ->
+  orn_seg new = orn_seg old ->
+  primitive_segment new = primitive_segment old.
+Proof.
+  intros old new Hx Hy Horn.
+  destruct (primitive_segment old) as [[vo ho] co] eqn:Eold.
+  destruct (primitive_segment new) as [[vn hn] cn] eqn:Enew.
+  pose proof (primitive_segment_embed old) as HembOld.
+  pose proof (primitive_segment_embed new) as HembNew.
+  rewrite Eold in HembOld. rewrite Enew in HembNew.
+  assert (Hv : vo = vn).
+  { destruct vo, vn; try reflexivity.
+    - exfalso.
+      pose proof (n_end_relation old ho co HembOld) as Hn.
+      pose proof (s_end_relation new hn cn HembNew) as Hs.
+      apply Hy in Hn. lra.
+    - exfalso.
+      pose proof (s_end_relation old ho co HembOld) as Hs.
+      pose proof (n_end_relation new hn cn HembNew) as Hn.
+      apply (proj2 Hy) in Hn. lra. }
+  assert (Hh : ho = hn).
+  { destruct ho, hn; try reflexivity.
+    - exfalso.
+      pose proof (e_end_relation old vo co HembOld) as He.
+      pose proof (w_end_relation new vn cn HembNew) as Hw.
+      apply Hx in He. lra.
+    - exfalso.
+      pose proof (w_end_relation old vo co HembOld) as Hw.
+      pose proof (e_end_relation new vn cn HembNew) as He.
+      apply (proj2 Hx) in He. lra. }
+  subst vn hn.
+  rewrite !orn_seg_primitive in Horn.
+  rewrite Enew, Eold in Horn.
+  destruct co, cn; try reflexivity;
+    destruct vo, ho; simpl in Horn; discriminate.
+Qed.
 
 (* ---- 連結性は埋め込みから出る（Embed.v の consist_init_term）---- *)
 Lemma embed_scurve_connected : forall sc ls,

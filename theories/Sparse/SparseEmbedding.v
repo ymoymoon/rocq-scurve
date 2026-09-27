@@ -354,6 +354,76 @@ Admitted.
 
 (* prepared 証人から、sub を固定して両側を再接続する。
    全域疎性と局所疎性を両方結論に残す。 *)
+Lemma embed_sparsely_prepared_from_spec :
+  forall ds1 sub_ds ds2 l sub r,
+    PreparedSparseEmbedding ds1 sub_ds ds2 l sub r ->
+    @ClassificationSpec l sub r (classify l sub r) ->
+    exists l' r',
+      embed_listDir ds1 l'
+      /\ embed_listDir sub_ds sub
+      /\ embed_listDir ds2 r'
+      /\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l' ++ sub ++ r')
+      /\ sparse_embedding (l' ++ sub ++ r')
+      /\ ~ close (l' ++ sub ++ r')
+      /\ sparse_around l' sub r'.
+Proof.
+  intros ds1 sub_ds ds2 l sub r Hprepared Hspec.
+  destruct Hprepared as [Hl Hsub Hr Hwhole Hsparse Hext Hgeometry].
+  destruct (choose_h sub) as [h Hh].
+  set (l' := reconnect_segs l sub r h l).
+  set (r' := reconnect_segs l sub r h r).
+  assert (Hwhole' :
+      embed_listDir (ds1 ++ sub_ds ++ ds2) (l' ++ sub ++ r')).
+  { change (embed_listDir (ds1 ++ sub_ds ++ ds2)
+              (ordinary_reconnect_split l sub r h)).
+    exact (prepared_ordinary_reconnect_preserves_embed
+             (ds1 ++ sub_ds ++ ds2) l sub r h
+             Hgeometry Hspec Hh Hsparse Hwhole Hext). }
+  assert (HlenL : length ds1 = length l').
+  { pose proof (embedding_listDir_length_consis ds1 l Hl) as Hlen.
+    unfold l'. rewrite reconnect_segs_length. exact Hlen. }
+  assert (HlenSub : length sub_ds = length sub).
+  { exact (embedding_listDir_length_consis sub_ds sub Hsub). }
+  assert (Hparts : embed_listDir ds1 l' /\
+                   embed_listDir (sub_ds ++ ds2) (sub ++ r')).
+  { change (embed_listDir (ds1 ++ (sub_ds ++ ds2))
+              (l' ++ (sub ++ r'))) in Hwhole'.
+    exact (embed_listDir_split_known
+             ds1 (sub_ds ++ ds2) l' (sub ++ r') Hwhole' HlenL). }
+  destruct Hparts as [Hleft HtailEmbed].
+  assert (Hright : embed_listDir ds2 r').
+  { exact (proj2 (embed_listDir_split_known
+                    sub_ds ds2 sub r' HtailEmbed HlenSub)). }
+  assert (Hsparse' : sparse_embedding (l' ++ sub ++ r')).
+  { change (sparse_embedding (ordinary_reconnect_split l sub r h)).
+    exact (prepared_no_lid_preserves_sparse_embedding
+             (ds1 ++ sub_ds ++ ds2) l sub r h
+             Hgeometry Hspec Hh Hsparse Hwhole Hext). }
+  assert (Hext' : extensions_disjoint (l' ++ sub ++ r')).
+  { change (extensions_disjoint (ordinary_reconnect_split l sub r h)).
+    exact (ordinary_extensions_disjoint_prepared
+             (ds1 ++ sub_ds ++ ds2) l sub r h
+             Hgeometry Hspec Hh Hsparse Hwhole Hext). }
+  assert (Hnonempty : l' ++ sub ++ r' <> []).
+  { intro Hnil. apply app_eq_nil in Hnil as [_ Htail].
+    apply app_eq_nil in Htail as [Hsubnil _].
+    exact (prepared_sub_nonempty l sub r Hgeometry Hsubnil). }
+  assert (Hopen : ~ close (l' ++ sub ++ r')).
+  { exact (sparse_extensions_open _ _ Hnonempty Hwhole' Hsparse' Hext'). }
+  assert (Haround : sparse_around l' sub r').
+  { exact (ordinary_sparse_around_prepared
+             (ds1 ++ sub_ds ++ ds2) l sub r h
+             Hgeometry Hspec Hh Hsparse Hwhole Hext). }
+  exists l', r'.
+  split; [exact Hleft |].
+  split; [exact Hsub |].
+  split; [exact Hright |].
+  split; [exact Hwhole' |].
+  split; [exact Hsparse' |].
+  split; [exact Hopen | exact Haround].
+Qed.
+
+(* 具体的な classify が Spec を満たす証明は、上の条件付き定理とは分離する。 *)
 Lemma embed_sparsely_prepared :
   forall ds1 sub_ds ds2 l sub r,
     PreparedSparseEmbedding ds1 sub_ds ds2 l sub r ->
@@ -367,58 +437,38 @@ Lemma embed_sparsely_prepared :
       /\ sparse_around l' sub r'.
 Proof.
   intros ds1 sub_ds ds2 l sub r Hprepared.
-  destruct Hprepared as [Hl Hsub Hr Hwhole Hsparse Hext Hgeometry].
-  destruct (choose_h sub) as [h Hh].
-  set (l' := reconnect_segs l sub r h l).
-  set (r' := reconnect_segs l sub r h r).
-  assert (Hspec : @ClassificationSpec l sub r (classify l sub r)).
-  { exact (classify_spec_prepared l sub r Hgeometry Hsparse
-             (ex_intro _ (ds1 ++ sub_ds ++ ds2) Hwhole) Hext). }
-  assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
-  { exact (operate_endpoints_reconnectable_from_spec
-             l sub r h Hspec Hh). }
-  assert (Hleft : embed_listDir ds1 l').
-  { unfold l'. eapply reconnects_list_preserves_embed; [|exact Hl].
-    apply reconnect_segs_reconnects_after.
-    intros s Hs. apply Hrec. apply in_or_app. left. exact Hs. }
-  assert (Hright : embed_listDir ds2 r').
-  { unfold r'. eapply reconnects_list_preserves_embed; [|exact Hr].
-    apply reconnect_segs_reconnects_after.
-    intros s Hs. apply Hrec. rewrite in_app_iff. right.
-    apply in_or_app. right. exact Hs. }
-  assert (Hwhole' :
-      embed_listDir (ds1 ++ sub_ds ++ ds2) (l' ++ sub ++ r')).
-  { change (embed_listDir (ds1 ++ sub_ds ++ ds2)
-              (ordinary_reconnect_split l sub r h)).
-    exact (prepared_ordinary_reconnect_preserves_embed
-             (ds1 ++ sub_ds ++ ds2) l sub r h
-             Hgeometry Hh Hsparse Hwhole Hext). }
-  assert (Hsparse' : sparse_embedding (l' ++ sub ++ r')).
-  { change (sparse_embedding (ordinary_reconnect_split l sub r h)).
-    exact (prepared_no_lid_preserves_sparse_embedding
-             (ds1 ++ sub_ds ++ ds2) l sub r h
-             Hgeometry Hh Hsparse Hwhole Hext). }
-  assert (Hext' : extensions_disjoint (l' ++ sub ++ r')).
-  { change (extensions_disjoint (ordinary_reconnect_split l sub r h)).
-    exact (ordinary_extensions_disjoint_prepared
-             (ds1 ++ sub_ds ++ ds2) l sub r h
-             Hgeometry Hh Hsparse Hwhole Hext). }
-  assert (Hnonempty : l' ++ sub ++ r' <> []).
-  { intro Hnil. apply app_eq_nil in Hnil as [_ Htail].
-    apply app_eq_nil in Htail as [Hsubnil _].
-    exact (prepared_sub_nonempty l sub r Hgeometry Hsubnil). }
-  assert (Hopen : ~ close (l' ++ sub ++ r')).
-  { exact (sparse_extensions_open _ _ Hnonempty Hwhole' Hsparse' Hext'). }
-  assert (Haround : sparse_around l' sub r').
-  { exact (ordinary_sparse_around_prepared
-             (ds1 ++ sub_ds ++ ds2) l sub r h
-             Hgeometry Hh Hsparse Hwhole Hext). }
-  exists l', r'.
-  split; [exact Hleft |].
+  eapply embed_sparsely_prepared_from_spec; [exact Hprepared |].
+  destruct Hprepared as [_ _ _ Hwhole Hsparse Hext Hgeometry].
+  exact (classify_spec l sub r Hgeometry Hsparse
+           (ex_intro _ (ds1 ++ sub_ds ++ ds2) Hwhole) Hext).
+Qed.
+
+(* prepared 証人と分類仕様が与えられれば、++-- の結論まで未証明補題を使わない。 *)
+Lemma embed_sparsely_PPMM_from_spec :
+  forall ds1 ds2,
+    (exists l sub r,
+      PreparedSparseEmbedding ds1 [Plus; Plus; Minus; Minus] ds2 l sub r
+      /\ @ClassificationSpec l sub r (classify l sub r)) ->
+    exists l sub r,
+      embed_listDir ds1 l
+      /\ embed_listDir [Plus; Plus; Minus; Minus] sub
+      /\ embed_listDir ds2 r
+      /\ embed_listDir (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2)
+           (l ++ sub ++ r)
+      /\ sparse_embedding (l ++ sub ++ r)
+      /\ ~ close (l ++ sub ++ r)
+      /\ sparse_around l sub r.
+Proof.
+  intros ds1 ds2 [l [sub [r [Hprepared Hspec]]]].
+  destruct (embed_sparsely_prepared_from_spec ds1
+              [Plus; Plus; Minus; Minus] ds2 l sub r Hprepared Hspec)
+    as [l' [r' [Hl' [Hsub [Hr' [Hwhole [Hsparse [Hopen Haround]]]]]]]].
+  exists l', sub, r'.
+  split; [exact Hl' |].
   split; [exact Hsub |].
-  split; [exact Hright |].
-  split; [exact Hwhole' |].
-  split; [exact Hsparse' |].
+  split; [exact Hr' |].
+  split; [exact Hwhole |].
+  split; [exact Hsparse |].
   split; [exact Hopen | exact Haround].
 Qed.
 
@@ -538,6 +588,9 @@ Proof.
                 l1 sub1 r1 h Hsub1ne HconnSub1 Hx1 Hh Hsparse1 HconnAll1
                 (ex_intro _ (ds1 ++ sub_ds ++ ds2) Hall1) Hext1)
     as HrecAll1.
+  assert (Hspec1 : @ClassificationSpec l1 sub1 r1 (classify l1 sub1 r1)).
+  { exact (classify_spec_x_monotone l1 sub1 r1 Hsub1ne Hx1 Hsparse1
+             (ex_intro _ (ds1 ++ sub_ds ++ ds2) Hall1) Hext1). }
   assert (HlocalOpen :
       sparse_around
         (reconnect_left l1 sub1 r1 h) sub1
@@ -549,12 +602,22 @@ Proof.
          (reconnect_right l1 sub1 r1 h),
          sub1.
   split.
-  - eapply reconnects_list_preserves_embed; [|exact Hl1].
-    eapply reconnect_left_reconnects_after; eauto.
+  - eapply (reconnects_list_preserves_embed
+              l1 sub1 r1 h l1 (reconnect_left l1 sub1 r1 h) ds1).
+    + exact Hspec1.
+    + exact (proj1 Hh).
+    + intros s Hs. rewrite !in_app_iff. tauto.
+    + eapply reconnect_left_reconnects_after; eauto.
+    + exact Hl1.
   - split; [exact Hsub1 |].
     split.
-    + eapply reconnects_list_preserves_embed; [|exact Hr1].
-      eapply reconnect_right_reconnects_after; eauto.
+    + eapply (reconnects_list_preserves_embed
+                l1 sub1 r1 h r1 (reconnect_right l1 sub1 r1 h) ds2).
+      * exact Hspec1.
+      * exact (proj1 Hh).
+      * intros s Hs. rewrite !in_app_iff. tauto.
+      * eapply reconnect_right_reconnects_after; eauto.
+      * exact Hr1.
     + split.
       * eapply reconnect_split_safe_preserves_embed; eauto.
       * split.

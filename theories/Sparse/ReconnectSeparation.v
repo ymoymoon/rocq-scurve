@@ -304,7 +304,7 @@ Lemma operated_endpoint_rectangles_axis_separated :
 Proof.
   intros l sub r h i j s t s' t' Hne _ Hmono Hsparse _ Hembedded Hext.
   eapply operated_endpoint_rectangles_axis_separated_from_spec.
-  exact (classify_spec l sub r Hne Hmono Hsparse Hembedded Hext).
+  exact (classify_spec_x_monotone l sub r Hne Hmono Hsparse Hembedded Hext).
 Qed.
 
 (* 延長線点と同じ x の旧セグメント点が与える分類順序から，
@@ -487,7 +487,7 @@ Proof.
   intros ds l sub r h Hne _ Hmono Hh Hrec Hsparse Hembed Hext.
   exact (reconnect_preserves_extensions_avoid_rectangles_from_spec
            l sub r h Hne
-           (classify_spec l sub r Hne Hmono Hsparse
+           (classify_spec_x_monotone l sub r Hne Hmono Hsparse
               (ex_intro _ ds Hembed) Hext)
            Hh Hrec Hsparse).
 Qed.
@@ -739,7 +739,7 @@ Proof.
   { intro Heq. subst pl. exact (Hdisjoint ph Hph Hpl). }
   pose proof (classified_head_last_extension_order
                 l sub r
-                (classify_spec l sub r Hne Hmono Hsparse Hembedded Hdisjoint)
+                (classify_spec_x_monotone l sub r Hne Hmono Hsparse Hembedded Hdisjoint)
                 ph pl Hph Hpl Hx) as [HorderHeadLast HorderLastHead].
   destruct (total_order_T (snd ph) (snd pl)) as [[Hlt | Heq] | Hgt].
   - pose proof (shift_preserves_strict_vertical_order
@@ -1043,7 +1043,7 @@ Proof.
   intros l sub r h s Hne Hconn Hmono Hh Hsparse _ Hembedded Hext Hs.
   eapply operated_nonadjacent_endpoints_separated_from_spec;
     [exact Hne | exact Hconn | exact Hh | exact Hsparse | | exact Hs].
-  exact (classify_spec l sub r Hne Hmono Hsparse Hembedded Hext).
+  exact (classify_spec_x_monotone l sub r Hne Hmono Hsparse Hembedded Hext).
 Qed.
 
 Lemma in_rect_or_endpoints_at_closed_bounds :
@@ -1288,7 +1288,7 @@ Proof.
     Hqextend Habove Hbelow Hinside Hshift.
   exact (classified_shifted_extension_avoids_sub_rect_from_spec
            l sub r h p q g Hne Hconn
-           (classify_spec l sub r Hne Hmono Hsparse Hembed Hext)
+           (classify_spec_x_monotone l sub r Hne Hmono Hsparse Hembed Hext)
            Hh Hqextend Habove Hbelow Hinside Hshift).
 Qed.
 
@@ -1439,7 +1439,7 @@ Proof.
   exact (reconnect_extensions_avoid_sub_rect_from_spec
            l sub r h p Hne
            (connected_middle _ _ _ Hwhole)
-           (classify_spec l sub r Hne Hmono Hsparse
+           (classify_spec_x_monotone l sub r Hne Hmono Hsparse
               (ex_intro _ ds Hembed) Hext)
            Hh Hsparse Hextend).
 Qed.
