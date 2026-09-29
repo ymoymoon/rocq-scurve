@@ -6,7 +6,7 @@ From Stdlib Require Import Lia.
 From Stdlib Require Import Relations.Relation_Operators.
 From Stdlib Require Import Relations.Operators_Properties.
 
-(* 順序閉包から構成した分類器が外部仕様を満たすことの証明。 *)
+(* 順序閉包から構成した分類器が [ClassificationSpec] を満たすことの証明。 *)
 Lemma endpoint_forced_up_order : forall l sub r p q,
   endpoint_order l sub r p q ->
   endpoint_forced_up l sub r p ->
@@ -1216,31 +1216,6 @@ Proof.
     exact (strict_extension_above_or_below_sub l sub r p Hctx Hside Hrange).
 Qed.
 
-(* prepared 幾何での分類仕様。順序パス分離と通常境界の下側排除を
-   幾何補題に分け、各仕様への論理的な組み立ては旧証明と共有する。 *)
-Lemma classify_spec :
-  forall l sub r,
-    PreparedGeometry l sub r ->
-    sparse_embedding (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
-    @ClassificationSpec l sub r (classify l sub r).
-Proof.
-  intros l sub r Hgeometry Hsparse Hembed Hext.
-  eapply (classify_spec_from_separation l sub r).
-  - exact (prepared_sub_nonempty l sub r Hgeometry).
-  - exact (prepared_sources_separated
-             l sub r Hgeometry Hsparse Hembed Hext).
-  - exact Hembed.
-  - exact (classify_below_terminal_not_up_prepared
-             l sub r Hgeometry Hsparse Hembed Hext).
-  - exact (classify_below_initial_not_up_prepared
-             l sub r Hgeometry Hsparse Hembed Hext).
-  - intros p Hside Hrange.
-    exact (strict_extension_above_or_below_prepared
-             l sub r p Hgeometry Hsparse Hembed Hside Hrange).
-Qed.
-
 (* 分類された端点の上下移動。 *)
 
 Lemma shift_preserves_strict_vertical_order :
@@ -1307,4 +1282,29 @@ Proof.
   intros l sub r h p Hend.
   apply operate_point_RegFix.
   now apply classify_sub_endpoint.
+Qed.
+
+(* prepared 幾何での分類仕様。順序パス分離と通常境界の下側排除を
+   幾何補題に分け、各仕様への論理的な組み立ては旧証明と共有する。 *)
+Lemma classify_spec :
+  forall l sub r,
+    PreparedGeometry l sub r ->
+    sparse_embedding (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    @ClassificationSpec l sub r (classify l sub r).
+Proof.
+  intros l sub r Hgeometry Hsparse Hembed Hext.
+  eapply (classify_spec_from_separation l sub r).
+  - exact (prepared_sub_nonempty l sub r Hgeometry).
+  - exact (prepared_sources_separated
+             l sub r Hgeometry Hsparse Hembed Hext).
+  - exact Hembed.
+  - exact (classify_below_terminal_not_up_prepared
+             l sub r Hgeometry Hsparse Hembed Hext).
+  - exact (classify_below_initial_not_up_prepared
+             l sub r Hgeometry Hsparse Hembed Hext).
+  - intros p Hside Hrange.
+    exact (strict_extension_above_or_below_prepared
+             l sub r p Hgeometry Hsparse Hembed Hside Hrange).
 Qed.

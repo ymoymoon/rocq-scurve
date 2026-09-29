@@ -829,8 +829,8 @@ Proof.
     { apply Hsubset. now apply nth_error_In in Hold. }
     destruct (operated_segment_axis_orders_from_spec
                 l sub r h s Hspec Hh Hin) as [Hx Hy].
-    change (init s' = ClassifyProof.operate_point l sub r h (init s)) in Hinit.
-    change (term s' = ClassifyProof.operate_point l sub r h (term s)) in Hterm.
+    change (init s' = ClassifySpecProof.operate_point l sub r h (init s)) in Hinit.
+    change (term s' = ClassifySpecProof.operate_point l sub r h (term s)) in Hterm.
     rewrite <- Hinit, <- Hterm in Hx, Hy.
     exact (same_primitive_of_axis_orders s s' Hx Hy Horn).
   - intros i s1 s2 Hnew1 Hnew2.

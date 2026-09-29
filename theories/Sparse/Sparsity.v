@@ -1,5 +1,4 @@
 Require Export Sparse.SegmentListGeometry.
-Require Export Sparse.VerticalShiftGeometry.
 Require Import Stdlib.Lists.List.
 Import ListNotations.
 From Stdlib Require Import Lra.

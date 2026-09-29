@@ -1041,3 +1041,15 @@ Proof.
   destruct (onSegment_y_bounds t p Hp) as [Hlo Hhi].
   split; lra.
 Qed.
+
+(* sub の高さを上回る上下移動量を選べる。 *)
+Definition h_large (h : R) (sub : list Segment) : Prop :=
+  0 < h /\ rect_height (bbox_of sub) < h.
+
+Lemma choose_h : forall sub, exists h, h_large h sub.
+Proof.
+  intros sub. exists (Rmax 1 (rect_height (bbox_of sub) + 1)).
+  unfold h_large. split.
+  - eapply Rlt_le_trans; [apply Rlt_0_1 | apply Rmax_l].
+  - eapply Rlt_le_trans; [| apply Rmax_r]. lra.
+Qed.

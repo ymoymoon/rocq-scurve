@@ -300,7 +300,7 @@ Proof.
 			assumption.
 Qed.
 
-(* 最終命題。 *)
+(* 最終命題 *)
 
 (* 許容可能なら，全てのセグメント周りで疎な埋め込みが取れる *)
 Lemma AdmissibleDirs_has_sparse_embedding :

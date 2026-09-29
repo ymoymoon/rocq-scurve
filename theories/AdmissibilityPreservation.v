@@ -412,6 +412,17 @@ Lemma embed_sparsely_listDir_MPM (ds1 ds2 : list Direction) :
 		/\ sparse_around l [seg1; seg2; seg3] r.
 Proof. Admitted.
 
+(* 端点長方形内の PPMM は、両端の傾きを保つ PM の接続点を取れる。
+   割線傾きと端点傾きの関係、および指定傾きのセグメントの存在が必要。 *)
+Lemma ppmm_inside_rect_has_pm_slopes :
+  forall s1 s2 s3 s4,
+    embed_listDir [Plus; Plus; Minus; Minus] [s1; s2; s3; s4] ->
+    sub_strictly_inside_endpoint_rect [s1; s2; s3; s4] ->
+    fst (init s1) < fst (term s4) ->
+    reconnect_slope_pair (init s1) (term s4) Plus Minus
+      (slope_init s1) (slope_term s4).
+Admitted.
+
 Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2)
 	-> exists l r seg1 seg2 seg3 seg4, 
@@ -425,10 +436,18 @@ Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
 		/\ sparse_around l [seg1; seg2; seg3; seg4] r.
 Proof.
   intro Hadm.
-  destruct (embed_sparsely_if_both_lids_removable
+  destruct (AdmissibleDirs_has_prepared_PPMM ds1 ds2 Hadm)
+    as [old_l [sub [old_r Hprepared]]].
+  pose proof
+    (@prepared_geometry ds1 [Plus; Plus; Minus; Minus] ds2
+       old_l sub old_r Hprepared) as Hgeometry.
+  pose proof (prepared_sub_strictly_inside old_l sub old_r Hgeometry)
+    as Hinside.
+  pose proof (prepared_sub_x_order old_l sub old_r Hgeometry) as Hx.
+  destruct (embed_sparsely_prepared
               ds1 [Plus; Plus; Minus; Minus] ds2
-              (AdmissibleDirs_has_prepared_PPMM ds1 ds2 Hadm))
-    as [l [r [sub [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]]].
+              old_l sub old_r Hprepared)
+    as [l [r [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]].
   pose proof (embedding_listDir_length_consis _ _ Hsub) as Hlen.
   destruct sub as [|seg1 [|seg2 [|seg3 [|seg4 [|seg5 rest]]]]];
     simpl in Hlen; try lia.
@@ -436,14 +455,23 @@ Proof.
   assert (Hslope :
       reconnect_slope_pair (init seg1) (term seg4) Plus Minus
         (slope_init seg1) (slope_term seg4)).
-  { (* 指定両端傾きをもつ二セグメントの存在は、ここで別途必要。 *)
-    admit. }
+  { eapply ppmm_inside_rect_has_pm_slopes; eauto. }
   split; [exact Hslope |].
   split; [exact Hl |].
   split; [exact Hsub |].
   split; [exact Hr |].
   split; [exact Hwhole |].
   split; [exact Hopen | exact Haround].
+Qed.
+
+(* 端点長方形内の MMPP についての対称な傾き接続補題。 *)
+Lemma mmpp_inside_rect_has_mp_slopes :
+  forall s1 s2 s3 s4,
+    embed_listDir [Minus; Minus; Plus; Plus] [s1; s2; s3; s4] ->
+    sub_strictly_inside_endpoint_rect [s1; s2; s3; s4] ->
+    fst (init s1) < fst (term s4) ->
+    reconnect_slope_pair (init s1) (term s4) Minus Plus
+      (slope_init s1) (slope_term s4).
 Admitted.
 
 (* embed_sparsely_listDir_PPMM の Minus 版． *)
@@ -460,10 +488,18 @@ Lemma embed_sparsely_listDir_MMPP (ds1 ds2 : list Direction) :
 		/\ sparse_around l [seg1; seg2; seg3; seg4] r.
 Proof.
   intro Hadm.
-  destruct (embed_sparsely_if_both_lids_removable
+  destruct (AdmissibleDirs_has_prepared_MMPP ds1 ds2 Hadm)
+    as [old_l [sub [old_r Hprepared]]].
+  pose proof
+    (@prepared_geometry ds1 [Minus; Minus; Plus; Plus] ds2
+       old_l sub old_r Hprepared) as Hgeometry.
+  pose proof (prepared_sub_strictly_inside old_l sub old_r Hgeometry)
+    as Hinside.
+  pose proof (prepared_sub_x_order old_l sub old_r Hgeometry) as Hx.
+  destruct (embed_sparsely_prepared
               ds1 [Minus; Minus; Plus; Plus] ds2
-              (AdmissibleDirs_has_prepared_MMPP ds1 ds2 Hadm))
-    as [l [r [sub [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]]].
+              old_l sub old_r Hprepared)
+    as [l [r [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]].
   pose proof (embedding_listDir_length_consis _ _ Hsub) as Hlen.
   destruct sub as [|seg1 [|seg2 [|seg3 [|seg4 [|seg5 rest]]]]];
     simpl in Hlen; try lia.
@@ -471,15 +507,14 @@ Proof.
   assert (Hslope :
       reconnect_slope_pair (init seg1) (term seg4) Minus Plus
         (slope_init seg1) (slope_term seg4)).
-  { (* 指定両端傾きをもつ二セグメントの存在は別途必要。 *)
-    admit. }
+  { eapply mmpp_inside_rect_has_mp_slopes; eauto. }
   split; [exact Hslope |].
   split; [exact Hl |].
   split; [exact Hsub |].
   split; [exact Hr |].
   split; [exact Hwhole |].
   split; [exact Hopen | exact Haround].
-Admitted.
+Qed.
 
 (* Plus (の向きを持つ Primitive Segment) の埋め込みを，端点とそこでの傾きを保存したまま
 		[Plus; Minus; Plus] の埋め込みとなる３つに矩形内で分割できる *)
