@@ -82,6 +82,11 @@ Definition reconnect_segs
   (l sub r : list Segment) (h : R) (ls : list Segment) : list Segment :=
   map (reconnect_one l sub r h) ls.
 
+(* sub を固定し、左右を再接続して曲線全体の列を返す。 *)
+Definition reconnect_whole
+  (l sub r : list Segment) (h : R) : list Segment :=
+  reconnect_segs l sub r h l ++ sub ++ reconnect_segs l sub r h r.
+
 Definition reconnects_after
     (l sub r : list Segment) (h : R) (s s' : Segment) : Prop :=
   init s' = operate_point l sub r h (init s)

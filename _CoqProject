@@ -21,10 +21,7 @@ theories/Sparse/ClassifyInvariant.v
 theories/Sparse/ClassifySpecProof.v
 theories/Sparse/Classify.v
 theories/Sparse/Reconnect.v
-theories/Sparse/ReconnectSplit.v
-theories/Sparse/ReconnectProof.v
-theories/Sparse/ReconnectSeparation.v
-theories/Sparse/ReconnectSplitProof.v
-theories/Sparse/SparseEmbedding.v
+theories/Sparse/ReconnectLocalProof.v
+theories/Sparse/ReconnectWholeProof.v
 theories/AdmissibilityPreservation.v
 theories/ConcreteExtend.v
