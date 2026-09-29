@@ -82,9 +82,6 @@ Definition reconnect_segs
   (l sub r : list Segment) (h : R) (ls : list Segment) : list Segment :=
   map (reconnect_one l sub r h) ls.
 
-(* sub 自体は変更せず、左右の全端点だけを通常の方法で再接続する。
-   安全な先頭・末尾を選ぶ最終的な [reconnect_split] の内部候補である。 *)
-
 Definition reconnects_after
     (l sub r : list Segment) (h : R) (s s' : Segment) : Prop :=
   init s' = operate_point l sub r h (init s)
@@ -96,11 +93,3 @@ Definition reconnects_list_after
     (l sub r : list Segment) (h : R)
     (old new : list Segment) : Prop :=
   Forall2 (reconnects_after l sub r h) old new.
-
-(* 同じ向きの再接続セグメントが、指定した全障害長方形を避けること。 *)
-Definition segment_avoids_boxes
-    (s : Segment) (blockers : list Segment) : Prop :=
-  forall t p,
-    In t blockers ->
-    in_segment_rect_or_endpoints t p ->
-    ~ onSegment s p.

@@ -12,9 +12,6 @@ Import ListNotations.
 From Stdlib Require Import Lra.
 From Stdlib Require Import Lia.
 
-
-
-
 Require Export Sparse.ReconnectSplitProof.
 (* AdmissibleDirs について成り立ってほしい性質と、それに必要な補題。 *)
 
@@ -303,20 +300,6 @@ Proof.
 			assumption.
 Qed.
 
-Lemma admissible_gives_open_embed :
-  forall ds, AdmissibleDirs ds -> exists ls, embed_listDir ds ls /\ ~ close ls.
-Proof.
-  intros ds Hadm.
-  apply AdmissibleDirs_exist in Hadm.
-  destruct Hadm as [sc [Hdir Hadm]].
-  destruct Hadm as [ls [Hembed Hopen]].
-  exists ls.
-  split; auto.
-  exists sc.
-  split; auto.
-Qed.
-
-
 (* 最終命題。 *)
 
 (* 許容可能なら，全てのセグメント周りで疎な埋め込みが取れる *)
@@ -350,6 +333,27 @@ Lemma AdmissibleDirs_has_prepared_PPMM :
     AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) ->
     exists l sub r,
       PreparedSparseEmbedding ds1 [Plus; Plus; Minus; Minus] ds2 l sub r.
+Admitted.
+
+Lemma AdmissibleDirs_has_prepared_MMPP :
+  forall ds1 ds2,
+    AdmissibleDirs (ds1 ++ [Minus; Minus; Plus; Plus] ++ ds2) ->
+    exists l sub r,
+      PreparedSparseEmbedding ds1 [Minus; Minus; Plus; Plus] ds2 l sub r.
+Admitted.
+
+(* 二方向部分列で両側の蓋を避けられる初期埋め込みの選択。
+   全域 sparse 性と prepared 幾何を同じ証人について要求する。 *)
+Lemma AdmissibleDirs_has_prepared_PM :
+  forall ds1 ds2,
+    AdmissibleDirs (ds1 ++ [Plus; Minus] ++ ds2) ->
+    exists l sub r, PreparedSparseEmbedding ds1 [Plus; Minus] ds2 l sub r.
+Admitted.
+
+Lemma AdmissibleDirs_has_prepared_MP :
+  forall ds1 ds2,
+    AdmissibleDirs (ds1 ++ [Minus; Plus] ++ ds2) ->
+    exists l sub r, PreparedSparseEmbedding ds1 [Minus; Plus] ds2 l sub r.
 Admitted.
 
 (* prepared 証人から、sub を固定して両側を再接続する。
@@ -443,235 +447,28 @@ Proof.
            (ex_intro _ (ds1 ++ sub_ds ++ ds2) Hwhole) Hext).
 Qed.
 
-(* prepared 証人と分類仕様が与えられれば、++-- の結論まで未証明補題を使わない。 *)
-Lemma embed_sparsely_PPMM_from_spec :
-  forall ds1 ds2,
-    (exists l sub r,
-      PreparedSparseEmbedding ds1 [Plus; Plus; Minus; Minus] ds2 l sub r
-      /\ @ClassificationSpec l sub r (classify l sub r)) ->
-    exists l sub r,
-      embed_listDir ds1 l
-      /\ embed_listDir [Plus; Plus; Minus; Minus] sub
-      /\ embed_listDir ds2 r
-      /\ embed_listDir (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2)
-           (l ++ sub ++ r)
-      /\ sparse_embedding (l ++ sub ++ r)
-      /\ ~ close (l ++ sub ++ r)
-      /\ sparse_around l sub r.
-Proof.
-  intros ds1 ds2 [l [sub [r [Hprepared Hspec]]]].
-  destruct (embed_sparsely_prepared_from_spec ds1
-              [Plus; Plus; Minus; Minus] ds2 l sub r Hprepared Hspec)
-    as [l' [r' [Hl' [Hsub [Hr' [Hwhole [Hsparse [Hopen Haround]]]]]]]].
-  exists l', sub, r'.
-  split; [exact Hl' |].
-  split; [exact Hsub |].
-  split; [exact Hr' |].
-  split; [exact Hwhole |].
-  split; [exact Hsparse |].
-  split; [exact Hopen | exact Haround].
-Qed.
-
-(* ++-- の候補が prepared 条件を満たせば、選択した埋め込みで
-   x 単調性を使わずに全域疎性を得られる。 *)
-Lemma embed_sparsely_PPMM_prepared :
-  forall ds1 ds2,
-    AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) ->
-    exists l sub r,
-      embed_listDir ds1 l
-      /\ embed_listDir [Plus; Plus; Minus; Minus] sub
-      /\ embed_listDir ds2 r
-      /\ embed_listDir (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2)
-           (l ++ sub ++ r)
-      /\ sparse_embedding (l ++ sub ++ r)
-      /\ ~ close (l ++ sub ++ r)
-      /\ sparse_around l sub r.
-Proof.
-  intros ds1 ds2 Hadm.
-  destruct (AdmissibleDirs_has_prepared_PPMM ds1 ds2 Hadm)
-    as [l [sub [r Hprepared]]].
-  destruct (embed_sparsely_prepared ds1
-              [Plus; Plus; Minus; Minus] ds2 l sub r Hprepared)
-    as [l' [r' [Hl' [Hsub [Hr' [Hwhole [Hsparse [Hopen Haround]]]]]]]].
-  exists l', sub, r'.
-  split; [exact Hl' |].
-  split; [exact Hsub |].
-  split; [exact Hr' |].
-  split; [exact Hwhole |].
-  split; [exact Hsparse |].
-  split; [exact Hopen | exact Haround].
-Qed.
-
-(* 疎な初期埋め込みを回転して sub を x 単調にし、再接続後の局所疎性と
-   開性を得る。全域 sparse 性はこの結論に含めない。 *)
-Lemma embed_sparsely_xmono :
-  forall ds1 sub_ds ds2 l sub r,
-    embed_listDir ds1 l -> embed_listDir sub_ds sub -> embed_listDir ds2 r ->
-    embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub ++ r) ->
-    well_split l sub r ->
-    exists l' r' sub',
-      embed_listDir ds1 l'
-   /\ embed_listDir sub_ds sub'
-   /\ embed_listDir ds2 r'
-   /\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l' ++ sub' ++ r')
-   /\ ~ close (l' ++ sub' ++ r')
-   /\ sparse_around l' sub' r'
-   /\ sub' <> [].
-Proof.
-  intros ds1 sub_ds ds2 l sub r Hl Hsub Hr Hall Hws.
-  pose proof Hws as [Hsubne [Hx Hopen]].
-  assert (Hadm : AdmissibleDirs (ds1 ++ sub_ds ++ ds2)).
-  { apply AdmissibleDirs_exist.
-    destruct Hall as [sc [Hdir Hembed]].
-    exists sc. split; [exact Hdir |].
-    exists (l ++ sub ++ r). split; assumption. }
-  destruct (AdmissibleDirs_has_sparse_embedding _ Hadm)
-    as (ls0 & Hall0 & Hsparse & Hext).
-  destruct (embed_split ds1 sub_ds ds2 ls0 Hall0)
-    as (l0 & sub0 & r0 & Heq & Hl0 & Hsub0 & Hr0).
-  subst ls0.
-  assert (Hsub0ne : sub0 <> []).
-  { intro Hnil.
-    apply Hsubne.
-    apply length_zero_iff_nil.
-    pose proof (embedding_listDir_length_consis _ _ Hsub) as Hlen.
-    pose proof (embedding_listDir_length_consis _ _ Hsub0) as Hlen0.
-    rewrite Hnil in Hlen0. simpl in Hlen0. lia. }
-  assert (HoneDir : is_one_way_listDir sub_ds).
-  { eapply (x_monotone_embed_is_one_way_listDir sub_ds sub);
-      [exact Hsub | exact Hx]. }
-  assert (Hone0 : is_one_way_embedding sub0).
-  { destruct Hsub0 as [sc0 [Hdir0 Hembed0]].
-    destruct HoneDir as [sc [Hdir Hone]].
-    exists sc0. split; [exact Hembed0 |].
-    eapply is_one_way_same_direction; [| exact Hone].
-    exact (eq_trans Hdir (eq_sym Hdir0)). }
-  destruct (one_way_rot_exists sub0 Hone0) as [g Hx1].
-  set (l1 := rot_segs g l0).
-  set (sub1 := rot_segs g sub0).
-  set (r1 := rot_segs g r0).
-  assert (Hl1 : embed_listDir ds1 l1).
-  { unfold l1. apply rot_embed. exact Hl0. }
-  assert (Hsub1 : embed_listDir sub_ds sub1).
-  { unfold sub1. apply rot_embed. exact Hsub0. }
-  assert (Hr1 : embed_listDir ds2 r1).
-  { unfold r1. apply rot_embed. exact Hr0. }
-  assert (Hall1 :
-      embed_listDir (ds1 ++ sub_ds ++ ds2) (l1 ++ sub1 ++ r1)).
-  { unfold l1, sub1, r1. rewrite <- !rot_segs_app.
-    apply rot_embed. exact Hall0. }
-  assert (Hsparse1 : sparse_embedding (l1 ++ sub1 ++ r1)).
-  { unfold l1, sub1, r1. rewrite <- !rot_segs_app.
-    apply rot_sparse_embedding. exact Hsparse. }
-  assert (Hext1 : extensions_disjoint (l1 ++ sub1 ++ r1)).
-  { unfold l1, sub1, r1. rewrite <- !rot_segs_app.
-    apply rot_extensions_disjoint. exact Hext. }
-  assert (Hsub1ne : sub1 <> []).
-  { unfold sub1. apply rot_segs_nonnil. exact Hsub0ne. }
-  assert (Hopen1 : ~ close (l1 ++ sub1 ++ r1)).
-  { eapply sparse_extensions_open with
-      (ds := ds1 ++ sub_ds ++ ds2);
-      [| exact Hall1 | exact Hsparse1 | exact Hext1].
-    intro Hnil.
-    apply app_eq_nil in Hnil as [_ Htail].
-    apply app_eq_nil in Htail as [Hsubnil _].
-    contradiction. }
-  assert (Hws1 : well_split l1 sub1 r1).
-  { split; [exact Hsub1ne |].
-    split; [exact Hx1 | exact Hopen1]. }
-  destruct (choose_h sub1) as [h Hh].
-  assert (HconnAll1 : connected (l1 ++ sub1 ++ r1)).
-  { eapply embed_listDir_connected. exact Hall1. }
-  assert (HconnSub1 : connected sub1).
-  { eapply connected_middle. exact HconnAll1. }
-  pose proof (operate_endpoints_reconnectable
-                l1 sub1 r1 h Hsub1ne HconnSub1 Hx1 Hh Hsparse1 HconnAll1
-                (ex_intro _ (ds1 ++ sub_ds ++ ds2) Hall1) Hext1)
-    as HrecAll1.
-  assert (Hspec1 : @ClassificationSpec l1 sub1 r1 (classify l1 sub1 r1)).
-  { exact (classify_spec_x_monotone l1 sub1 r1 Hsub1ne Hx1 Hsparse1
-             (ex_intro _ (ds1 ++ sub_ds ++ ds2) Hall1) Hext1). }
-  assert (HlocalOpen :
-      sparse_around
-        (reconnect_left l1 sub1 r1 h) sub1
-        (reconnect_right l1 sub1 r1 h)
-      /\ ~ close (reconnect_split l1 sub1 r1 h)).
-  { apply reconnect_gives_sparse_around_and_open
-      with (ds := ds1 ++ sub_ds ++ ds2); assumption. }
-  exists (reconnect_left l1 sub1 r1 h),
-         (reconnect_right l1 sub1 r1 h),
-         sub1.
-  split.
-  - eapply (reconnects_list_preserves_embed
-              l1 sub1 r1 h l1 (reconnect_left l1 sub1 r1 h) ds1).
-    + exact Hspec1.
-    + exact (proj1 Hh).
-    + intros s Hs. rewrite !in_app_iff. tauto.
-    + eapply reconnect_left_reconnects_after; eauto.
-    + exact Hl1.
-  - split; [exact Hsub1 |].
-    split.
-    + eapply (reconnects_list_preserves_embed
-                l1 sub1 r1 h r1 (reconnect_right l1 sub1 r1 h) ds2).
-      * exact Hspec1.
-      * exact (proj1 Hh).
-      * intros s Hs. rewrite !in_app_iff. tauto.
-      * eapply reconnect_right_reconnects_after; eauto.
-      * exact Hr1.
-    + split.
-      * eapply reconnect_split_safe_preserves_embed; eauto.
-      * split.
-        -- exact (proj2 HlocalOpen).
-        -- split.
-           ++ exact (proj1 HlocalOpen).
-           ++ exact Hsub1ne.
-Qed.
-
-(* x 単調化した場合を逆回転し、一般の単方向部分列へ結果を輸送する。 *)
-Proposition embed_sparsely_listDir (ds1 sub_ds ds2 : list Direction) :
-  AdmissibleDirs (ds1 ++ sub_ds ++ ds2)
-  -> is_one_way_listDir sub_ds
-  -> exists l r sub_ls,
-       embed_listDir ds1 l
+(* 両側の蓋を避けた prepared 証人がある場合の最終命題。
+   証人選択と classify の仕様証明は、この命題の外に分離する。 *)
+Proposition embed_sparsely_if_both_lids_removable
+    (ds1 sub_ds ds2 : list Direction) :
+  (exists l sub r, PreparedSparseEmbedding ds1 sub_ds ds2 l sub r) ->
+  exists l r sub_ls,
+    embed_listDir ds1 l
     /\ embed_listDir sub_ds sub_ls
     /\ embed_listDir ds2 r
     /\ embed_listDir (ds1 ++ sub_ds ++ ds2) (l ++ sub_ls ++ r)
+    /\ sparse_embedding (l ++ sub_ls ++ r)
     /\ ~ close (l ++ sub_ls ++ r)
     /\ sparse_around l sub_ls r.
 Proof.
-  intros Hadm Hone.
-  destruct (admissible_gives_open_embed _ Hadm) as [ls0 [Hemb0 Hopen0]].
-  destruct (embed_split _ _ _ _ Hemb0)
-    as (l0 & sub0 & r0 & Heq & Hl0 & Hsub0 & Hr0).
-  subst ls0.
-
-  assert (Hne : sub0 <> []).
-  { eapply embed_nonnil; [exact Hsub0 | apply one_way_listDir_nonnil; exact Hone]. }
-
-  assert (Honeway : is_one_way_embedding sub0).
-  { destruct Hsub0 as [sc [Hdir Hembed]]. exists sc. split; [exact Hembed|].
-    destruct Hone as [sc' [Hdir' Honeway]].
-    apply (is_one_way_same_direction _ _ (eq_trans Hdir' (eq_sym Hdir)) Honeway). }
-
-  destruct (one_way_rot_exists sub0 Honeway) as [g Hx].
-
-  destruct (embed_sparsely_xmono
-             ds1 sub_ds ds2
-             (rot_segs g l0) (rot_segs g sub0) (rot_segs g r0))
-    as (L & Rr & S & HL & HS & HR & Hallg & Hopeng & Hspg & HSne).
-  { eapply rot_embed; exact Hl0. }
-  { eapply rot_embed; exact Hsub0. }
-  { eapply rot_embed; exact Hr0. }
-  { rewrite <- !rot_segs_app.
-    eapply rot_embed; exact Hemb0. }
-  { split; [apply rot_segs_nonnil; exact Hne
-           | split; [exact Hx
-                    | rewrite <- !rot_segs_app; apply rot_open; exact Hopen0]]. }
-
-  exists L, Rr, S.
-  split; [exact HL |].
-  split; [exact HS |].
-  split; [exact HR |].
-  split; [exact Hallg |].
-  split; [exact Hopeng | exact Hspg].
+  intros [l [sub [r Hprepared]]].
+  destruct (embed_sparsely_prepared ds1 sub_ds ds2 l sub r Hprepared)
+    as [l' [r' [Hl' [Hsub [Hr' [Hwhole [Hsparse [Hopen Haround]]]]]]]].
+  exists l', r', sub.
+  split; [exact Hl' |].
+  split; [exact Hsub |].
+  split; [exact Hr' |].
+  split; [exact Hwhole |].
+  split; [exact Hsparse |].
+  split; [exact Hopen | exact Haround].
 Qed.
