@@ -1131,7 +1131,7 @@ Lemma classified_below_terminal_not_up_from_construction :
     sparse_embedding (l ++ sub ++ r) ->
     connected (l ++ sub ++ r) ->
     l <> [] ->
-    ~ terminal_lid l ->
+    ~ terminal_backtrack_lid l ->
     forall t p,
       In t (nonadjacent_sides l r) ->
       segment_x_ranges_overlap t (last_segment l) ->
@@ -1149,11 +1149,60 @@ Lemma classified_below_initial_not_up_from_construction :
     sparse_embedding (l ++ sub ++ r) ->
     connected (l ++ sub ++ r) ->
     r <> [] ->
-    ~ initial_lid r ->
+    ~ initial_backtrack_lid r ->
     forall t p,
       In t (nonadjacent_sides l r) ->
       segment_x_ranges_overlap t (hd_segment r) ->
       ry1 (rect_of [t]) < ry0 (rect_of [hd_segment r]) ->
       endpoint_of_seg t p ->
       classify l sub r p <> RegUp.
+Admitted.
+
+(* 蓋がない場合には、sub 上の端点を除外せずに非隣接長方形の順序を
+   分類順序へ移せる。これは patch 構成の全域 sparse 用の検証部分である。 *)
+Lemma classified_nonadjacent_endpoint_order_no_lid_from_construction :
+  forall l sub r,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
+    ~ terminal_lid l sub r ->
+    ~ initial_lid l sub r ->
+    forall i j s t ps pt,
+      nth_error (l ++ sub ++ r) i = Some s ->
+      nth_error (l ++ sub ++ r) j = Some t ->
+      (S i < j \/ S j < i)%nat ->
+      segment_x_ranges_overlap s t ->
+      endpoint_of_seg s ps ->
+      endpoint_of_seg t pt ->
+      snd ps <= snd pt ->
+      region_at_or_above
+        (classify l sub r pt) (classify l sub r ps).
+Admitted.
+
+(* 先頭・末尾 patch の表は、許された例外も含めて指定側の傾きを
+   保存して再接続できることを保証する。 *)
+Lemma classified_head_init_slope_reconnectable_from_construction :
+  forall l sub r h,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
+    0 <= h ->
+    l <> [] ->
+    classified_init_slope_reconnectable (classify l sub r) h (hd_segment l).
+Admitted.
+
+Lemma classified_last_term_slope_reconnectable_from_construction :
+  forall l sub r h,
+    sub <> [] ->
+    connected sub ->
+    x_monotone_segs sub ->
+    sparse_embedding (l ++ sub ++ r) ->
+    connected (l ++ sub ++ r) ->
+    0 <= h ->
+    r <> [] ->
+    classified_term_slope_reconnectable (classify l sub r) h (last_segment r).
 Admitted.

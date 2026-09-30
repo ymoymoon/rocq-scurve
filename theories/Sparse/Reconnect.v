@@ -1,7 +1,21 @@
 Require Export Sparse.Classify.
 Require Import Stdlib.Logic.ClassicalDescription.
 Require Import Stdlib.Lists.List.
+Require Import Stdlib.Reals.Reals.
 Import ListNotations.
+From Stdlib Require Import Lra.
+
+(* 再接続の上下移動で sub の高さ全体を越えるための十分大きな高さ。 *)
+Definition h_large (h : R) (sub : list Segment) : Prop :=
+  0 < h /\ rect_height (bbox_of sub) < h.
+
+Lemma choose_h : forall sub, exists h, h_large h sub.
+Proof.
+  intros sub. exists (Rmax 1 (rect_height (bbox_of sub) + 1)).
+  unfold h_large. split.
+  - eapply Rlt_le_trans; [apply Rlt_0_1 | apply Rmax_l].
+  - eapply Rlt_le_trans; [| apply Rmax_r]. lra.
+Qed.
 
 (* 分類後の端点から各セグメントを作り直す通常再接続。 *)
 Definition reconnectable_after
@@ -81,6 +95,12 @@ Definition reconnect_one
 Definition reconnect_segs
   (l sub r : list Segment) (h : R) (ls : list Segment) : list Segment :=
   map (reconnect_one l sub r h) ls.
+
+(* 蓋のない prepared 埋め込みで用いる通常再接続。safe split とは別に、
+   [sub] を固定して左右の全端点を一律に結び直す。 *)
+Definition reconnect_whole
+  (l sub r : list Segment) (h : R) : list Segment :=
+  reconnect_segs l sub r h l ++ sub ++ reconnect_segs l sub r h r.
 
 (* sub 自体は変更せず、左右の全端点だけを通常の方法で再接続する。
    安全な先頭・末尾を選ぶ最終的な [reconnect_split] の内部候補である。 *)

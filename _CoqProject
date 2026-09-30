@@ -13,7 +13,6 @@ theories/Admissible.v
 theories/SegmentsTranslation.v
 theories/Sparse/SparsePrelude.v
 theories/Sparse/SegmentListGeometry.v
-theories/Sparse/VerticalShiftGeometry.v
 theories/Sparse/Sparsity.v
 theories/Sparse/ClassifyGeometry.v
 theories/Sparse/ClassifyDefinition.v
@@ -22,10 +21,7 @@ theories/Sparse/ClassifyProperties.v
 theories/Sparse/ClassifyCorrectness.v
 theories/Sparse/Classify.v
 theories/Sparse/Reconnect.v
-theories/Sparse/ReconnectSplit.v
-theories/Sparse/ReconnectProof.v
-theories/Sparse/ReconnectSeparation.v
-theories/Sparse/ReconnectSplitProof.v
-theories/Sparse/SparseEmbedding.v
+theories/Sparse/ReconnectLocalProof.v
+theories/Sparse/ReconnectWholeProof.v
 theories/AdmissibilityPreservation.v
 theories/ConcreteExtend.v

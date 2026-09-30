@@ -21,43 +21,6 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
       (snd (term s) < snd (init s) ->
         region_at_or_above (classify l sub r (init s)) (classify l sub r (term s)));
 
-  (* x 範囲が重なる非隣接セグメントについては、sub 上にある端点を
-     除き、下側の長方形が Up なら上側の長方形も Up など。 *)
-  classified_nonadjacent_endpoint_order :
-    forall i j s t ps pt,
-      nth_error (l ++ sub ++ r) i = Some s ->
-      nth_error (l ++ sub ++ r) j = Some t ->
-      (S i < j \/ S j < i)%nat ->
-      segment_x_ranges_overlap s t ->
-      endpoint_of_seg s ps ->
-      endpoint_of_seg t pt ->
-      ~ onSegmentlist sub pt ->
-      snd ps <= snd pt ->
-      region_at_or_above
-        (classify l sub r pt) (classify l sub r ps);
-
-  (* 蓋でない左境界では、その完全に下の非隣接端点を上へ動かさない。 *)
-  classified_below_terminal_not_up :
-    l <> [] ->
-    ~ terminal_lid l ->
-    forall t p,
-      In t (nonadjacent_sides l r) ->
-      segment_x_ranges_overlap t (last_segment l) ->
-      ry1 (rect_of [t]) < ry0 (rect_of [last_segment l]) ->
-      endpoint_of_seg t p ->
-      classify l sub r p <> RegUp;
-
-  (* 蓋でない右境界についても、完全に下の端点を上へ動かさない。 *)
-  classified_below_initial_not_up :
-    r <> [] ->
-    ~ initial_lid r ->
-    forall t p,
-      In t (nonadjacent_sides l r) ->
-      segment_x_ranges_overlap t (hd_segment r) ->
-      ry1 (rect_of [t]) < ry0 (rect_of [hd_segment r]) ->
-      endpoint_of_seg t p ->
-      classify l sub r p <> RegUp;
-
   (* sub と同じ x 座標を持つセグメントは Up もしくは Down *)
   classified_segment_at_sub_x :
     forall s p,
@@ -171,5 +134,35 @@ Record ClassificationSpec (l sub r : list Segment) : Prop := {
             \/ embed (n, e, cx) (last_segment r)))
     \/ (classify l sub r (term (last_segment r)) = RegDown
         /\ (embed (s, w, cc) (last_segment r)
-            \/ embed (s, e, cc) (last_segment r)))
+            \/ embed (s, e, cc) (last_segment r)));
+
+  (* 蓋を除いた prepared な状況では、sub 上の端点も含めて非隣接の
+     上下順序を保存する。全域 sparse 性を復元するための強い版。 *)
+  classified_nonadjacent_endpoint_order_no_lid :
+    ~ terminal_lid l sub r ->
+    ~ initial_lid l sub r ->
+    forall i j s t ps pt,
+      nth_error (l ++ sub ++ r) i = Some s ->
+      nth_error (l ++ sub ++ r) j = Some t ->
+      (S i < j \/ S j < i)%nat ->
+      segment_x_ranges_overlap s t ->
+      endpoint_of_seg s ps ->
+      endpoint_of_seg t pt ->
+      snd ps <= snd pt ->
+      region_at_or_above
+        (classify l sub r pt) (classify l sub r ps);
+
+  (* prepared な通常再接続で、先頭・末尾の外側延長線を保つために必要な
+     片側の傾き保存可能性。 *)
+  classified_head_init_slope_reconnectable :
+    forall h,
+      0 <= h ->
+      l <> [] ->
+      classified_init_slope_reconnectable (classify l sub r) h (hd_segment l);
+
+  classified_last_term_slope_reconnectable :
+    forall h,
+      0 <= h ->
+      r <> [] ->
+      classified_term_slope_reconnectable (classify l sub r) h (last_segment r)
 }.

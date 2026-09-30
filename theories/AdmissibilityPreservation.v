@@ -6,10 +6,254 @@ Require Import PrimitiveSegment.
 Require Import Segment.
 Require Import SegmentsTranslation.
 Require Import ListExt.
-Require Import Sparse.SparseEmbedding.
+Require Import Sparse.ReconnectWholeProof.
+Require Import Stdlib.Logic.ClassicalDescription.
 Import ListNotations.
 From Stdlib Require Import Lra.
 From Stdlib Require Import Lia.
+
+(* PrimitiveSegment の有限回転を用いて、同じ向き列をもつ scurve 間で
+   単方向性を移すための補題群。幾何的な sparse 証明には依存しない。 *)
+Local Definition quarter_turn_primitive (p : PrimitiveSegment) : PrimitiveSegment :=
+  match p with
+  | (n, e, cx) => (n, w, cc) | (n, e, cc) => (n, w, cx)
+  | (n, w, cx) => (s, w, cx) | (n, w, cc) => (s, w, cc)
+  | (s, e, cx) => (n, e, cx) | (s, e, cc) => (n, e, cc)
+  | (s, w, cx) => (s, e, cc) | (s, w, cc) => (s, e, cx)
+  end.
+
+Local Definition rotate_primitive (g : Rot) (p : PrimitiveSegment) : PrimitiveSegment :=
+  match g with
+  | R0 => p
+  | R90 => quarter_turn_primitive p
+  | R180 => quarter_turn_primitive (quarter_turn_primitive p)
+  | R270 => quarter_turn_primitive
+              (quarter_turn_primitive (quarter_turn_primitive p))
+  end.
+
+Local Definition quarter_turn_dir (d : Dir) : Dir :=
+  match d with
+  | Hor e => Ver n | Hor w => Ver s | Ver n => Hor w | Ver s => Hor e
+  end.
+
+Local Definition rotate_dir (g : Rot) (d : Dir) : Dir :=
+  match g with
+  | R0 => d | R90 => quarter_turn_dir d
+  | R180 => quarter_turn_dir (quarter_turn_dir d)
+  | R270 => quarter_turn_dir (quarter_turn_dir (quarter_turn_dir d))
+  end.
+
+Local Definition follows_dir (d : Dir) (p : PrimitiveSegment) : Prop :=
+  match d with
+  | Ver v => V_of p = v
+  | Hor h => H_of p = h
+  end.
+
+Lemma rotate_primitive_orn : forall g p,
+  orn (rotate_primitive g p) = orn p.
+Proof.
+  intros g [[v h] c]. destruct g, v, h, c; reflexivity.
+Qed.
+
+Lemma rotate_primitive_dc : forall g p q,
+  dc p q -> dc (rotate_primitive g p) (rotate_primitive g q).
+Proof.
+  intros g [[v1 h1] c1] [[v2 h2] c2] Hdc.
+  destruct v1, h1, c1, v2, h2, c2;
+    inversion Hdc; subst; destruct g; simpl; constructor.
+Qed.
+
+Lemma dc_successor_of_direction_unique : forall p q1 q2,
+  dc p q1 -> dc p q2 -> orn q1 = orn q2 -> q1 = q2.
+Proof.
+  intros [[v h] c] [[v1 h1] c1] [[v2 h2] c2] H1 H2 Hdir.
+  destruct v, h, c, v1, h1, c1, v2, h2, c2;
+    inversion H1; inversion H2; subst; simpl in Hdir;
+    try discriminate; reflexivity.
+Qed.
+
+Lemma same_orn_has_primitive_rotation : forall p q,
+  orn p = orn q -> exists g, q = rotate_primitive g p.
+Proof.
+  intros [[v1 h1] c1] [[v2 h2] c2].
+  destruct v1, h1, c1, v2, h2, c2; simpl; intros H;
+    try discriminate;
+    first [exists R0; reflexivity | exists R90; reflexivity
+          | exists R180; reflexivity | exists R270; reflexivity].
+Qed.
+
+Lemma is_scurve_tail : forall p ps,
+  is_scurve (p :: ps) -> is_scurve ps.
+Proof.
+  intros p ps H. inversion H; assumption.
+Qed.
+
+Lemma same_direction_scurve_lists_rotate : forall g p q ps qs,
+  is_scurve (p :: ps) ->
+  is_scurve (q :: qs) ->
+  map orn (p :: ps) = map orn (q :: qs) ->
+  q = rotate_primitive g p ->
+  q :: qs = map (rotate_primitive g) (p :: ps).
+Proof.
+  intros g p q ps. revert g p q.
+  induction ps as [|p' ps IH]; intros g p q qs Hps Hqs Hdir Hhead.
+  - destruct qs as [|q' qs].
+    + simpl. now rewrite Hhead.
+    + simpl in Hdir. injection Hdir as _ Htail. discriminate Htail.
+  - destruct qs as [|q' qs].
+    + simpl in Hdir. injection Hdir as _ Htail. discriminate Htail.
+    + assert (HtailDir : map orn (p' :: ps) = map orn (q' :: qs))
+        by exact (f_equal (@tl Direction) Hdir).
+      assert (HnextDir : orn p' = orn q').
+      { pose proof (f_equal (hd Plus) HtailDir) as H. simpl in H. exact H. }
+      assert (Hdc1 : dc p p').
+      { eapply is_scurve_adjacent_dc with (ps := p :: p' :: ps) (i := 0%nat);
+          eauto; reflexivity. }
+      assert (Hdc2 : dc q q').
+      { eapply is_scurve_adjacent_dc with (ps := q :: q' :: qs) (i := 0%nat);
+          eauto; reflexivity. }
+      assert (Hnext : q' = rotate_primitive g p').
+      { apply (dc_successor_of_direction_unique q q' (rotate_primitive g p'));
+          [exact Hdc2 | |].
+        - rewrite Hhead. now apply rotate_primitive_dc.
+        - rewrite rotate_primitive_orn. symmetry. exact HnextDir. }
+      assert (HtailCurve1 : is_scurve (p' :: ps)) by now apply is_scurve_tail in Hps.
+      assert (HtailCurve2 : is_scurve (q' :: qs)) by now apply is_scurve_tail in Hqs.
+      assert (HtailEq : q' :: qs = map (rotate_primitive g) (p' :: ps))
+        by (eapply IH; eauto).
+      simpl. rewrite Hhead. now f_equal.
+Qed.
+
+Lemma follows_dir_rotate : forall g d p,
+  follows_dir d p -> follows_dir (rotate_dir g d) (rotate_primitive g p).
+Proof.
+  intros g d [[v h] c] H.
+  destruct g; destruct d as [vd | hd];
+    try destruct vd; try destruct hd;
+    destruct v; destruct h; destruct c; simpl in *;
+    try discriminate; reflexivity.
+Qed.
+
+Lemma Forall_follows_dir_rotate : forall g d ps,
+  Forall (follows_dir d) ps ->
+  Forall (follows_dir (rotate_dir g d)) (map (rotate_primitive g) ps).
+Proof.
+  intros g d ps H. induction H; simpl; constructor; auto.
+  now apply follows_dir_rotate.
+Qed.
+
+Lemma is_one_way_scurve_dir_form : forall sc,
+  is_one_way_scurve sc <->
+  proj1_sig sc <> [] /\ exists d, Forall (follows_dir d) (proj1_sig sc).
+Proof.
+  intros [ps Hcurve]. unfold is_one_way_scurve. simpl. split.
+  - intros [Hne Hways]. split; [exact Hne |]. clear Hcurve Hne.
+    destruct Hways as [He | [Hw | [Hn | Hs]]].
+    + exists (Hor e). induction He as [|p ps Hp Hps IH]; constructor; auto.
+      destruct Hp as [v [c ->]]. reflexivity.
+    + exists (Hor w). induction Hw as [|p ps Hp Hps IH]; constructor; auto.
+      destruct Hp as [v [c ->]]. reflexivity.
+    + exists (Ver n). induction Hn as [|p ps Hp Hps IH]; constructor; auto.
+      destruct Hp as [h [c ->]]. reflexivity.
+    + exists (Ver s). induction Hs as [|p ps Hp Hps IH]; constructor; auto.
+      destruct Hp as [h [c ->]]. reflexivity.
+  - intros [Hne [d Hd]]. split; [exact Hne |].
+    destruct d as [v | h]; [destruct v | destruct h].
+    + right; right; left. apply Forall_forall. intros [[v' h] c] Hp.
+      apply Forall_forall with (x := ((v', h), c)) in Hd; [|exact Hp].
+      unfold follows_dir, V_of in Hd. simpl in Hd. exists h, c. now rewrite Hd.
+    + do 3 right. apply Forall_forall. intros [[v' h] c] Hp.
+      apply Forall_forall with (x := ((v', h), c)) in Hd; [|exact Hp].
+      unfold follows_dir, V_of in Hd. simpl in Hd. exists h, c. now rewrite Hd.
+    + left. apply Forall_forall. intros [[v h'] c] Hp.
+      apply Forall_forall with (x := ((v, h'), c)) in Hd; [|exact Hp].
+      unfold follows_dir, H_of in Hd. simpl in Hd. exists v, c. now rewrite Hd.
+    + right; left. apply Forall_forall. intros [[v h'] c] Hp.
+      apply Forall_forall with (x := ((v, h'), c)) in Hd; [|exact Hp].
+      unfold follows_dir, H_of in Hd. simpl in Hd. exists v, c. now rewrite Hd.
+Qed.
+
+(* 単方向曲線と向き列が同じなら単方向曲線。 *)
+Lemma is_one_way_same_direction : forall sc1 sc2,
+  scurve_to_direction sc1 = scurve_to_direction sc2 ->
+  is_one_way_scurve sc1 -> is_one_way_scurve sc2.
+Proof.
+  intros [ps Hps] [qs Hqs] Hdir Hone.
+  apply is_one_way_scurve_dir_form in Hone.
+  destruct Hone as [HpsNe [d Hone]]. simpl in *.
+  destruct ps as [|p ps]; [contradiction |].
+  destruct qs as [|q qs].
+  { unfold scurve_to_direction in Hdir. simpl in Hdir. discriminate. }
+  unfold scurve_to_direction in Hdir. simpl in Hdir.
+  assert (HheadDir : orn p = orn q) by now injection Hdir.
+  destruct (same_orn_has_primitive_rotation p q HheadDir) as [g Hg].
+  assert (Hlists : q :: qs = map (rotate_primitive g) (p :: ps)).
+  { eapply same_direction_scurve_lists_rotate; eauto. }
+  apply is_one_way_scurve_dir_form. simpl.
+  split; [discriminate |]. exists (rotate_dir g d). rewrite Hlists.
+  now apply Forall_follows_dir_rotate.
+Qed.
+
+Lemma Direction_to_PrimitiveSegment : forall d p,
+  exists p', orn p' = d /\ dc p p'.
+Proof.
+  intros d p.
+  destruct d; destruct p as [[v h] c];
+  destruct v; destruct h; destruct c; eexists;
+  try solve [split; try apply DIfl; reflexivity];
+  try solve [split; try apply DXtrvN; reflexivity];
+  try solve [split; try apply DXtrvS; reflexivity];
+  try solve [split; try apply DXtrhN; reflexivity];
+  try solve [split; try apply DXtrhS; reflexivity].
+Qed.
+
+(* 任意の向き列を、指定された先頭 PrimitiveSegment から直接連結して実現する。 *)
+Lemma direction_scurve_correspondence : forall ds p,
+  exists sc, hd_scurve sc = p /\ scurve_to_direction sc = orn p :: ds.
+Proof.
+  intros ds. induction ds as [| d ds' IH]; intros p.
+  - exists (scurve_from_one p). split; reflexivity.
+  - destruct (Direction_to_PrimitiveSegment d p) as [p' [Horn_p' Hdc]].
+    destruct (IH p') as [sc [Hhead Hdir]].
+    assert (H0 : exists l, proj1_sig sc = p' :: l).
+    { unfold scurve_to_direction in Hdir.
+      unfold hd_scurve in Hhead.
+      destruct (proj1_sig sc) as [| p0 l0].
+      - discriminate.
+      - simpl in Hhead; subst. exists l0. reflexivity. }
+    destruct H0 as [l H0].
+    pose (DcCons _ _ l Hdc) as H1. rewrite <- H0 in H1.
+    exists (connect p sc H1). split.
+    + auto.
+    + unfold scurve_to_direction. simpl.
+      unfold scurve_to_direction in Hdir. rewrite Hdir, Horn_p'. reflexivity.
+Qed.
+
+Lemma admissible_AdmissibleDirs_correspondence : forall sc,
+  admissible sc <-> AdmissibleDirs (scurve_to_direction sc).
+Proof.
+  intros sc. split.
+  - intros Hadm ps Hps. symmetry in Hps.
+    destruct (rot_scurve_of_same_direction _ _ Hps) as [g ->].
+    now rewrite <- rot_scurve_admissible.
+  - auto.
+Qed.
+
+(* 一つの許容可能な scurve があれば、同じ向き列全体の許容可能性になる。 *)
+Lemma AdmissibleDirs_exist : forall ds,
+  AdmissibleDirs ds <->
+  exists sc, scurve_to_direction sc = ds /\ admissible sc.
+Proof.
+  intros ds. split.
+  - intros H. destruct ds as [|d tail].
+    + exists (exist _ _ IsScurveNil). auto.
+    + destruct (Direction_to_PrimitiveSegment d default_primitive_segment)
+        as [p [H0 _]].
+      destruct (direction_scurve_correspondence tail p) as [sc [H1 H2]].
+      exists sc. split; try apply H; subst; assumption.
+  - intros [sc [Hdir Hadm]]. rewrite <- Hdir.
+    apply admissible_AdmissibleDirs_correspondence; assumption.
+Qed.
 
 
 (* --------------------------------------------------------------------------- *)
@@ -386,6 +630,45 @@ Lemma oneway_then_open : forall ls,
 Proof.
 Admitted.
 
+(* 全セグメント周りで疎、かつ先頭・末尾の延長線も分離した初期埋め込み。 *)
+Lemma AdmissibleDirs_has_sparse_embedding :
+  forall ds,
+    AdmissibleDirs ds ->
+    exists ls,
+      embed_listDir ds ls
+      /\ sparse_embedding ls
+      /\ extensions_disjoint ls.
+Admitted.
+
+(* ++-- / --++ では、両側に幾何学的な蓋を持たない prepared な
+   初期埋め込みを選べることを要請する。この証人では通常再接続が
+   全域 sparse 性を保つ。 *)
+Lemma AdmissibleDirs_has_prepared_PPMM :
+  forall ds1 ds2,
+    AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) ->
+    exists l sub r,
+      PreparedSparseEmbedding ds1 [Plus; Plus; Minus; Minus] ds2 l sub r.
+Admitted.
+
+Lemma AdmissibleDirs_has_prepared_MMPP :
+  forall ds1 ds2,
+    AdmissibleDirs (ds1 ++ [Minus; Minus; Plus; Plus] ++ ds2) ->
+    exists l sub r,
+      PreparedSparseEmbedding ds1 [Minus; Minus; Plus; Plus] ds2 l sub r.
+Admitted.
+
+Lemma AdmissibleDirs_has_prepared_PM :
+  forall ds1 ds2,
+    AdmissibleDirs (ds1 ++ [Plus; Minus] ++ ds2) ->
+    exists l sub r, PreparedSparseEmbedding ds1 [Plus; Minus] ds2 l sub r.
+Admitted.
+
+Lemma AdmissibleDirs_has_prepared_MP :
+  forall ds1 ds2,
+    AdmissibleDirs (ds1 ++ [Minus; Plus] ++ ds2) ->
+    exists l sub r, PreparedSparseEmbedding ds1 [Minus; Plus] ds2 l sub r.
+Admitted.
+
 (* sub_ls 周りで疎な埋め込みについて， sub_ls を矩形の中で sub_ls' に変えても疎なまま *)
 (* Lemma sparse_in_rect_change : forall (ls rs sub_ls sub_ls' : list Segment), 
 	sparse ls sub_ls rs
@@ -427,6 +710,16 @@ Lemma embed_sparsely_listDir_MPM (ds1 ds2 : list Direction) :
 		/\ sparse_around l [seg1; seg2; seg3] r.
 Proof. Admitted.
 
+(* 端点長方形内の ++-- は、両端の傾きを保つ +- の接続点を取れる。 *)
+Lemma ppmm_inside_rect_has_pm_slopes :
+  forall s1 s2 s3 s4,
+    embed_listDir [Plus; Plus; Minus; Minus] [s1; s2; s3; s4] ->
+    sub_strictly_inside_endpoint_rect [s1; s2; s3; s4] ->
+    fst (init s1) < fst (term s4) ->
+    reconnect_slope_pair (init s1) (term s4) Plus Minus
+      (slope_init s1) (slope_term s4).
+Admitted.
+
 Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
 	AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2)
 	-> exists l r seg1 seg2 seg3 seg4, 
@@ -438,7 +731,45 @@ Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
 		/\ embed_listDir (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) (l ++ [seg1; seg2; seg3; seg4] ++ r)
 		/\ ~ close (l ++ [seg1; seg2; seg3; seg4] ++ r)
 		/\ sparse_around l [seg1; seg2; seg3; seg4] r.
-Proof. Admitted.
+Proof.
+  intro Hadm.
+  destruct (AdmissibleDirs_has_prepared_PPMM ds1 ds2 Hadm)
+    as [old_l [sub [old_r Hprepared]]].
+  pose proof
+    (@prepared_geometry ds1 [Plus; Plus; Minus; Minus] ds2
+       old_l sub old_r Hprepared) as Hgeometry.
+  pose proof (prepared_sub_strictly_inside old_l sub old_r Hgeometry)
+    as Hinside.
+  pose proof (prepared_sub_x_order old_l sub old_r Hgeometry) as Hx.
+  destruct (embed_sparsely_if_both_lids_removable
+              ds1 [Plus; Plus; Minus; Minus] ds2
+              old_l sub old_r Hprepared)
+    as [l [r [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]].
+  pose proof (embedding_listDir_length_consis _ _ Hsub) as Hlen.
+  destruct sub as [|seg1 [|seg2 [|seg3 [|seg4 [|seg5 rest]]]]];
+    simpl in Hlen; try lia.
+  exists l, r, seg1, seg2, seg3, seg4.
+  assert (Hslope :
+      reconnect_slope_pair (init seg1) (term seg4) Plus Minus
+        (slope_init seg1) (slope_term seg4)).
+  { eapply ppmm_inside_rect_has_pm_slopes; eauto. }
+  split; [exact Hslope |].
+  split; [exact Hl |].
+  split; [exact Hsub |].
+  split; [exact Hr |].
+  split; [exact Hwhole |].
+  split; [exact Hopen | exact Haround].
+Qed.
+
+(* 端点長方形内の --++ についての対称な接続点。 *)
+Lemma mmpp_inside_rect_has_mp_slopes :
+  forall s1 s2 s3 s4,
+    embed_listDir [Minus; Minus; Plus; Plus] [s1; s2; s3; s4] ->
+    sub_strictly_inside_endpoint_rect [s1; s2; s3; s4] ->
+    fst (init s1) < fst (term s4) ->
+    reconnect_slope_pair (init s1) (term s4) Minus Plus
+      (slope_init s1) (slope_term s4).
+Admitted.
 
 (* embed_sparsely_listDir_PPMM の Minus 版． *)
 Lemma embed_sparsely_listDir_MMPP (ds1 ds2 : list Direction) :
@@ -452,7 +783,35 @@ Lemma embed_sparsely_listDir_MMPP (ds1 ds2 : list Direction) :
 		/\ embed_listDir (ds1 ++ [Minus; Minus; Plus; Plus] ++ ds2) (l ++ [seg1; seg2; seg3; seg4] ++ r)
 		/\ ~ close (l ++ [seg1; seg2; seg3; seg4] ++ r)
 		/\ sparse_around l [seg1; seg2; seg3; seg4] r.
-Proof. Admitted.
+Proof.
+  intro Hadm.
+  destruct (AdmissibleDirs_has_prepared_MMPP ds1 ds2 Hadm)
+    as [old_l [sub [old_r Hprepared]]].
+  pose proof
+    (@prepared_geometry ds1 [Minus; Minus; Plus; Plus] ds2
+       old_l sub old_r Hprepared) as Hgeometry.
+  pose proof (prepared_sub_strictly_inside old_l sub old_r Hgeometry)
+    as Hinside.
+  pose proof (prepared_sub_x_order old_l sub old_r Hgeometry) as Hx.
+  destruct (embed_sparsely_if_both_lids_removable
+              ds1 [Minus; Minus; Plus; Plus] ds2
+              old_l sub old_r Hprepared)
+    as [l [r [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]].
+  pose proof (embedding_listDir_length_consis _ _ Hsub) as Hlen.
+  destruct sub as [|seg1 [|seg2 [|seg3 [|seg4 [|seg5 rest]]]]];
+    simpl in Hlen; try lia.
+  exists l, r, seg1, seg2, seg3, seg4.
+  assert (Hslope :
+      reconnect_slope_pair (init seg1) (term seg4) Minus Plus
+        (slope_init seg1) (slope_term seg4)).
+  { eapply mmpp_inside_rect_has_mp_slopes; eauto. }
+  split; [exact Hslope |].
+  split; [exact Hl |].
+  split; [exact Hsub |].
+  split; [exact Hr |].
+  split; [exact Hwhole |].
+  split; [exact Hopen | exact Haround].
+Qed.
 
 (* Plus (の向きを持つ Primitive Segment) の埋め込みを，端点とそこでの傾きを保存したまま
 		[Plus; Minus; Plus] の埋め込みとなる３つに矩形内で分割できる *)
@@ -688,9 +1047,19 @@ Lemma AdmissibleDirs_r1_Plus_inv: forall l r,
   AdmissibleDirs (l ++ [Plus] ++ r) -> AdmissibleDirs (l ++ [Plus; Minus; Plus] ++ r).
 Proof.
 	intros l r admds. 
-	(* 疎な開埋め込みをとる *)
-	pose proof (embed_sparsely_listDir _ _ _ admds P_is_oneway) 
-		as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]];
+		(* 全域 sparse な初期埋め込みを分割する。 *)
+		destruct (AdmissibleDirs_has_sparse_embedding _ admds)
+			as [ls [Hls [HwholeSparse Hext]]].
+		destruct (embed_split l [Plus] r ls Hls)
+			as [ls1 [ls2 [ls3 [Heq [Hls1 [Hls2 Hls3]]]]]].
+		subst ls.
+		destruct (embedding_one_dir Plus ls2 Hls2) as [segP HP].
+		subst ls2.
+		assert (Hne : ls1 ++ [segP] ++ ls3 <> []).
+		{ intro Hnil. apply app_eq_nil in Hnil as [_ Htail]. discriminate Htail. }
+		pose proof (sparse_extensions_open _ _ Hne Hls HwholeSparse Hext) as Hopen.
+		pose proof (HwholeSparse ls1 segP ls3 eq_refl) as Hsparse.
+		destruct Hls as [sc [Hdir_sc Hembed]].
 	simpl in *.
 	assert (Hdir: hd Plus (l ++ Plus :: Minus :: Plus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
@@ -705,10 +1074,9 @@ Proof.
 	- (* 向きが l ++ [Plus; Minus; Plus] ++ r であること *)
 		rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 	- (* 許容可能であること *)
-		assert (H: embed_listDir (l ++ [Plus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
+		assert (H: embed_listDir (l ++ [Plus] ++ r) (ls1 ++ [segP] ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
 			unfold embed_listDir. exists sc. split; assumption.
 		}
-		pose proof (embedding_one_dir Plus ls2 Hls2) as [segP HP]; subst.
 		pose proof (embedding_P_to_PMP_in_rect segP Hls2) 
 			as [seg1 [seg2 [seg3 [HPMP [Hin_rect [Hinit_term Hslope]]]]]].
 		(* 欲しかった埋め込み *) 
@@ -731,9 +1099,19 @@ Lemma AdmissibleDirs_r1_Minus_inv: forall l r,
   AdmissibleDirs (l ++ [Minus] ++ r) -> AdmissibleDirs (l ++ [Minus; Plus; Minus] ++ r).
 Proof.
 	intros l r admds.
-	(* 疎な開埋め込みをとる *)
-	pose proof (embed_sparsely_listDir _ _ _ admds M_is_oneway)
-		as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]];
+		(* 全域 sparse な初期埋め込みを分割する。 *)
+		destruct (AdmissibleDirs_has_sparse_embedding _ admds)
+			as [ls [Hls [HwholeSparse Hext]]].
+		destruct (embed_split l [Minus] r ls Hls)
+			as [ls1 [ls2 [ls3 [Heq [Hls1 [Hls2 Hls3]]]]]].
+		subst ls.
+		destruct (embedding_one_dir Minus ls2 Hls2) as [segM HM].
+		subst ls2.
+		assert (Hne : ls1 ++ [segM] ++ ls3 <> []).
+		{ intro Hnil. apply app_eq_nil in Hnil as [_ Htail]. discriminate Htail. }
+		pose proof (sparse_extensions_open _ _ Hne Hls HwholeSparse Hext) as Hopen.
+		pose proof (HwholeSparse ls1 segM ls3 eq_refl) as Hsparse.
+		destruct Hls as [sc [Hdir_sc Hembed]].
 	simpl in *.
 	assert (Hdir: hd Minus (l ++ Minus :: Plus :: Minus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
@@ -748,10 +1126,9 @@ Proof.
 	- (* 向きが l ++ [Minus; Plus; Minus] ++ r であること *)
 		rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 	- (* 許容可能であること *)
-		assert (H: embed_listDir (l ++ [Minus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
+		assert (H: embed_listDir (l ++ [Minus] ++ r) (ls1 ++ [segM] ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
 			unfold embed_listDir. exists sc. split; assumption.
 		}
-		pose proof (embedding_one_dir Minus ls2 Hls2) as [segM HM]; subst.
 		pose proof (embedding_M_to_MPM_in_rect segM Hls2)
 			as [seg1 [seg2 [seg3 [HMPM [Hin_rect [Hinit_term Hslope]]]]]].
 		(* 欲しかった埋め込み *)
@@ -854,9 +1231,13 @@ Lemma AdmissibleDirs_r2_Plus_inv: forall l r,
   AdmissibleDirs (l ++ [Plus; Minus] ++ r) -> AdmissibleDirs (l ++ [Plus; Plus; Minus; Minus] ++ r).
 Proof.
 	intros l r admds. 
-	(* 疎な開埋め込みをとる *)
-	pose proof (embed_sparsely_listDir _ _ _ admds PM_is_oneway) 
-		as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]];
+		(* 蓋のない prepared 埋め込みを通常再接続する。 *)
+		destruct (AdmissibleDirs_has_prepared_PM l r admds)
+			as [old_l [ls2 [old_r Hprepared]]].
+		pose proof (embed_sparsely_if_both_lids_removable
+			l [Plus; Minus] r old_l ls2 old_r Hprepared)
+			as [ls1 [ls3 [Hls1 [Hls2 [Hls3 [Hwhole [_ [Hopen Hsparse]]]]]]]].
+		destruct Hwhole as [sc [Hdir_sc Hembed]].
 	simpl in *.
 	assert (Hdir: hd Plus (l ++ Plus :: Plus :: Minus :: Minus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
@@ -897,9 +1278,13 @@ Lemma AdmissibleDirs_r2_Minus_inv: forall l r,
   AdmissibleDirs (l ++ [Minus; Plus] ++ r) -> AdmissibleDirs (l ++ [Minus; Minus; Plus; Plus] ++ r).
 Proof.
 	intros l r admds.
-	(* 疎な開埋め込みをとる *)
-	pose proof (embed_sparsely_listDir _ _ _ admds MP_is_oneway)
-		as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [Hopen Hsparse]]]]]]]];
+		(* 蓋のない prepared 埋め込みを通常再接続する。 *)
+		destruct (AdmissibleDirs_has_prepared_MP l r admds)
+			as [old_l [ls2 [old_r Hprepared]]].
+		pose proof (embed_sparsely_if_both_lids_removable
+			l [Minus; Plus] r old_l ls2 old_r Hprepared)
+			as [ls1 [ls3 [Hls1 [Hls2 [Hls3 [Hwhole [_ [Hopen Hsparse]]]]]]]].
+		destruct Hwhole as [sc [Hdir_sc Hembed]].
 	simpl in *.
 	assert (Hdir: hd Minus (l ++ Minus :: Minus :: Plus :: Plus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.

@@ -19,12 +19,13 @@ Require Export Sparse.Sparsity.
 
 Inductive Region : Type := RegFix | RegUp | RegDown.
 
-(* sub に隣接する左右のセグメントが、sub 側へ x 方向に戻る蓋か。 *)
-Definition terminal_lid (l : list Segment) : Prop :=
+(* 安全な split が使う、sub に隣接する左側セグメントの単純な x 方向の
+   折返し判定。以下の幾何学的な [terminal_lid] とは区別する。 *)
+Definition terminal_backtrack_lid (l : list Segment) : Prop :=
   l <> [] /\
   fst (term (last_segment l)) < fst (init (last_segment l)).
 
-Definition initial_lid (r : list Segment) : Prop :=
+Definition initial_backtrack_lid (r : list Segment) : Prop :=
   r <> [] /\
   fst (term (hd_segment r)) < fst (init (hd_segment r)).
 
@@ -99,6 +100,29 @@ Definition strictly_above_sub_at_x
     fst p = fst q ->
     snd q < snd p.
 
+(* prepared な初期埋め込みで [sub] に要求する局所幾何。内部点を端点長方形の
+   開内部に置くことで、両側の蓋を除いた通常再接続でも全域 sparse 性を扱える。 *)
+Definition sub_strictly_inside_endpoint_rect (sub : list Segment) : Prop :=
+  forall i s p,
+    nth_error sub i = Some s ->
+    onSegment s p ->
+    (i = 0%nat -> p <> init s) ->
+    (S i = length sub -> p <> term s) ->
+    in_rect (rect_of sub) p.
+
+Definition avoids_sub_vertical_gap (sub : list Segment) (p : Point) : Prop :=
+  ~ exists qlo qhi,
+      onSegmentlist sub qlo /\ onSegmentlist sub qhi
+      /\ fst p = fst qlo /\ fst p = fst qhi
+      /\ snd qlo < snd p < snd qhi.
+
+Definition external_points_avoid_sub_vertical_gap
+    (l sub r : list Segment) : Prop :=
+  forall p,
+    onSegmentlist (l ++ r) p ->
+    ~ onSegmentlist sub p ->
+    avoids_sub_vertical_gap sub p.
+
 Lemma strictly_above_sub_at_x_not_on_sub : forall sub p,
   strictly_above_sub_at_x sub p ->
   ~ onSegmentlist sub p.
@@ -122,6 +146,40 @@ Definition on_trace_above_sub (sub : list Segment) (p : Point) : Prop :=
 Definition segment_x_ranges_overlap (s t : Segment) : Prop :=
   rx0 (rect_of [s]) <= rx1 (rect_of [t])
   /\ rx0 (rect_of [t]) <= rx1 (rect_of [s]).
+
+(* [sub] の上側に入る外側セグメントと、左右の境界セグメントとの
+   配置としての蓋。全域 sparse 性を保存する prepared 埋め込みでは、
+   この二種類の蓋を最初から除外する。 *)
+Definition segment_meets_upper_sub_rect
+    (sub : list Segment) (t : Segment) : Prop :=
+  exists p,
+    onSegment t p
+    /\ in_rect (rect_of sub) p
+    /\ above_sub_at_x sub p.
+
+Definition upper_lid_witness
+    (l sub r : list Segment) (boundary : Segment) : Prop :=
+  exists t,
+    In t (l ++ r)
+    /\ segment_meets_upper_sub_rect sub t
+    /\ segment_x_ranges_overlap boundary t
+    /\ ry1 (rect_of [t]) < ry0 (rect_of [boundary]).
+
+Definition terminal_lid (l sub r : list Segment) : Prop :=
+  l <> [] /\ upper_lid_witness l sub r (last_segment l).
+
+Definition initial_lid (l sub r : list Segment) : Prop :=
+  r <> [] /\ upper_lid_witness l sub r (hd_segment r).
+
+Record PreparedGeometry (l sub r : list Segment) : Prop := {
+  prepared_sub_nonempty : sub <> [];
+  prepared_sub_strictly_inside : sub_strictly_inside_endpoint_rect sub;
+  prepared_sub_x_order :
+    fst (init (hd_segment sub)) < fst (term (last_segment sub));
+  prepared_external_no_gap : external_points_avoid_sub_vertical_gap l sub r;
+  prepared_no_terminal_lid : ~ terminal_lid l sub r;
+  prepared_no_initial_lid : ~ initial_lid l sub r
+}.
 
 (* 以下の三補題は分類には依存しないが、延長線と sub の比較で使う。 *)
 Lemma connected_x_monotone_endpoints :
@@ -312,6 +370,61 @@ Proof.
                   ltac:(rewrite <- surjective_pairing; apply onInit)
                   ltac:(lra) (proj1 Hx) (proj2 Hx)) as [y [Hon _]].
       exists (x, y). split; [exact Hon | reflexivity].
+Qed.
+
+(* 連結した二つの x 区間の和は、両外端を結ぶ区間を覆う。 *)
+Lemma x_interval_bridge : forall a b c x,
+  Rmin a c <= x <= Rmax a c ->
+  Rmin a b <= x <= Rmax a b \/
+  Rmin b c <= x <= Rmax b c.
+Proof.
+  intros a b c x Hx.
+  unfold Rmin, Rmax in *.
+  repeat destruct Rle_dec; lra.
+Qed.
+
+(* x 単調でなくても、連結な列の両端間の各 x には sub 上の点がある。 *)
+Lemma connected_sub_has_point_at_x :
+  forall sub x,
+    sub <> [] ->
+    connected sub ->
+    rx0 (rect_of sub) <= x <= rx1 (rect_of sub) ->
+    exists q, onSegmentlist sub q /\ fst q = x.
+Proof.
+  intros sub x Hne.
+  destruct sub as [|a tail]; [contradiction|].
+  clear Hne. revert a x.
+  induction tail as [|b tail IH]; intros a x Hconn Hx.
+  - destruct (segment_has_point_at_x a x Hx) as [q [Hon Hqx]].
+    exists q. split; [exists a; split; [now left | exact Hon] | exact Hqx].
+  - assert (Hab : term a = init b).
+    { apply (Hconn 0%nat a b); reflexivity. }
+    assert (HconnTail : connected (b :: tail)).
+    { intros i s1 s2 H1 H2.
+      apply (Hconn (S i) s1 s2); simpl; assumption. }
+    assert (Hlast :
+        last_segment (a :: b :: tail) = last_segment (b :: tail)).
+    { change (last_segment ([a] ++ b :: tail) = last_segment (b :: tail)).
+      apply last_app_nonnil. discriminate. }
+    assert (Hbetween :
+        Rmin (fst (init a)) (fst (term (last_segment (b :: tail)))) <= x <=
+        Rmax (fst (init a)) (fst (term (last_segment (b :: tail))))).
+    { unfold rect_of in Hx. simpl in Hx. rewrite Hlast in Hx.
+      exact Hx. }
+    destruct (x_interval_bridge
+                (fst (init a)) (fst (term a))
+                (fst (term (last_segment (b :: tail)))) x Hbetween)
+      as [Ha | Htail].
+    + destruct (segment_has_point_at_x a x Ha) as [q [Hon Hqx]].
+      exists q. split; [exists a; split; [now left | exact Hon] | exact Hqx].
+    + assert (HxTail :
+        rx0 (rect_of (b :: tail)) <= x <=
+        rx1 (rect_of (b :: tail))).
+      { unfold rect_of. simpl. rewrite <- Hab. exact Htail. }
+      destruct (IH b x HconnTail HxTail) as [q [[s [Hs Hon]] Hqx]].
+      exists q. split.
+      * exists s. split; [now right | exact Hon].
+      * exact Hqx.
 Qed.
 
 Lemma x_monotone_sub_has_point :

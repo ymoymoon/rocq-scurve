@@ -19,9 +19,6 @@ Proof.
   intros l sub r Hne Hconn Hmono Hsparse Hwhole. constructor.
   - now apply classified_sub_fixed_from_construction.
   - now apply classified_segment_endpoints_monotone_from_construction.
-  - now apply classified_nonadjacent_endpoint_order_from_construction.
-  - now apply classified_below_terminal_not_up_from_construction.
-  - now apply classified_below_initial_not_up_from_construction.
   - now apply classified_segment_at_sub_x_from_construction.
   - now apply classified_head_extension_at_sub_x_from_construction.
   - now apply classified_last_extension_at_sub_x_from_construction.
@@ -30,6 +27,11 @@ Proof.
   - now apply classified_last_segment_crossing_order_from_construction.
   - now apply classified_head_slope_case_from_construction.
   - now apply classified_last_slope_case_from_construction.
+  - now apply classified_nonadjacent_endpoint_order_no_lid_from_construction.
+  - intros h Hh Hl.
+    eapply classified_head_init_slope_reconnectable_from_construction; eauto.
+  - intros h Hh Hr.
+    eapply classified_last_term_slope_reconnectable_from_construction; eauto.
 Qed.
 
 (* 埋め込み証人を受け取る再接続側の呼出形。連結性は証人から復元し、
@@ -50,6 +52,17 @@ Proof.
   { apply connected_middle with (l := l) (r := r). exact Hwhole. }
   now apply (classify_spec l sub r Hne Hsub Hmono Hsparse Hwhole).
 Qed.
+
+(* prepared 幾何では、patch の構成に固有の詳細を外へ出さずに
+   全域 sparse 用の強い分類仕様を得る。 *)
+Lemma classify_spec_prepared :
+  forall l sub r,
+    PreparedGeometry l sub r ->
+    sparse_embedding (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    ClassificationSpec l sub r.
+Admitted.
 
 (* 同じ x 上の具体的な分類単調性から、異なる領域の上下順序を逆に読む。 *)
 Lemma classified_vertical_order :
