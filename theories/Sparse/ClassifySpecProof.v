@@ -918,76 +918,6 @@ Qed.
 (*  構成した分類器が ClassificationSpec を満たすこと                *)
 (* ----------------------------------------------------------------- *)
 
-
-
-(* 蓋でない左通常境界の下では、固定接続点までの空いた閉長方形と
-   その外側から伸びる rising 障壁により Up 到達を排除する。 *)
-Lemma classify_below_terminal_not_up :
-  forall l sub r,
-    ClassificationContext l sub r ->
-    l <> [] ->
-    ~ terminal_lid l ->
-    forall p,
-      endpoint_of (l ++ sub ++ r) p ->
-      snd p < ry0 (rect_of [last_segment l]) ->
-      classify l sub r p <> RegUp.
-Admitted.
-
-(* 右通常境界についての双対。 *)
-Lemma classify_below_initial_not_up :
-  forall l sub r,
-    ClassificationContext l sub r ->
-    r <> [] ->
-    ~ initial_lid r ->
-    forall p,
-      endpoint_of (l ++ sub ++ r) p ->
-      snd p < ry0 (rect_of [hd_segment r]) ->
-      classify l sub r p <> RegUp.
-Admitted.
-
-(* 通常境界の下側排除は旧補題を x 単調枝に再利用する。 *)
-Lemma classify_below_terminal_not_up_prepared :
-  forall l sub r,
-    PreparedGeometry l sub r ->
-    sparse_embedding (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
-    l <> [] -> ~ terminal_lid l ->
-    forall p,
-      endpoint_of (l ++ sub ++ r) p ->
-      snd p < ry0 (rect_of [last_segment l]) ->
-      classify l sub r p <> RegUp.
-Proof.
-  intros l sub r Hgeometry Hsparse Hembed Hext Hl HnoL p Hend Hbelow.
-  destruct (classic (x_monotone_segs sub)) as [Hmono | Hnonmono].
-  - eapply classify_below_terminal_not_up; eauto.
-    exact (Build_ClassificationContext l sub r
-             (prepared_sub_nonempty l sub r Hgeometry)
-             Hmono Hsparse Hembed Hext).
-  - admit.
-Admitted.
-
-Lemma classify_below_initial_not_up_prepared :
-  forall l sub r,
-    PreparedGeometry l sub r ->
-    sparse_embedding (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
-    r <> [] -> ~ initial_lid r ->
-    forall p,
-      endpoint_of (l ++ sub ++ r) p ->
-      snd p < ry0 (rect_of [hd_segment r]) ->
-      classify l sub r p <> RegUp.
-Proof.
-  intros l sub r Hgeometry Hsparse Hembed Hext Hr HnoR p Hend Hbelow.
-  destruct (classic (x_monotone_segs sub)) as [Hmono | Hnonmono].
-  - eapply classify_below_initial_not_up; eauto.
-    exact (Build_ClassificationContext l sub r
-             (prepared_sub_nonempty l sub r Hgeometry)
-             Hmono Hsparse Hembed Hext).
-  - admit.
-Admitted.
-
 Lemma strict_extension_above_or_below_sub : forall l sub r p,
   ClassificationContext l sub r ->
   ((l <> [] /\ onHead_extend_strict (l ++ sub ++ r) p)
@@ -1036,21 +966,36 @@ Proof.
   - left. exists (xp, yz). repeat split; assumption.
 Qed.
 
-(* seed の分離、通常境界の下側排除、延長線と sub の上下比較から
+(* 蓋なしの場合に固定 sub 端点まで届く非隣接順序。具体的な分類器に
+   対する証明は、追加した core 辺と seed の整合性の検証を要する。 *)
+Lemma classify_nonadjacent_endpoint_order_to_sub_no_lid :
+  forall l sub r,
+    sparse_embedding (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    ~ terminal_lid l sub r ->
+    ~ initial_lid l sub r ->
+    forall i j s t ps pt,
+      nth_error (l ++ sub ++ r) i = Some s ->
+      nth_error (l ++ sub ++ r) j = Some t ->
+      (S i < j \/ S j < i)%nat ->
+      segment_x_ranges_overlap s t ->
+      endpoint_of_seg s ps ->
+      endpoint_of_seg t pt ->
+      onSegmentlist sub pt ->
+      snd ps <= snd pt ->
+      region_at_or_above (classify l sub r pt) (classify l sub r ps).
+Admitted.
+
+(* seed の分離と延長線・sub の上下比較から
    x 単調版・prepared 版に共通する全仕様を組み立てる。 *)
 Lemma classify_spec_from_separation :
   forall l sub r,
     sub <> [] ->
     sources_separated l sub r ->
+    sparse_embedding (l ++ sub ++ r) ->
     (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    (l <> [] -> ~ terminal_lid l ->
-      forall p, endpoint_of (l ++ sub ++ r) p ->
-        snd p < ry0 (rect_of [last_segment l]) ->
-        classify l sub r p <> RegUp) ->
-    (r <> [] -> ~ initial_lid r ->
-      forall p, endpoint_of (l ++ sub ++ r) p ->
-        snd p < ry0 (rect_of [hd_segment r]) ->
-        classify l sub r p <> RegUp) ->
+    extensions_disjoint (l ++ sub ++ r) ->
     (forall p,
       ((l <> [] /\ onHead_extend_strict (l ++ sub ++ r) p)
        \/ (r <> [] /\ onLast_extend_strict (l ++ sub ++ r) p)) ->
@@ -1058,7 +1003,7 @@ Lemma classify_spec_from_separation :
       above_sub_at_x sub p \/ below_sub_at_x sub p) ->
     @ClassificationSpec l sub r (classify l sub r).
 Proof.
-  intros l sub r Hne Hsep Hembed Hterminal Hinitial Hcompare.
+  intros l sub r Hne Hsep Hsparse Hembed Hextensions Hcompare.
   assert (HwholeNe : l ++ sub ++ r <> []) by now apply whole_nonempty.
   constructor.
   - intros p Hp. unfold classify, constraint_classifier.
@@ -1083,16 +1028,19 @@ Proof.
         -- now right.
         -- now left.
         -- lra.
-  - intros i j s0 t ps pt Hs Ht Hij Hover Hps Hpt HptNotSub Hy.
-    eapply endpoint_order_classified_from_separation; eauto.
-    + exists s0. split; [eapply nth_error_In; eauto | exact Hps].
-    + exists t. split; [eapply nth_error_In; eauto | exact Hpt].
-    + apply rt_step.
-      apply order_core_step.
-      exact (order_nonadjacent l sub r i j s0 t ps pt
-               Hs Ht Hij Hover Hps Hpt HptNotSub Hy).
-  - exact Hterminal.
-  - exact Hinitial.
+  - intros HnoTerminal HnoInitial i j s0 t ps pt
+      Hs Ht Hij Hover Hps Hpt Hy.
+    destruct (classic (onSegmentlist sub pt)) as [HptSub | HptNotSub].
+    + exact (classify_nonadjacent_endpoint_order_to_sub_no_lid
+               l sub r Hsparse Hembed Hextensions HnoTerminal HnoInitial
+               i j s0 t ps pt Hs Ht Hij Hover Hps Hpt HptSub Hy).
+    + eapply endpoint_order_classified_from_separation; eauto.
+      * exists s0. split; [eapply nth_error_In; eauto | exact Hps].
+      * exists t. split; [eapply nth_error_In; eauto | exact Hpt].
+      * apply rt_step.
+        apply order_core_step.
+        exact (order_nonadjacent l sub r i j s0 t ps pt
+                 Hs Ht Hij Hover Hps Hpt HptNotSub Hy).
   - intros seg p Hseg Hon Hrange. split; intros Hside.
     + split; apply (classify_forced_up_from_separation l sub r _ Hsep).
       * exists seg. split; [now apply nonadjacent_sides_in_whole | now left].
@@ -1209,9 +1157,9 @@ Proof.
   eapply (classify_spec_from_separation l sub r).
   - exact Hne.
   - exact (endpoint_order_separates_sources l sub r Hctx).
+  - exact Hsparse.
   - exact Hembed.
-  - exact (classify_below_terminal_not_up l sub r Hctx).
-  - exact (classify_below_initial_not_up l sub r Hctx).
+  - exact Hext.
   - intros p Hside Hrange.
     exact (strict_extension_above_or_below_sub l sub r p Hctx Hside Hrange).
 Qed.
@@ -1299,11 +1247,9 @@ Proof.
   - exact (prepared_sub_nonempty l sub r Hgeometry).
   - exact (prepared_sources_separated
              l sub r Hgeometry Hsparse Hembed Hext).
+  - exact Hsparse.
   - exact Hembed.
-  - exact (classify_below_terminal_not_up_prepared
-             l sub r Hgeometry Hsparse Hembed Hext).
-  - exact (classify_below_initial_not_up_prepared
-             l sub r Hgeometry Hsparse Hembed Hext).
+  - exact Hext.
   - intros p Hside Hrange.
     exact (strict_extension_above_or_below_prepared
              l sub r p Hgeometry Hsparse Hembed Hside Hrange).

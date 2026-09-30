@@ -31,9 +31,10 @@ Record ClassificationSpec
       (snd (term seg) < snd (init seg) ->
         region_at_or_above (classifier (init seg)) (classifier (term seg)));
 
-  (* x 範囲が重なる非隣接セグメントの端点順序を保存する。
-     固定する sub 上の target はこの順序制約の対象にしない。 *)
+  (* 両側に蓋がなければ、非隣接セグメントの全端点順序を保存する。 *)
   classified_nonadjacent_endpoint_order :
+    ~ terminal_lid l sub r ->
+    ~ initial_lid l sub r ->
     forall i j s t ps pt,
       nth_error (l ++ sub ++ r) i = Some s ->
       nth_error (l ++ sub ++ r) j = Some t ->
@@ -41,28 +42,8 @@ Record ClassificationSpec
       segment_x_ranges_overlap s t ->
       endpoint_of_seg s ps ->
       endpoint_of_seg t pt ->
-      ~ onSegmentlist sub pt ->
       snd ps <= snd pt ->
       region_at_or_above (classifier pt) (classifier ps);
-
-  (* l 末尾が蓋でない通常境界では、その端点長方形より完全に下の
-     端点を固定接続点へ向かって上昇させない。 *)
-  classified_below_terminal_not_up :
-    l <> [] ->
-    ~ terminal_lid l ->
-    forall p,
-      endpoint_of (l ++ sub ++ r) p ->
-      snd p < ry0 (rect_of [last_segment l]) ->
-      classifier p <> RegUp;
-
-  (* r 先頭が蓋でない通常境界についても同様。 *)
-  classified_below_initial_not_up :
-    r <> [] ->
-    ~ initial_lid r ->
-    forall p,
-      endpoint_of (l ++ sub ++ r) p ->
-      snd p < ry0 (rect_of [hd_segment r]) ->
-      classifier p <> RegUp;
 
   (* sub の x 範囲でその上側・下側を通る非隣接セグメントは、
      両端を同じ外側へ動かす。 *)

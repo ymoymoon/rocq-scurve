@@ -19,14 +19,56 @@ Require Export Sparse.Sparsity.
 
 Inductive Region : Type := RegFix | RegUp | RegDown.
 
-(* sub に隣接する左右のセグメントが、sub 側へ x 方向に戻る蓋か。 *)
-Definition terminal_lid (l : list Segment) : Prop :=
-  l <> [] /\
-  fst (term (last_segment l)) < fst (init (last_segment l)).
+(* 二つのセグメントの端点長方形が x 方向に重なる。 *)
+Definition segment_x_ranges_overlap (s t : Segment) : Prop :=
+  rx0 (rect_of [s]) <= rx1 (rect_of [t])
+  /\ rx0 (rect_of [t]) <= rx1 (rect_of [s]).
 
-Definition initial_lid (r : list Segment) : Prop :=
-  r <> [] /\
-  fst (term (hd_segment r)) < fst (init (hd_segment r)).
+Definition above_sub_at_x (sub : list Segment) (p : Point) : Prop :=
+  exists q,
+    onSegmentlist sub q
+    /\ fst p = fst q
+    /\ snd q < snd p.
+
+Definition segment_meets_upper_sub_rect
+    (sub : list Segment) (t : Segment) : Prop :=
+  exists p,
+    onSegment t p
+    /\ in_rect (rect_of sub) p
+    /\ above_sub_at_x sub p.
+
+(* sub より上かつ開長方形内の点を持つ外側セグメントが、上昇時に境界長方形へ
+   入り得る配置。実際の移動高さや分類結果には依存しない。 *)
+Definition upper_lid_witness
+    (l sub r : list Segment) (boundary : Segment) : Prop :=
+  exists t,
+    In t (l ++ r)
+    /\ segment_meets_upper_sub_rect sub t
+    /\ segment_x_ranges_overlap boundary t
+    /\ ry1 (rect_of [t]) < ry0 (rect_of [boundary]).
+
+Definition terminal_lid (l sub r : list Segment) : Prop :=
+  l <> [] /\ upper_lid_witness l sub r (last_segment l).
+
+Definition initial_lid (l sub r : list Segment) : Prop :=
+  r <> [] /\ upper_lid_witness l sub r (hd_segment r).
+
+(* 蓋がなければ、境界の完全下側にある外側セグメントは、
+   x が重なっても sub 上側の開長方形部分には入らない。 *)
+Lemma no_upper_lid_witness_excludes_below_segment :
+  forall l sub r boundary t,
+    ~ upper_lid_witness l sub r boundary ->
+    In t (l ++ r) ->
+    segment_x_ranges_overlap boundary t ->
+    ry1 (rect_of [t]) < ry0 (rect_of [boundary]) ->
+    ~ segment_meets_upper_sub_rect sub t.
+Proof.
+  intros l sub r boundary t Hno Ht Hoverlap Hbelow Hmeet.
+  apply Hno. exists t.
+  split; [exact Ht |].
+  split; [exact Hmeet |].
+  split; [exact Hoverlap | exact Hbelow].
+Qed.
 
 Inductive region_above : Region -> Region -> Prop :=
   | RegUp_above_Fix : region_above RegUp RegFix
@@ -79,12 +121,6 @@ Qed.
 Definition in_sub_x_range (sub : list Segment) (p : Point) : Prop :=
   rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub).
 
-Definition above_sub_at_x (sub : list Segment) (p : Point) : Prop :=
-  exists q,
-    onSegmentlist sub q
-    /\ fst p = fst q
-    /\ snd q < snd p.
-
 Definition below_sub_at_x (sub : list Segment) (p : Point) : Prop :=
   exists q,
     onSegmentlist sub q
@@ -122,8 +158,8 @@ Record PreparedGeometry (l sub r : list Segment) : Prop := {
   prepared_sub_x_order :
     fst (init (hd_segment sub)) < fst (term (last_segment sub));
   prepared_external_no_gap : external_points_avoid_sub_vertical_gap l sub r;
-  prepared_no_terminal_lid : ~ terminal_lid l;
-  prepared_no_initial_lid : ~ initial_lid r
+  prepared_no_terminal_lid : ~ terminal_lid l sub r;
+  prepared_no_initial_lid : ~ initial_lid l sub r
 }.
 
 (* 開内部条件は端点長方形への閉包含を含意する。二つの全体端点だけを別扱いする。 *)
@@ -247,6 +283,197 @@ Proof.
   apply Rmax_lub_lt; assumption.
 Qed.
 
+(* 最初以外の sub セグメントは、全体の始点の高さから厳密に離れる。 *)
+Lemma inner_segment_left_y : forall sub k s,
+  sub <> [] ->
+  sub_strictly_inside_endpoint_rect sub ->
+  nth_error sub k = Some s ->
+  (0 < k)%nat ->
+  (snd (init (hd_segment sub)) < snd (term (last_segment sub)) ->
+     snd (init (hd_segment sub)) < ry0 (rect_of [s])) /\
+  (snd (term (last_segment sub)) < snd (init (hd_segment sub)) ->
+     ry1 (rect_of [s]) < snd (init (hd_segment sub))).
+Proof.
+  intros sub k s Hsub Hstrict Hnth Hk.
+  assert (Hdistinct : init s <> term s) by apply neq_init_term.
+  assert (Hinit : in_rect (rect_of sub) (init s)).
+  { apply (Hstrict k s (init s) Hnth (onInit s)).
+    - intros Hzero. lia.
+    - intros Hlast. exact Hdistinct. }
+  assert (Hterm : in_rect (rect_of sub) (term s) \/
+                  term s = term (last_segment sub)).
+  { destruct (Nat.eq_dec (S k) (length sub)) as [Hlast | Hnotlast].
+    - right. assert (Hindex : k = (length sub - 1)%nat) by lia.
+      subst k.
+      assert (HlastNth :
+        nth_error sub (length sub - 1) = Some (last_segment sub)).
+      { unfold last_segment. apply nth_error_last.
+        exact Hsub. }
+      rewrite Hnth in HlastNth. now inversion HlastNth.
+    - left. apply (Hstrict k s (term s) Hnth (onTerm s)).
+      + intros Hzero Heq. apply Hdistinct. symmetry. exact Heq.
+      + intro Hlast. exfalso. contradiction. }
+  split; intros Hglobal;
+    unfold rect_of; simpl;
+    unfold in_rect, rect_of in Hinit;
+    destruct Hinit as [_ [HinitLo HinitHi]];
+    simpl in HinitLo, HinitHi;
+    destruct Hterm as [Hterm | Hterm].
+  - unfold in_rect, rect_of in Hterm; simpl in Hterm.
+    destruct Hterm as [_ [HtermLo HtermHi]].
+    change (snd (init (hd_segment sub)) <
+            Rmin (snd (init s)) (snd (term s))).
+    rewrite Rmin_left in HinitLo, HtermLo by lra.
+    apply Rmin_glb_lt; lra.
+  - change (snd (init (hd_segment sub)) <
+            Rmin (snd (init s)) (snd (term s))).
+    rewrite Hterm. rewrite Rmin_left in HinitLo by lra.
+    apply Rmin_glb_lt; lra.
+  - unfold in_rect, rect_of in Hterm; simpl in Hterm.
+    destruct Hterm as [_ [HtermLo HtermHi]].
+    change (Rmax (snd (init s)) (snd (term s)) <
+            snd (init (hd_segment sub))).
+    rewrite Rmax_left in HinitHi, HtermHi by lra.
+    apply Rmax_lub_lt; lra.
+  - change (Rmax (snd (init s)) (snd (term s)) <
+            snd (init (hd_segment sub))).
+    rewrite Hterm. rewrite Rmax_left in HinitHi by lra.
+    apply Rmax_lub_lt; lra.
+Qed.
+
+(* 最後以外の sub セグメントは、全体の終点の高さから厳密に離れる。 *)
+Lemma inner_segment_right_y : forall sub k s,
+  sub <> [] ->
+  sub_strictly_inside_endpoint_rect sub ->
+  nth_error sub k = Some s ->
+  (S k < length sub)%nat ->
+  (snd (init (hd_segment sub)) < snd (term (last_segment sub)) ->
+     ry1 (rect_of [s]) < snd (term (last_segment sub))) /\
+  (snd (term (last_segment sub)) < snd (init (hd_segment sub)) ->
+     snd (term (last_segment sub)) < ry0 (rect_of [s])).
+Proof.
+  intros sub k s Hsub Hstrict Hnth Hk.
+  assert (Hdistinct : init s <> term s) by apply neq_init_term.
+  assert (Hterm : in_rect (rect_of sub) (term s)).
+  { apply (Hstrict k s (term s) Hnth (onTerm s)).
+    - intros Hzero Heq. apply Hdistinct. symmetry. exact Heq.
+    - intro Hlast. exfalso. lia. }
+  assert (Hinit : in_rect (rect_of sub) (init s) \/
+                  init s = init (hd_segment sub)).
+  { destruct (Nat.eq_dec k 0) as [Hzero | Hnotzero].
+    - right. subst k. destruct sub as [|first rest]; [contradiction |].
+      simpl in Hnth. inversion Hnth; reflexivity.
+    - left. apply (Hstrict k s (init s) Hnth (onInit s)).
+      + intros Hzero. exfalso. lia.
+      + intros Hlast. exact Hdistinct. }
+  split; intros Hglobal;
+    unfold rect_of; simpl;
+    unfold in_rect, rect_of in Hterm;
+    destruct Hterm as [_ [HtermLo HtermHi]];
+    simpl in HtermLo, HtermHi;
+    destruct Hinit as [Hinit | Hinit].
+  - unfold in_rect, rect_of in Hinit; simpl in Hinit.
+    destruct Hinit as [_ [HinitLo HinitHi]].
+    change (Rmax (snd (init s)) (snd (term s)) <
+            snd (term (last_segment sub))).
+    rewrite Rmax_right in HinitHi, HtermHi by lra.
+    apply Rmax_lub_lt; lra.
+  - change (Rmax (snd (init s)) (snd (term s)) <
+            snd (term (last_segment sub))).
+    rewrite Hinit. rewrite Rmax_right in HtermHi by lra.
+    apply Rmax_lub_lt; lra.
+  - unfold in_rect, rect_of in Hinit; simpl in Hinit.
+    destruct Hinit as [_ [HinitLo HinitHi]].
+    change (snd (term (last_segment sub)) <
+            Rmin (snd (init s)) (snd (term s))).
+    rewrite Rmin_right in HinitLo, HtermLo by lra.
+    apply Rmin_glb_lt; lra.
+  - change (snd (term (last_segment sub)) <
+            Rmin (snd (init s)) (snd (term s))).
+    rewrite Hinit. rewrite Rmin_right in HtermLo by lra.
+    apply Rmin_glb_lt; lra.
+Qed.
+
+(* sub に二つ以上のセグメントがあれば、両端のセグメントも全体の
+   端点長方形の内側へ向かう。 *)
+Lemma first_sub_segment_axis_order : forall sub,
+  (1 < length sub)%nat ->
+  sub_strictly_inside_endpoint_rect sub ->
+  fst (init (hd_segment sub)) < fst (term (last_segment sub)) ->
+  fst (init (hd_segment sub)) < fst (term (hd_segment sub)) /\
+  (snd (init (hd_segment sub)) < snd (term (last_segment sub)) ->
+     snd (init (hd_segment sub)) < snd (term (hd_segment sub))) /\
+  (snd (term (last_segment sub)) < snd (init (hd_segment sub)) ->
+     snd (term (hd_segment sub)) < snd (init (hd_segment sub))).
+Proof.
+  intros sub Hlen Hstrict Hxorder.
+  destruct sub as [|a [|b tail]]; simpl in Hlen; try lia.
+  assert (Hinside : in_rect (rect_of (a :: b :: tail)) (term a)).
+  { apply (Hstrict 0%nat a (term a) eq_refl (onTerm a)).
+    - intros _ Heq. exact (neq_init_term a (eq_sym Heq)).
+    - intro Hlast. simpl in Hlast. exfalso. lia. }
+  unfold in_rect, rect_of in Hinside; simpl in Hinside.
+  destruct Hinside as [[HxLo HxHi] [HyLo HyHi]].
+  simpl hd_segment.
+  simpl in Hxorder.
+  split.
+  - rewrite Rmin_left in HxLo by lra. lra.
+  - split; intro Hglobal.
+    + rewrite Rmin_left in HyLo by lra. lra.
+    + rewrite Rmax_left in HyHi by lra. lra.
+Qed.
+
+Lemma sub_endpoint_y_distinct : forall sub,
+  (1 < length sub)%nat ->
+  sub_strictly_inside_endpoint_rect sub ->
+  snd (init (hd_segment sub)) <> snd (term (last_segment sub)).
+Proof.
+  intros sub Hlen Hstrict Heq.
+  destruct sub as [|a [|b tail]]; simpl in Hlen; try lia.
+  pose proof (Hstrict 0%nat a (term a) eq_refl (onTerm a)) as Hinside.
+  assert (Hfirst : 0%nat = 0%nat -> term a <> init a).
+  { intros _ Heq'. exact (neq_init_term a (eq_sym Heq')). }
+  assert (Hlast : 1%nat = length (a :: b :: tail) -> term a <> term a).
+  { intro Hbad. exfalso. simpl in Hbad. lia. }
+  specialize (Hinside Hfirst Hlast).
+  unfold in_rect, rect_of in Hinside; simpl in Hinside.
+  destruct Hinside as [_ [Hlo Hhi]].
+  simpl in Heq. rewrite <- Heq in Hlo, Hhi.
+  rewrite Rmin_left in Hlo by lra.
+  rewrite Rmax_left in Hhi by lra.
+  lra.
+Qed.
+
+Lemma last_sub_segment_axis_order : forall sub,
+  (1 < length sub)%nat ->
+  sub_strictly_inside_endpoint_rect sub ->
+  fst (init (hd_segment sub)) < fst (term (last_segment sub)) ->
+  fst (init (last_segment sub)) < fst (term (last_segment sub)) /\
+  (snd (init (hd_segment sub)) < snd (term (last_segment sub)) ->
+     snd (init (last_segment sub)) < snd (term (last_segment sub))) /\
+  (snd (term (last_segment sub)) < snd (init (hd_segment sub)) ->
+     snd (term (last_segment sub)) < snd (init (last_segment sub))).
+Proof.
+  intros sub Hlen Hstrict Hxorder.
+  assert (Hne : sub <> []).
+  { destruct sub; [simpl in Hlen; lia | discriminate]. }
+  assert (Hnth : nth_error sub (length sub - 1)%nat =
+                 Some (last_segment sub)).
+  { unfold last_segment. now apply nth_error_last. }
+  assert (Hinside : in_rect (rect_of sub) (init (last_segment sub))).
+  { apply (Hstrict (length sub - 1)%nat (last_segment sub)
+              (init (last_segment sub)) Hnth (onInit _)).
+    - intro Hzero. lia.
+    - intros _ Heq. exact (neq_init_term _ Heq). }
+  unfold in_rect, rect_of in Hinside; simpl in Hinside.
+  destruct Hinside as [[HxLo HxHi] [HyLo HyHi]].
+  split.
+  - rewrite Rmax_right in HxHi by lra. lra.
+  - split; intro Hglobal.
+    + rewrite Rmax_right in HyHi by lra. lra.
+    + rewrite Rmin_right in HyLo by lra. lra.
+Qed.
+
 (* [p] と同じ x にある sub 上の全ての点より、[p] が厳密に上にある。
    全称形にしておくと、sub 上への到達時には [q := p] で直ちに矛盾する。 *)
 Definition strictly_above_sub_at_x
@@ -316,11 +543,6 @@ Definition on_trace_above_sub (sub : list Segment) (p : Point) : Prop :=
     /\ onSegmentlist sub q0
     /\ fst p0 = fst q0
     /\ snd q0 < snd p0.
-
-(* x 方向の閉区間が交わる二つの端点長方形。 *)
-Definition segment_x_ranges_overlap (s t : Segment) : Prop :=
-  rx0 (rect_of [s]) <= rx1 (rect_of [t])
-  /\ rx0 (rect_of [t]) <= rx1 (rect_of [s]).
 
 (* 以下の三補題は分類には依存しないが、延長線と sub の比較で使う。 *)
 Lemma connected_x_monotone_endpoints :

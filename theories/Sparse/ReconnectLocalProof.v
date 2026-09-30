@@ -15,8 +15,8 @@ Lemma west_to_east_dc_shapes :
     dc ps1 ps2 ->
     fst (term seg1) < fst (init seg1) ->
     fst (init seg2) < fst (term seg2) ->
-    (embed (n, w, cc) seg1 \/ embed (s, w, cx) seg1)
-    /\ (embed (n, e, cx) seg2 \/ embed (s, e, cc) seg2).
+    (embed (n, w, cc) seg1 /\ embed (n, e, cx) seg2)
+    \/ (embed (s, w, cx) seg1 /\ embed (s, e, cc) seg2).
 Proof.
   intros seg1 seg2 ps1 ps2 Hemb1 Hemb2 Hdc Hwest Heast.
   destruct Hdc; destruct h.
@@ -27,9 +27,9 @@ Proof.
   - exfalso. pose proof (e_end_relation seg1 s cc Hemb1). lra.
   - exfalso. pose proof (w_end_relation seg2 n cc Hemb2). lra.
   - exfalso. pose proof (e_end_relation seg1 n cc Hemb1). lra.
-  - split; [now left | now left].
+  - left. now split.
   - exfalso. pose proof (e_end_relation seg1 s cx Hemb1). lra.
-  - split; [now right | now right].
+  - right. now split.
 Qed.
 
 Lemma east_to_west_dc_shapes :
@@ -39,8 +39,8 @@ Lemma east_to_west_dc_shapes :
     dc ps1 ps2 ->
     fst (init seg1) < fst (term seg1) ->
     fst (term seg2) < fst (init seg2) ->
-    (embed (n, e, cc) seg1 \/ embed (s, e, cx) seg1)
-    /\ (embed (n, w, cx) seg2 \/ embed (s, w, cc) seg2).
+    (embed (n, e, cc) seg1 /\ embed (n, w, cx) seg2)
+    \/ (embed (s, e, cx) seg1 /\ embed (s, w, cc) seg2).
 Proof.
   intros seg1 seg2 ps1 ps2 Hemb1 Hemb2 Hdc Heast Hwest.
   destruct Hdc; destruct h.
@@ -50,10 +50,51 @@ Proof.
   - exfalso. pose proof (w_end_relation seg1 n cx Hemb1). lra.
   - exfalso. pose proof (e_end_relation seg2 n cc Hemb2). lra.
   - exfalso. pose proof (w_end_relation seg1 s cc Hemb1). lra.
-  - split; [now left | now left].
+  - left. now split.
   - exfalso. pose proof (w_end_relation seg1 n cc Hemb1). lra.
-  - split; [now right | now right].
+  - right. now split.
   - exfalso. pose proof (w_end_relation seg1 s cx Hemb1). lra.
+Qed.
+
+(* x 方向を折り返して接続するとき、二セグメントの y 方向は一致する。 *)
+Lemma west_to_east_dc_vertical_order :
+  forall seg1 seg2 ps1 ps2,
+    embed ps1 seg1 -> embed ps2 seg2 -> dc ps1 ps2 ->
+    fst (term seg1) < fst (init seg1) ->
+    fst (init seg2) < fst (term seg2) ->
+    (snd (init seg2) < snd (term seg2) ->
+       snd (init seg1) < snd (term seg1)) /\
+    (snd (term seg2) < snd (init seg2) ->
+       snd (term seg1) < snd (init seg1)).
+Proof.
+  intros seg1 seg2 ps1 ps2 Hemb1 Hemb2 Hdc Hwest Heast.
+  destruct (west_to_east_dc_shapes
+              seg1 seg2 ps1 ps2 Hemb1 Hemb2 Hdc Hwest Heast)
+    as [[Hn1 Hn2] | [Hs1 Hs2]].
+  - split; intros; [exact (n_end_relation seg1 w cc Hn1) |].
+    exfalso. pose proof (n_end_relation seg2 e cx Hn2). lra.
+  - split; intros; [|exact (s_end_relation seg1 w cx Hs1)].
+    exfalso. pose proof (s_end_relation seg2 e cc Hs2). lra.
+Qed.
+
+Lemma east_to_west_dc_vertical_order :
+  forall seg1 seg2 ps1 ps2,
+    embed ps1 seg1 -> embed ps2 seg2 -> dc ps1 ps2 ->
+    fst (init seg1) < fst (term seg1) ->
+    fst (term seg2) < fst (init seg2) ->
+    (snd (init seg1) < snd (term seg1) ->
+       snd (init seg2) < snd (term seg2)) /\
+    (snd (term seg1) < snd (init seg1) ->
+       snd (term seg2) < snd (init seg2)).
+Proof.
+  intros seg1 seg2 ps1 ps2 Hemb1 Hemb2 Hdc Heast Hwest.
+  destruct (east_to_west_dc_shapes
+              seg1 seg2 ps1 ps2 Hemb1 Hemb2 Hdc Heast Hwest)
+    as [[Hn1 Hn2] | [Hs1 Hs2]].
+  - split; intros; [exact (n_end_relation seg2 w cx Hn2) |].
+    exfalso. pose proof (n_end_relation seg1 e cc Hn1). lra.
+  - split; intros; [|exact (s_end_relation seg2 w cc Hs2)].
+    exfalso. pose proof (s_end_relation seg1 e cx Hs1). lra.
 Qed.
 
 (* 埋め込み列を二つに分けた境界では、左右の末尾・先頭に対応する
@@ -649,49 +690,6 @@ Proof.
   f_equal. exact (Hc i a b Ha Hb).
 Qed.
 
-(* sub に隣接する l 末尾より下の端点は、分類移動後にもその旧長方形
-   より下に残る。隣接・非隣接の区別は不要である。 *)
-
-Lemma operated_endpoint_below_terminal_stays_below_from_spec :
-  forall l sub r h p,
-    @ClassificationSpec l sub r (classify l sub r) ->
-    0 <= h ->
-    l <> [] ->
-    ~ terminal_lid l ->
-    endpoint_of (l ++ sub ++ r) p ->
-    snd p < ry0 (rect_of [last_segment l]) ->
-    snd (operate_point l sub r h p) < ry0 (rect_of [last_segment l]).
-Proof.
-  intros l sub r h p Hspec Hh Hl HnotLid Hp Hbelow.
-  unfold operate_point.
-  pose proof (classified_below_terminal_not_up
-                l sub r Hspec Hl HnotLid p Hp Hbelow) as HnotUp.
-  pose proof (shift_not_up_nonincreasing
-                h (classify l sub r p) p Hh HnotUp).
-  lra.
-Qed.
-
-(* r 先頭についての双対。 *)
-
-Lemma operated_endpoint_below_initial_stays_below_from_spec :
-  forall l sub r h p,
-    @ClassificationSpec l sub r (classify l sub r) ->
-    0 <= h ->
-    r <> [] ->
-    ~ initial_lid r ->
-    endpoint_of (l ++ sub ++ r) p ->
-    snd p < ry0 (rect_of [hd_segment r]) ->
-    snd (operate_point l sub r h p) < ry0 (rect_of [hd_segment r]).
-Proof.
-  intros l sub r h p Hspec Hh Hr HnotLid Hp Hbelow.
-  unfold operate_point.
-  pose proof (classified_below_initial_not_up
-                l sub r Hspec Hr HnotLid p Hp Hbelow) as HnotUp.
-  pose proof (shift_not_up_nonincreasing
-                h (classify l sub r p) p Hh HnotUp).
-  lra.
-Qed.
-
 (* 十分大きい移動では、各セグメントの二端点の y 座標は一致しない。 *)
 Lemma operation_height_safe_from_spec :
   forall l sub r h s,
@@ -1141,10 +1139,21 @@ Proof.
 Qed.
 
 (* 端点間の分類順序により、旧長方形の軸方向の分離は移動後も保たれる。 *)
-Lemma operated_endpoint_rectangles_axis_separated_from_spec :
+Lemma operated_endpoint_rectangles_axis_separated_from_order :
   forall l sub r h i j s t s' t',
-    @ClassificationSpec l sub r (classify l sub r) ->
     0 < h ->
+    (forall pt ps,
+      segment_x_ranges_overlap t s ->
+      endpoint_of_seg t pt -> endpoint_of_seg s ps ->
+      snd pt < snd ps ->
+      snd (operate_point l sub r h pt) <
+      snd (operate_point l sub r h ps)) ->
+    (forall ps pt,
+      segment_x_ranges_overlap s t ->
+      endpoint_of_seg s ps -> endpoint_of_seg t pt ->
+      snd ps < snd pt ->
+      snd (operate_point l sub r h ps) <
+      snd (operate_point l sub r h pt)) ->
     nth_error (l ++ sub ++ r) i = Some s ->
     nth_error (l ++ sub ++ r) j = Some t ->
     (S i < j \/ S j < i)%nat ->
@@ -1152,35 +1161,11 @@ Lemma operated_endpoint_rectangles_axis_separated_from_spec :
     term s' = operate_point l sub r h (term s) ->
     init t' = operate_point l sub r h (init t) ->
     term t' = operate_point l sub r h (term t) ->
-    ~ onSegmentlist sub (init s) ->
-    ~ onSegmentlist sub (term s) ->
-    ~ onSegmentlist sub (init t) ->
-    ~ onSegmentlist sub (term t) ->
     endpoint_rectangles_axis_separated s t ->
     endpoint_rectangles_axis_separated s' t'.
 Proof.
-  intros l sub r h i j s t s' t' Hspec Hh
-    Hs Ht Hfar Hsinit Hsterm Htinit Htterm
-    HsinitNotSub HstermNotSub HtinitNotSub HttermNotSub Haxis.
-  assert (Horder :
-    forall i0 j0 u v pu pv,
-      nth_error (l ++ sub ++ r) i0 = Some u ->
-      nth_error (l ++ sub ++ r) j0 = Some v ->
-      (S i0 < j0 \/ S j0 < i0)%nat ->
-      segment_x_ranges_overlap u v ->
-      endpoint_of_seg u pu -> endpoint_of_seg v pv ->
-      ~ onSegmentlist sub pv ->
-      snd pu < snd pv ->
-      snd (operate_point l sub r h pu) <
-      snd (operate_point l sub r h pv)).
-  { intros i0 j0 u v pu pv Hu Hv Hfar0 Hoverlap Hpu Hpv HpvNotSub Hy.
-    unfold operate_point. eapply shift_preserves_strict_vertical_order;
-      [exact Hh | exact Hy |].
-    exact (classified_nonadjacent_endpoint_order
-             l sub r
-             Hspec
-             i0 j0 u v pu pv Hu Hv Hfar0 Hoverlap Hpu Hpv
-             HpvNotSub (Rlt_le _ _ Hy)). }
+  intros l sub r h i j s t s' t' Hh HorderTS HorderST
+    Hs Ht Hfar Hsinit Hsterm Htinit Htterm Haxis.
   unfold endpoint_rectangles_axis_separated in Haxis |- *.
   assert (Hhorizontal_or_overlap :
       rx1 (rect_of [t]) < rx0 (rect_of [s])
@@ -1226,22 +1211,10 @@ Proof.
     assert (Hoverlap' : segment_x_ranges_overlap t s).
     { unfold segment_x_ranges_overlap in *. tauto. }
     apply Rmax_lub_lt; apply Rmin_glb_lt.
-    * eapply (Horder j i t s (init t) (init s));
-        [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
-         now left | now left | exact HsinitNotSub |
-         apply Hold; now left].
-    * eapply (Horder j i t s (init t) (term s));
-        [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
-         now left | now right | exact HstermNotSub |
-         apply Hold; [now left | now right]].
-    * eapply (Horder j i t s (term t) (init s));
-        [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
-         now right | now left | exact HsinitNotSub |
-         apply Hold; [now right | now left]].
-    * eapply (Horder j i t s (term t) (term s));
-        [exact Ht | exact Hs | exact Hfar' | exact Hoverlap' |
-         now right | now right | exact HstermNotSub |
-         apply Hold; now right].
+    * eapply HorderTS; [exact Hoverlap' | now left | now left | apply Hold; now left].
+    * eapply HorderTS; [exact Hoverlap' | now left | now right | apply Hold; [now left | now right]].
+    * eapply HorderTS; [exact Hoverlap' | now right | now left | apply Hold; [now right | now left]].
+    * eapply HorderTS; [exact Hoverlap' | now right | now right | apply Hold; now right].
     + right; right; right.
     change (Rmax (snd (init s')) (snd (term s')) <
             Rmin (snd (init t')) (snd (term t'))).
@@ -1256,22 +1229,51 @@ Proof.
         pose proof (Rmin_l (snd (init t)) (snd (term t)));
         pose proof (Rmin_r (snd (init t)) (snd (term t))); lra. }
     apply Rmax_lub_lt; apply Rmin_glb_lt.
-    * eapply (Horder i j s t (init s) (init t));
-        [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
-         now left | now left | exact HtinitNotSub |
-         apply Hold; now left].
-    * eapply (Horder i j s t (init s) (term t));
-        [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
-         now left | now right | exact HttermNotSub |
-         apply Hold; [now left | now right]].
-    * eapply (Horder i j s t (term s) (init t));
-        [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
-         now right | now left | exact HtinitNotSub |
-         apply Hold; [now right | now left]].
-    * eapply (Horder i j s t (term s) (term t));
-        [exact Hs | exact Ht | exact Hfar | exact Hoverlap |
-         now right | now right | exact HttermNotSub |
-         apply Hold; now right].
+    * eapply HorderST; [exact Hoverlap | now left | now left | apply Hold; now left].
+    * eapply HorderST; [exact Hoverlap | now left | now right | apply Hold; [now left | now right]].
+    * eapply HorderST; [exact Hoverlap | now right | now left | apply Hold; [now right | now left]].
+    * eapply HorderST; [exact Hoverlap | now right | now right | apply Hold; now right].
+Qed.
+
+(* 蓋なしなら固定 sub 端点も同じ順序仕様の対象となる。 *)
+Lemma operated_endpoint_rectangles_axis_separated_no_lid :
+  forall l sub r h i j s t s' t',
+    @ClassificationSpec l sub r (classify l sub r) ->
+    ~ terminal_lid l sub r ->
+    ~ initial_lid l sub r ->
+    0 < h ->
+    nth_error (l ++ sub ++ r) i = Some s ->
+    nth_error (l ++ sub ++ r) j = Some t ->
+    (S i < j \/ S j < i)%nat ->
+    init s' = operate_point l sub r h (init s) ->
+    term s' = operate_point l sub r h (term s) ->
+    init t' = operate_point l sub r h (init t) ->
+    term t' = operate_point l sub r h (term t) ->
+    endpoint_rectangles_axis_separated s t ->
+    endpoint_rectangles_axis_separated s' t'.
+Proof.
+  intros l sub r h i j s t s' t' Hspec HnoTerminal HnoInitial Hh
+    Hs Ht Hfar Hsinit Hsterm Htinit Htterm Haxis.
+  eapply operated_endpoint_rectangles_axis_separated_from_order;
+    [exact Hh | | | exact Hs | exact Ht | exact Hfar |
+     exact Hsinit | exact Hsterm | exact Htinit | exact Htterm | exact Haxis].
+  - intros pt ps Hover Hpt Hps Hy.
+    assert (Hfar' : (S j < i \/ S i < j)%nat) by tauto.
+    unfold operate_point.
+    eapply shift_preserves_strict_vertical_order;
+      [exact Hh | exact Hy |].
+    exact (classified_nonadjacent_endpoint_order
+             l sub r Hspec HnoTerminal HnoInitial
+             j i t s pt ps Ht Hs Hfar' Hover Hpt Hps
+             (Rlt_le _ _ Hy)).
+  - intros ps pt Hover Hps Hpt Hy.
+    unfold operate_point.
+    eapply shift_preserves_strict_vertical_order;
+      [exact Hh | exact Hy |].
+    exact (classified_nonadjacent_endpoint_order
+             l sub r Hspec HnoTerminal HnoInitial
+             i j s t ps pt Hs Ht Hfar Hover Hps Hpt
+             (Rlt_le _ _ Hy)).
 Qed.
 
 (* 延長線点と同じ x の旧セグメント点が与える分類順序から，

@@ -772,7 +772,7 @@ Proof.
   pose proof (prepared_sub_strictly_inside old_l sub old_r Hgeometry)
     as Hinside.
   pose proof (prepared_sub_x_order old_l sub old_r Hgeometry) as Hx.
-  destruct (embed_sparsely_prepared
+  destruct (embed_sparsely_if_both_lids_removable
               ds1 [Plus; Plus; Minus; Minus] ds2
               old_l sub old_r Hprepared)
     as [l [r [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]].
@@ -824,7 +824,7 @@ Proof.
   pose proof (prepared_sub_strictly_inside old_l sub old_r Hgeometry)
     as Hinside.
   pose proof (prepared_sub_x_order old_l sub old_r Hgeometry) as Hx.
-  destruct (embed_sparsely_prepared
+  destruct (embed_sparsely_if_both_lids_removable
               ds1 [Minus; Minus; Plus; Plus] ds2
               old_l sub old_r Hprepared)
     as [l [r [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]].
@@ -1262,9 +1262,11 @@ Lemma AdmissibleDirs_r2_Plus_inv: forall l r,
 Proof.
 	intros l r admds. 
 	(* 疎な開埋め込みをとる *)
+	destruct (AdmissibleDirs_has_prepared_PM l r admds)
+		as [old_l [ls2 [old_r Hprepared]]].
 	pose proof (embed_sparsely_if_both_lids_removable
-		l [Plus; Minus] r (AdmissibleDirs_has_prepared_PM l r admds))
-		as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [_ [Hopen Hsparse]]]]]]]]];
+		l [Plus; Minus] r old_l ls2 old_r Hprepared)
+		as [ls1 [ls3 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [_ [Hopen Hsparse]]]]]]]];
 	simpl in *.
 	assert (Hdir: hd Plus (l ++ Plus :: Plus :: Minus :: Minus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
@@ -1306,9 +1308,11 @@ Lemma AdmissibleDirs_r2_Minus_inv: forall l r,
 Proof.
 	intros l r admds.
 	(* 疎な開埋め込みをとる *)
+	destruct (AdmissibleDirs_has_prepared_MP l r admds)
+		as [old_l [ls2 [old_r Hprepared]]].
 	pose proof (embed_sparsely_if_both_lids_removable
-		l [Minus; Plus] r (AdmissibleDirs_has_prepared_MP l r admds))
-		as [ls1 [ls3 [ls2 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [_ [Hopen Hsparse]]]]]]]]];
+		l [Minus; Plus] r old_l ls2 old_r Hprepared)
+		as [ls1 [ls3 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [_ [Hopen Hsparse]]]]]]]];
 	simpl in *.
 	assert (Hdir: hd Minus (l ++ Minus :: Minus :: Plus :: Plus :: r) = orn (hd_scurve sc)). {
 		unfold hd_scurve. unfold scurve_to_direction in Hdir_sc.
