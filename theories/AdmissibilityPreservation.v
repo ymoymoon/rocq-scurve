@@ -12,25 +12,7 @@ Import ListNotations.
 From Stdlib Require Import Lra.
 From Stdlib Require Import Lia.
 
-(* PrimitiveSegment の有限回転を用いて、同じ向き列をもつ scurve 間で
-   単方向性を移すための補題群。幾何的な sparse 証明には依存しない。 *)
-Local Definition quarter_turn_primitive (p : PrimitiveSegment) : PrimitiveSegment :=
-  match p with
-  | (n, e, cx) => (n, w, cc) | (n, e, cc) => (n, w, cx)
-  | (n, w, cx) => (s, w, cx) | (n, w, cc) => (s, w, cc)
-  | (s, e, cx) => (n, e, cx) | (s, e, cc) => (n, e, cc)
-  | (s, w, cx) => (s, e, cc) | (s, w, cc) => (s, e, cx)
-  end.
-
-Local Definition rotate_primitive (g : Rot) (p : PrimitiveSegment) : PrimitiveSegment :=
-  match g with
-  | R0 => p
-  | R90 => quarter_turn_primitive p
-  | R180 => quarter_turn_primitive (quarter_turn_primitive p)
-  | R270 => quarter_turn_primitive
-              (quarter_turn_primitive (quarter_turn_primitive p))
-  end.
-
+(* 単方向性だけに必要な、PrimitiveSegment 回転後の方向を読む補題群。 *)
 Local Definition quarter_turn_dir (d : Dir) : Dir :=
   match d with
   | Hor e => Ver n | Hor w => Ver s | Ver n => Hor w | Ver s => Hor e
@@ -48,81 +30,6 @@ Local Definition follows_dir (d : Dir) (p : PrimitiveSegment) : Prop :=
   | Ver v => V_of p = v
   | Hor h => H_of p = h
   end.
-
-Lemma rotate_primitive_orn : forall g p,
-  orn (rotate_primitive g p) = orn p.
-Proof.
-  intros g [[v h] c]. destruct g, v, h, c; reflexivity.
-Qed.
-
-Lemma rotate_primitive_dc : forall g p q,
-  dc p q -> dc (rotate_primitive g p) (rotate_primitive g q).
-Proof.
-  intros g [[v1 h1] c1] [[v2 h2] c2] Hdc.
-  destruct v1, h1, c1, v2, h2, c2;
-    inversion Hdc; subst; destruct g; simpl; constructor.
-Qed.
-
-Lemma dc_successor_of_direction_unique : forall p q1 q2,
-  dc p q1 -> dc p q2 -> orn q1 = orn q2 -> q1 = q2.
-Proof.
-  intros [[v h] c] [[v1 h1] c1] [[v2 h2] c2] H1 H2 Hdir.
-  destruct v, h, c, v1, h1, c1, v2, h2, c2;
-    inversion H1; inversion H2; subst; simpl in Hdir;
-    try discriminate; reflexivity.
-Qed.
-
-Lemma same_orn_has_primitive_rotation : forall p q,
-  orn p = orn q -> exists g, q = rotate_primitive g p.
-Proof.
-  intros [[v1 h1] c1] [[v2 h2] c2].
-  destruct v1, h1, c1, v2, h2, c2; simpl; intros H;
-    try discriminate;
-    first [exists R0; reflexivity | exists R90; reflexivity
-          | exists R180; reflexivity | exists R270; reflexivity].
-Qed.
-
-Lemma is_scurve_tail : forall p ps,
-  is_scurve (p :: ps) -> is_scurve ps.
-Proof.
-  intros p ps H. inversion H; assumption.
-Qed.
-
-Lemma same_direction_scurve_lists_rotate : forall g p q ps qs,
-  is_scurve (p :: ps) ->
-  is_scurve (q :: qs) ->
-  map orn (p :: ps) = map orn (q :: qs) ->
-  q = rotate_primitive g p ->
-  q :: qs = map (rotate_primitive g) (p :: ps).
-Proof.
-  intros g p q ps. revert g p q.
-  induction ps as [|p' ps IH]; intros g p q qs Hps Hqs Hdir Hhead.
-  - destruct qs as [|q' qs].
-    + simpl. now rewrite Hhead.
-    + simpl in Hdir. injection Hdir as _ Htail. discriminate Htail.
-  - destruct qs as [|q' qs].
-    + simpl in Hdir. injection Hdir as _ Htail. discriminate Htail.
-    + assert (HtailDir : map orn (p' :: ps) = map orn (q' :: qs))
-        by exact (f_equal (@tl Direction) Hdir).
-      assert (HnextDir : orn p' = orn q').
-      { pose proof (f_equal (hd Plus) HtailDir) as H. simpl in H. exact H. }
-      assert (Hdc1 : dc p p').
-      { eapply is_scurve_adjacent_dc with (ps := p :: p' :: ps) (i := 0%nat);
-          eauto; reflexivity. }
-      assert (Hdc2 : dc q q').
-      { eapply is_scurve_adjacent_dc with (ps := q :: q' :: qs) (i := 0%nat);
-          eauto; reflexivity. }
-      assert (Hnext : q' = rotate_primitive g p').
-      { apply (dc_successor_of_direction_unique q q' (rotate_primitive g p'));
-          [exact Hdc2 | |].
-        - rewrite Hhead. now apply rotate_primitive_dc.
-        - rewrite rotate_primitive_orn. symmetry. exact HnextDir. }
-      assert (HtailCurve1 : is_scurve (p' :: ps)) by now apply is_scurve_tail in Hps.
-      assert (HtailCurve2 : is_scurve (q' :: qs)) by now apply is_scurve_tail in Hqs.
-      assert (HtailEq : q' :: qs = map (rotate_primitive g) (p' :: ps))
-        by (eapply IH; eauto).
-      simpl. rewrite Hhead. now f_equal.
-Qed.
 
 Lemma follows_dir_rotate : forall g d p,
   follows_dir d p -> follows_dir (rotate_dir g d) (rotate_primitive g p).

@@ -5,6 +5,8 @@ Require Import PrimitiveSegment.
 Require Import Reduction.
 Require Import Embed.
 Require Import Admissible.
+Require Import Stdlib.Logic.ProofIrrelevance.
+From Stdlib Require Import Lra.
 Import ListNotations.
 Open Scope R_scope.
 
@@ -27,11 +29,6 @@ Definition same_extention_head (ls1 ls2 : list Segment) :=
 
 Definition same_extention_last (ls1 ls2 : list Segment) :=
   forall p, onLast_extend ls1 p <-> onLast_extend ls2 p.
-
-Definition x_monotone_seg (s : Segment) : Prop := init_x s < term_x s.
-
-Definition x_monotone_segs (ls : list Segment) : Prop :=
-  forall s, In s ls -> x_monotone_seg s.
 
 Definition embed_listDir (ds : list Direction) (ls : list Segment) : Prop :=
   exists sc : scurve,
@@ -157,13 +154,58 @@ Qed.
 (*  scurve（PrimitiveSegment 列）レベルでの回転                       *)
 (* ----------------------------------------------------------------- *)
 
-Definition rot_scurve (g : Rot) (sc : scurve) : scurve.
-Admitted. (*TODO*)
+Definition quarter_turn_primitive (p : PrimitiveSegment) : PrimitiveSegment :=
+  match p with
+  | (n, e, cx) => (n, w, cc) | (n, e, cc) => (n, w, cx)
+  | (n, w, cx) => (s, w, cx) | (n, w, cc) => (s, w, cc)
+  | (s, e, cx) => (n, e, cx) | (s, e, cc) => (n, e, cc)
+  | (s, w, cx) => (s, e, cc) | (s, w, cc) => (s, e, cx)
+  end.
+
+Definition rotate_primitive (g : Rot) (p : PrimitiveSegment) : PrimitiveSegment :=
+  match g with
+  | R0 => p | R90 => quarter_turn_primitive p
+  | R180 => quarter_turn_primitive (quarter_turn_primitive p)
+  | R270 => quarter_turn_primitive
+              (quarter_turn_primitive (quarter_turn_primitive p))
+  end.
+
+Lemma rotate_primitive_orn : forall g p,
+  orn (rotate_primitive g p) = orn p.
+Proof.
+  intros g [[v h] c]. destruct g, v, h, c; reflexivity.
+Qed.
+
+Lemma rotate_primitive_dc : forall g p q,
+  dc p q -> dc (rotate_primitive g p) (rotate_primitive g q).
+Proof.
+  intros g [[v1 h1] c1] [[v2 h2] c2] Hdc.
+  destruct v1, h1, c1, v2, h2, c2;
+    inversion Hdc; subst; destruct g; simpl; constructor.
+Qed.
+
+Lemma rotate_scurve_list : forall g ps,
+  is_scurve ps -> is_scurve (map (rotate_primitive g) ps).
+Proof.
+  intros g ps Hcurve. induction Hcurve as [|p ps Hps IH Hdc]; simpl.
+  - constructor.
+  - constructor; [exact IH |].
+    destruct Hdc as [p | p q qs Hlink]; simpl.
+    + constructor.
+    + constructor. now apply rotate_primitive_dc.
+Qed.
+
+Definition rot_scurve (g : Rot) (sc : scurve) : scurve :=
+  exist _ (map (rotate_primitive g) (proj1_sig sc))
+    (rotate_scurve_list g (proj1_sig sc) (proj2_sig sc)).
 
 (** 回転は向き（Plus/Minus）の列を変えない。 *)
 Lemma rot_scurve_direction : forall g sc,
   scurve_to_direction (rot_scurve g sc) = scurve_to_direction sc.
-Admitted.
+Proof.
+  intros g sc. unfold scurve_to_direction, rot_scurve. simpl.
+  rewrite map_map. apply map_ext. intro p. apply rotate_primitive_orn.
+Qed.
 
 Axiom rot_scurve_embed : forall g sc ls,
   embed_scurve sc ls <-> embed_scurve (rot_scurve g sc) (rot_segs g ls).
@@ -178,10 +220,76 @@ Proof.
   - apply (rot_scurve_embed g sc ls). exact Hembed.
 Qed.
 
-(* 回転後に自己交差があれば、逆回転により元の列にも自己交差がある。 *)
+Lemma pos_of_in_range_for_rotation : forall ls t,
+  ls <> [] -> in_range ls (pos_of ls t).
+Proof.
+  intros ls t Hne.
+  destruct (extend_repr ls t Hne) as [s [Hnth _]].
+  unfold in_range, pos_of; simpl.
+  split; [apply (proj1 (nth_error_Some ls (extend_index ls t)));
+          rewrite Hnth; discriminate |].
+  destruct (extend_param_region ls t Hne) as [Hmid | [[Hi Hle] | [Hi Hgt]]].
+  - split; [right | right]; lra.
+  - split; [left; exact Hi | right; lra].
+  - split; [right; lra | left; exact Hi].
+Qed.
+
+Lemma rotated_extend_at_same_position : forall g ls tr to,
+  ls <> [] ->
+  pos_of (rot_segs g ls) tr = pos_of ls to ->
+  extend (rot_segs g ls) tr = rot_pt g (extend ls to).
+Proof.
+  intros g ls tr to Hne Hpos.
+  assert (Hrotne : rot_segs g ls <> []).
+  { now apply rot_segs_nonnil. }
+  destruct (extend_repr (rot_segs g ls) tr Hrotne) as [sr [Hnr Her]].
+  destruct (extend_repr ls to Hne) as [so [Hno Heo]].
+  pose proof (f_equal fst Hpos) as Hi.
+  pose proof (f_equal snd Hpos) as Hu.
+  unfold pos_of in Hi, Hu. simpl in Hi, Hu.
+  rewrite Hi in Hnr. unfold rot_segs in Hnr.
+  rewrite nth_error_map, Hno in Hnr. injection Hnr as Hseg. subst sr.
+  rewrite Her, Heo, Hu. apply rot_seg_point.
+Qed.
+
+(* 回転後に自己交差があれば、対応する二つの局所位置が元の列でも衝突する。 *)
 Lemma rot_close :
   forall g ls, close (rot_segs g ls) -> close ls.
-Admitted.
+Proof.
+  intros g ls Hclose. destruct ls as [|s ls].
+  - exact Hclose.
+  - set (whole := s :: ls).
+    assert (Hne : whole <> []) by discriminate.
+    assert (Hrotne : rot_segs g whole <> []) by now apply rot_segs_nonnil.
+    unfold close, close_extended in Hclose.
+    destruct Hclose as [tr1 [tr2 [Htr Heq]]].
+    set (q1 := pos_of (rot_segs g whole) tr1).
+    set (q2 := pos_of (rot_segs g whole) tr2).
+    assert (Hr1 : in_range whole q1).
+    { unfold q1. pose proof (pos_of_in_range_for_rotation
+                                (rot_segs g whole) tr1 Hrotne) as H.
+      unfold in_range, rot_segs in *. rewrite length_map in H. exact H. }
+    assert (Hr2 : in_range whole q2).
+    { unfold q2. pose proof (pos_of_in_range_for_rotation
+                                (rot_segs g whole) tr2 Hrotne) as H.
+      unfold in_range, rot_segs in *. rewrite length_map in H. exact H. }
+    destruct (extend_onto whole q1 Hne Hr1) as [to1 Hto1].
+    destruct (extend_onto whole q2 Hne Hr2) as [to2 Hto2].
+    unfold close, close_extended. exists to1, to2. split.
+    + intro Hsame. apply Htr.
+      eapply extend_same_piece_injective; [exact Hrotne | |].
+      * change (fst q1 = fst q2). rewrite <- Hto1, <- Hto2, Hsame. reflexivity.
+      * change (snd q1 = snd q2). rewrite <- Hto1, <- Hto2, Hsame. reflexivity.
+    + pose proof (rotated_extend_at_same_position
+                    g whole tr1 to1 Hne (eq_sym Hto1)) as Hpoint1.
+      pose proof (rotated_extend_at_same_position
+                    g whole tr2 to2 Hne (eq_sym Hto2)) as Hpoint2.
+      change (extend (rot_segs g whole) tr1 =
+              extend (rot_segs g whole) tr2) in Heq.
+      rewrite Hpoint1, Hpoint2 in Heq.
+      apply (f_equal (rot_pt (rot_inv g))) in Heq.
+      now rewrite !rot_pt_inv in Heq.
+Qed.
 
 Lemma rot_open :
   forall g ls, ~ close ls -> ~ close (rot_segs g ls).
@@ -202,24 +310,91 @@ Qed.
 
 (** 向き列（Plus/Minus の列）が一致する2つの scurve は，一方をもう一方の
    回転として得られる。 *)
+Lemma dc_successor_of_direction_unique : forall p q1 q2,
+  dc p q1 -> dc p q2 -> orn q1 = orn q2 -> q1 = q2.
+Proof.
+  intros [[v h] c] [[v1 h1] c1] [[v2 h2] c2] H1 H2 Hdir.
+  destruct v, h, c, v1, h1, c1, v2, h2, c2;
+    inversion H1; inversion H2; subst; simpl in Hdir;
+    try discriminate; reflexivity.
+Qed.
+
+Lemma same_orn_has_primitive_rotation : forall p q,
+  orn p = orn q -> exists g, q = rotate_primitive g p.
+Proof.
+  intros [[v1 h1] c1] [[v2 h2] c2].
+  destruct v1, h1, c1, v2, h2, c2; simpl; intros H;
+    try discriminate;
+    first [exists R0; reflexivity | exists R90; reflexivity
+          | exists R180; reflexivity | exists R270; reflexivity].
+Qed.
+
+Lemma is_scurve_tail : forall p ps,
+  is_scurve (p :: ps) -> is_scurve ps.
+Proof. intros p ps H. inversion H; assumption. Qed.
+
+Lemma is_scurve_head_dc : forall p q qs,
+  is_scurve (p :: q :: qs) -> dc p q.
+Proof.
+  intros p q qs H. inversion H as [|x xs Htail Hdc]; subst.
+  inversion Hdc; subst; assumption.
+Qed.
+
+Lemma same_direction_scurve_lists_rotate : forall g p q ps qs,
+  is_scurve (p :: ps) ->
+  is_scurve (q :: qs) ->
+  map orn (p :: ps) = map orn (q :: qs) ->
+  q = rotate_primitive g p ->
+  q :: qs = map (rotate_primitive g) (p :: ps).
+Proof.
+  intros g p q ps. revert g p q.
+  induction ps as [|p' ps IH]; intros g p q qs Hps Hqs Hdir Hhead.
+  - destruct qs as [|q' qs].
+    + simpl. now rewrite Hhead.
+    + simpl in Hdir. injection Hdir as _ Htail. discriminate Htail.
+  - destruct qs as [|q' qs].
+    + simpl in Hdir. injection Hdir as _ Htail. discriminate Htail.
+    + assert (HtailDir : map orn (p' :: ps) = map orn (q' :: qs))
+        by exact (f_equal (@tl Direction) Hdir).
+      assert (HnextDir : orn p' = orn q').
+      { pose proof (f_equal (hd Plus) HtailDir) as H. simpl in H. exact H. }
+      assert (Hdc1 : dc p p') by now apply is_scurve_head_dc with (qs := ps).
+      assert (Hdc2 : dc q q') by now apply is_scurve_head_dc with (qs := qs).
+      assert (Hnext : q' = rotate_primitive g p').
+      { apply (dc_successor_of_direction_unique q q' (rotate_primitive g p'));
+          [exact Hdc2 | |].
+        - rewrite Hhead. now apply rotate_primitive_dc.
+        - rewrite rotate_primitive_orn. symmetry. exact HnextDir. }
+      assert (HtailCurve1 : is_scurve (p' :: ps)) by now apply is_scurve_tail in Hps.
+      assert (HtailCurve2 : is_scurve (q' :: qs)) by now apply is_scurve_tail in Hqs.
+      assert (HtailEq : q' :: qs = map (rotate_primitive g) (p' :: ps))
+        by (eapply IH; eauto).
+      simpl. rewrite Hhead. now f_equal.
+Qed.
+
+Lemma scurve_ext : forall sc1 sc2 : scurve,
+  proj1_sig sc1 = proj1_sig sc2 -> sc1 = sc2.
+Proof.
+  intros [xs Hxs] [ys Hys] Heq. simpl in Heq. subst ys.
+  f_equal. apply proof_irrelevance.
+Qed.
+
 Lemma rot_scurve_of_same_direction :
   forall sc ps,
     scurve_to_direction sc = scurve_to_direction ps ->
     exists g, ps = rot_scurve g sc.
-Admitted.
-
-(* 単方向な埋め込みは、90 度単位の回転で x 正方向へ単調にできる。 *)
-Lemma one_way_rot_exists :
-  forall ls, is_one_way_embedding ls ->
-    exists g : Rot, x_monotone_segs (rot_segs g ls).
-Admitted.
-
-Lemma x_monotone_embed_is_one_way_listDir :
-  forall ds ls,
-    embed_listDir ds ls ->
-    x_monotone_segs ls ->
-    is_one_way_listDir ds.
-Admitted.
+Proof.
+  intros [xs Hxs] [ys Hys] Hdir.
+  unfold scurve_to_direction in Hdir. simpl in Hdir.
+  destruct xs as [|p xs], ys as [|q ys]; try discriminate.
+  - exists R0. apply scurve_ext. reflexivity.
+  - assert (Hfirst : orn p = orn q) by exact (f_equal (hd Plus) Hdir).
+    destruct (same_orn_has_primitive_rotation p q Hfirst) as [g Hg].
+    exists g. apply scurve_ext. simpl.
+    pose proof (same_direction_scurve_lists_rotate
+                  g p q xs ys Hxs Hys Hdir Hg) as Hlist.
+    exact Hlist.
+Qed.
 
 
 (* ----------------------------------------------------------------- *)

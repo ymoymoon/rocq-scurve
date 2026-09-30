@@ -6,64 +6,6 @@ From Stdlib Require Import Lra.
 From Stdlib Require Import Lia.
 Open Scope R_scope.
 
-(* 一括公理ではなく、上で分離した幾何補題から仕様を組み立てる。 *)
-Lemma classify_spec :
-  forall l sub r,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
-    ClassificationSpec l sub r.
-Proof.
-  intros l sub r Hne Hconn Hmono Hsparse Hwhole. constructor.
-  - now apply classified_sub_fixed_from_construction.
-  - now apply classified_segment_endpoints_monotone_from_construction.
-  - now apply classified_segment_at_sub_x_from_construction.
-  - now apply classified_head_extension_at_sub_x_from_construction.
-  - now apply classified_last_extension_at_sub_x_from_construction.
-  - now apply classified_head_last_extension_order_from_construction.
-  - now apply classified_head_segment_crossing_order_from_construction.
-  - now apply classified_last_segment_crossing_order_from_construction.
-  - now apply classified_head_slope_case_from_construction.
-  - now apply classified_last_slope_case_from_construction.
-  - now apply classified_nonadjacent_endpoint_order_no_lid_from_construction.
-  - intros h Hh Hl.
-    eapply classified_head_init_slope_reconnectable_from_construction; eauto.
-  - intros h Hh Hr.
-    eapply classified_last_term_slope_reconnectable_from_construction; eauto.
-Qed.
-
-(* 埋め込み証人を受け取る再接続側の呼出形。連結性は証人から復元し、
-   現行の境界分類に対する [classify_spec] へ渡す。 *)
-Lemma classify_spec_from_embedding :
-  forall l sub r,
-    sub <> [] ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
-    ClassificationSpec l sub r.
-Proof.
-  intros l sub r Hne Hmono Hsparse [ds Hembed] Hext.
-  assert (Hwhole : connected (l ++ sub ++ r)).
-  { now apply (embed_listDir_connected ds (l ++ sub ++ r)). }
-  assert (Hsub : connected sub).
-  { apply connected_middle with (l := l) (r := r). exact Hwhole. }
-  now apply (classify_spec l sub r Hne Hsub Hmono Hsparse Hwhole).
-Qed.
-
-(* prepared 幾何では、patch の構成に固有の詳細を外へ出さずに
-   全域 sparse 用の強い分類仕様を得る。 *)
-Lemma classify_spec_prepared :
-  forall l sub r,
-    PreparedGeometry l sub r ->
-    sparse_embedding (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
-    ClassificationSpec l sub r.
-Admitted.
-
 (* 同じ x 上の具体的な分類単調性から、異なる領域の上下順序を逆に読む。 *)
 Lemma classified_vertical_order :
   forall l sub r p q,
@@ -78,7 +20,7 @@ Proof.
     left. f_equal. destruct p as [xp yp], q as [xq yq].
     simpl in Hx, Heq |- *. f_equal; lra.
   - exfalso. apply (region_above_not_reverse _ _ Habove).
-    eapply classify_same_x_monotone; eauto.
+    eapply classify_vertical_order; eauto.
 Qed.
 
 Lemma shift_preserves_strict_vertical_order :
@@ -193,32 +135,56 @@ Qed.
 
 Lemma classify_sub_endpoint :
   forall l sub r p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
+    ClassificationSpec l sub r ->
     endpoint_of sub p ->
     classify l sub r p = RegFix.
 Proof.
-  intros l sub r p Hne Hconn Hmono Hsparse Hwhole Hend.
+  intros l sub r p Hspec Hend.
   exact (classified_sub_fixed
            l sub r
-           (classify_spec l sub r Hne Hconn Hmono Hsparse Hwhole)
+           Hspec
            p (endpoint_of_onSegmentlist sub p Hend)).
 Qed.
 
 Lemma operate_sub_endpoint :
   forall l sub r h p,
-    sub <> [] ->
-    connected sub ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    connected (l ++ sub ++ r) ->
+    ClassificationSpec l sub r ->
     endpoint_of sub p ->
     operate_point l sub r h p = p.
 Proof.
-  intros l sub r h p Hne Hconn Hmono Hsparse Hwhole Hend.
+  intros l sub r h p Hspec Hend.
   apply operate_point_RegFix.
-  now apply classify_sub_endpoint.
+  now apply (classify_sub_endpoint l sub r p Hspec Hend).
+Qed.
+
+(* prepared 幾何から、具体的な patch 分類が全域 sparse 再接続に必要な
+   仕様をすべて満たすこと。Correctness 層の唯一の外部仮定である。 *)
+Lemma classify_spec :
+  forall l sub r,
+    PreparedGeometry l sub r ->
+    sparse_embedding (l ++ sub ++ r) ->
+    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
+    extensions_disjoint (l ++ sub ++ r) ->
+    ClassificationSpec l sub r.
+Proof.
+  intros l sub r Hgeometry Hsparse [ds Hembed] Hext.
+  assert (Hwhole : connected (l ++ sub ++ r)).
+  { now apply (embed_listDir_connected ds (l ++ sub ++ r)). }
+  constructor.
+  - now apply classified_sub_fixed_from_construction.
+  - now apply classified_segment_endpoints_monotone_from_construction.
+  - now apply classified_segment_at_sub_x_from_construction.
+  - now apply classified_head_extension_at_sub_x_from_construction.
+  - now apply classified_last_extension_at_sub_x_from_construction.
+  - now apply classified_head_last_extension_order_from_construction.
+  - now apply classified_head_segment_crossing_order_from_construction.
+  - now apply classified_last_segment_crossing_order_from_construction.
+  - now apply classified_head_slope_case_from_construction.
+  - now apply classified_last_slope_case_from_construction.
+  - intros Hterminal Hinitial.
+    now apply classified_nonadjacent_endpoint_order_no_lid_from_construction.
+  - intros h Hh Hl.
+    eapply classified_head_init_slope_reconnectable_from_construction; eauto.
+  - intros h Hh Hr.
+    eapply classified_last_term_slope_reconnectable_from_construction; eauto.
 Qed.

@@ -509,7 +509,7 @@ Qed.
 
 (* 準備済み埋め込みからの最終結論。 *)
 
-(* 選んだ同一の分割埋め込みが、全域疎性と非 x 単調の作業条件を満たす。 *)
+(* 選んだ同一の分割埋め込みが、全域疎性と分類に必要な prepared 幾何を満たす。 *)
 Record PreparedSparseEmbedding
     (ds1 sub_ds ds2 : list Direction)
     (l sub r : list Segment) : Prop := {
@@ -650,5 +650,5 @@ Proof.
   intro Hprepared.
   eapply embed_sparsely_prepared_from_spec; [exact Hprepared |].
   destruct Hprepared as [_ _ _ Hwhole Hsparse Hext Hgeometry].
-  eapply classify_spec_prepared; eauto.
+  eapply classify_spec; eauto.
 Qed.
