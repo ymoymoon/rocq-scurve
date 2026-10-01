@@ -681,13 +681,40 @@ Lemma AdmissibleDirs_has_sparse_embedding :
       /\ extensions_disjoint ls.
 Admitted.
 
-(* 存在は任意の疎な埋め込みの回転ではなく、++-- 用に証人を選ぶ。
-   +-+ は片側三角形の局所疎性が必要なので、ここでは扱わない。 *)
+(* 既存の疎な埋め込みの存在から ++-- 用の prepared 証人を選び直す。
+   任意の疎な証人そのものを回転・変形できるとは主張しない。 *)
+Lemma sparse_PPMM_can_be_prepared :
+  forall ds1 ds2,
+    AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) ->
+    (exists ls,
+      embed_listDir (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) ls
+      /\ sparse_embedding ls
+      /\ extensions_disjoint ls) ->
+    exists l sub r,
+      PreparedSparseEmbedding ds1 [Plus; Plus; Minus; Minus] ds2 l sub r.
+Admitted.
+
 Lemma AdmissibleDirs_has_prepared_PPMM :
   forall ds1 ds2,
     AdmissibleDirs (ds1 ++ [Plus; Plus; Minus; Minus] ++ ds2) ->
     exists l sub r,
       PreparedSparseEmbedding ds1 [Plus; Plus; Minus; Minus] ds2 l sub r.
+Proof.
+  intros ds1 ds2 Hadm.
+  eapply sparse_PPMM_can_be_prepared; [exact Hadm |].
+  exact (AdmissibleDirs_has_sparse_embedding _ Hadm).
+Qed.
+
+(* --++ についても、疎な証人の存在と prepared 証人の選択を分ける。 *)
+Lemma sparse_MMPP_can_be_prepared :
+  forall ds1 ds2,
+    AdmissibleDirs (ds1 ++ [Minus; Minus; Plus; Plus] ++ ds2) ->
+    (exists ls,
+      embed_listDir (ds1 ++ [Minus; Minus; Plus; Plus] ++ ds2) ls
+      /\ sparse_embedding ls
+      /\ extensions_disjoint ls) ->
+    exists l sub r,
+      PreparedSparseEmbedding ds1 [Minus; Minus; Plus; Plus] ds2 l sub r.
 Admitted.
 
 Lemma AdmissibleDirs_has_prepared_MMPP :
@@ -695,7 +722,11 @@ Lemma AdmissibleDirs_has_prepared_MMPP :
     AdmissibleDirs (ds1 ++ [Minus; Minus; Plus; Plus] ++ ds2) ->
     exists l sub r,
       PreparedSparseEmbedding ds1 [Minus; Minus; Plus; Plus] ds2 l sub r.
-Admitted.
+Proof.
+  intros ds1 ds2 Hadm.
+  eapply sparse_MMPP_can_be_prepared; [exact Hadm |].
+  exact (AdmissibleDirs_has_sparse_embedding _ Hadm).
+Qed.
 
 (* 二方向部分列で両側の蓋を避けられる初期埋め込みの選択。
    全域 sparse 性と prepared 幾何を同じ証人について要求する。 *)
