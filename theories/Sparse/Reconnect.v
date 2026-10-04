@@ -86,15 +86,3 @@ Definition reconnect_segs
 Definition reconnect_whole
   (l sub r : list Segment) (h : R) : list Segment :=
   reconnect_segs l sub r h l ++ sub ++ reconnect_segs l sub r h r.
-
-Definition reconnects_after
-    (l sub r : list Segment) (h : R) (s s' : Segment) : Prop :=
-  init s' = operate_point l sub r h (init s)
-  /\ term s' = operate_point l sub r h (term s)
-  /\ orn_seg s' = orn_seg s.
-
-(* 左右の各セグメントを、位置を保って再接続した対応。 *)
-Definition reconnects_list_after
-    (l sub r : list Segment) (h : R)
-    (old new : list Segment) : Prop :=
-  Forall2 (reconnects_after l sub r h) old new.
