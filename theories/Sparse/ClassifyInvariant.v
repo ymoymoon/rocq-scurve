@@ -887,11 +887,9 @@ Proof.
       * left. split.
         -- intros Hnil. subst before. simpl in Hlen. lia.
         -- unfold onHead_extend_strict. exists t.
-           split; [exact HtStrict |].
-           change (point (hd_segment (before ++ seg :: after)) t = q).
-           rewrite <- Hsplit. exact Htq.
+           split; [exact HtStrict | exact Htq].
       * destruct Hq as [-> | ->];
-          apply segment_in_rect_or_endpoints; [apply onInit | apply onTerm].
+          apply segment_in_endpoint_triangle; [apply onInit | apply onTerm].
   - (* q は先頭セグメント本体上にある。 *)
     assert (Ht0 : 0 <= t) by lra.
     assert (HqOnHead : onSegment (hd_segment whole) q).
@@ -945,8 +943,8 @@ Proof.
            destruct (context_sparse l sub r Hctx before seg after Hsplit)
              as [_ Hrect].
            apply (Hrect (hd_segment whole) q HinHead).
-           ++ now apply segment_in_rect_or_endpoints.
-           ++ rewrite HqInit. apply segment_in_rect_or_endpoints, onInit.
+           ++ now apply segment_in_endpoint_triangle.
+           ++ rewrite HqInit. apply segment_in_endpoint_triangle, onInit.
       * (* 後続セグメントの終点が先頭本体へ戻ることはない。 *)
         eapply (later_body_point_not_on_earlier_segment
                   sc whole 0 (S i) (hd_segment whole) seg 1
@@ -1101,8 +1099,8 @@ Proof.
       as [before [after [Hsplit HinLater]]].
     destruct (Hsparse before s_earlier after Hsplit) as [_ Hrect].
     apply (Hrect s_later (point s_earlier u) HinLater).
-    + now apply segment_in_rect_or_endpoints.
-    + now apply segment_in_rect_or_endpoints.
+    + now apply segment_in_endpoint_triangle.
+    + now apply segment_in_endpoint_triangle.
 Qed.
 
 (* 末尾 trace についての双対。末尾以前の各出現との位置関係だけが
@@ -1164,11 +1162,9 @@ Proof.
            unfold last_i in HiLt. rewrite length_app in Hlength.
            simpl in Hlength. lia.
         -- unfold onLast_extend_strict. exists t.
-           split; [exact HtStrict |].
-           change (point (last_segment (before ++ seg :: after)) t = q).
-           rewrite <- Hsplit. exact Htq.
+           split; [exact HtStrict | exact Htq].
       * destruct Hq as [-> | ->];
-          apply segment_in_rect_or_endpoints; [apply onInit | apply onTerm].
+          apply segment_in_endpoint_triangle; [apply onInit | apply onTerm].
   - (* q は末尾セグメント本体上にある。 *)
     assert (Ht1 : t <= 1) by lra.
     assert (HqOnLast : onSegment (last_segment whole) q).
@@ -1234,8 +1230,8 @@ Proof.
            destruct (context_sparse l sub r Hctx before seg after Hsplit)
              as [_ Hrect].
            apply (Hrect (last_segment whole) q HinLast).
-           ++ now apply segment_in_rect_or_endpoints.
-           ++ rewrite HqTerm. apply segment_in_rect_or_endpoints, onTerm.
+           ++ now apply segment_in_endpoint_triangle.
+           ++ rewrite HqTerm. apply segment_in_endpoint_triangle, onTerm.
 Qed.
 
 (* 端点 q の上下に実在する右上がりの end trace が q に触れる場合を、
@@ -1650,10 +1646,9 @@ Proof.
              rewrite HheadNth in Hi. injection Hi as Heq.
              apply Hne. exact (eq_sym Heq).
         -- unfold onHead_extend_strict. exists t. split; [exact HtStrict |].
-           change (point (hd_segment (before ++ seg :: after)) t = p).
-           rewrite <- Hsplit. exact Htp.
+           exact Htp.
       * destruct Hp as [-> | ->];
-          apply segment_in_rect_or_endpoints; [apply onInit | apply onTerm].
+          apply segment_in_endpoint_triangle; [apply onInit | apply onTerm].
     + assert (HpHead : onSegment (hd_segment whole) p).
       { exists t. split; [lra | exact Htp]. }
       destruct i as [|i].
@@ -1684,8 +1679,8 @@ Proof.
                 as [_ Hrect].
               exfalso.
               apply (Hrect (hd_segment whole) p HinHead).
-              ** exact (segment_in_rect_or_endpoints _ _ HpHead).
-              ** rewrite HpInit. apply segment_in_rect_or_endpoints, onInit.
+              ** exact (segment_in_endpoint_triangle _ _ HpHead).
+              ** rewrite HpInit. apply segment_in_endpoint_triangle, onInit.
         -- exfalso. eapply (later_body_point_not_on_earlier_segment
                      sc whole 0 (S i) (hd_segment whole) seg 1
                      Hembed (context_sparse l sub r Hctx)
@@ -1714,10 +1709,9 @@ Proof.
           -- intros Hnil. subst after. apply Hne. rewrite Hsplit.
              rewrite last_app_nonnil by discriminate. reflexivity.
         -- unfold onLast_extend_strict. exists t. split; [exact HtStrict |].
-           change (point (last_segment (before ++ seg :: after)) t = p).
-           rewrite <- Hsplit. exact Htp.
+           exact Htp.
       * destruct Hp as [-> | ->];
-          apply segment_in_rect_or_endpoints; [apply onInit | apply onTerm].
+          apply segment_in_endpoint_triangle; [apply onInit | apply onTerm].
     + assert (HpLast : onSegment (last_segment whole) p).
       { exists t. split; [lra | exact Htp]. }
       destruct (Nat.eq_dec i last_i) as [Heq | Hlt].
@@ -1756,8 +1750,8 @@ Proof.
                 as [_ Hrect].
               exfalso.
               apply (Hrect (last_segment whole) p HinLast).
-              ** exact (segment_in_rect_or_endpoints _ _ HpLast).
-              ** rewrite HpTerm. apply segment_in_rect_or_endpoints, onTerm.
+              ** exact (segment_in_endpoint_triangle _ _ HpLast).
+              ** rewrite HpTerm. apply segment_in_endpoint_triangle, onTerm.
 Qed.
 
 Lemma same_segment_left_exception_moves_outward_or_is_barrier :
@@ -2271,10 +2265,9 @@ Proof.
            rewrite HheadNth in Hi. injection Hi as Heq.
            apply Hne. exact (eq_sym Heq).
         -- unfold onHead_extend_strict. exists t. split; [exact HtStrict |].
-           change (point (hd_segment (before ++ seg :: after)) t = p).
-           rewrite <- Hsplit. exact Htp.
+           exact Htp.
       * destruct Hp as [-> | ->];
-          apply segment_in_rect_or_endpoints; [apply onInit | apply onTerm].
+          apply segment_in_endpoint_triangle; [apply onInit | apply onTerm].
     + assert (HpHead : onSegment (hd_segment whole) p).
       { exists t. split; [lra | exact Htp]. }
       destruct i as [|i].
@@ -2305,8 +2298,8 @@ Proof.
               destruct (context_sparse l sub r Hctx before seg after Hsplit)
                 as [_ Hrect].
               exfalso. apply (Hrect (hd_segment whole) p HinHead).
-              ** exact (segment_in_rect_or_endpoints _ _ HpHead).
-              ** rewrite HpInit. apply segment_in_rect_or_endpoints, onInit.
+              ** exact (segment_in_endpoint_triangle _ _ HpHead).
+              ** rewrite HpInit. apply segment_in_endpoint_triangle, onInit.
         -- exfalso. eapply (later_body_point_not_on_earlier_segment
                      sc whole 0 (S i) (hd_segment whole) seg 1
                      Hembed (context_sparse l sub r Hctx)
@@ -2334,10 +2327,9 @@ Proof.
         -- intros Hnil. subst after. apply Hne. rewrite Hsplit.
            rewrite last_app_nonnil by discriminate. reflexivity.
         -- unfold onLast_extend_strict. exists t. split; [exact HtStrict |].
-           change (point (last_segment (before ++ seg :: after)) t = p).
-           rewrite <- Hsplit. exact Htp.
+           exact Htp.
       * destruct Hp as [-> | ->];
-          apply segment_in_rect_or_endpoints; [apply onInit | apply onTerm].
+          apply segment_in_endpoint_triangle; [apply onInit | apply onTerm].
     + assert (HpLast : onSegment (last_segment whole) p).
       { exists t. split; [lra | exact Htp]. }
       destruct (Nat.eq_dec i last_i) as [Heq | Hlt].
@@ -2375,8 +2367,8 @@ Proof.
               destruct (context_sparse l sub r Hctx before seg after Hsplit)
                 as [_ Hrect].
               exfalso. apply (Hrect (last_segment whole) p HinLast).
-              ** exact (segment_in_rect_or_endpoints _ _ HpLast).
-              ** rewrite HpTerm. apply segment_in_rect_or_endpoints, onTerm.
+              ** exact (segment_in_endpoint_triangle _ _ HpLast).
+              ** rewrite HpTerm. apply segment_in_endpoint_triangle, onTerm.
 Qed.
 
 Lemma same_segment_right_exception_moves_outward_or_is_barrier :
@@ -2609,298 +2601,16 @@ Proof.
         with (seg := seg) (p := p).
 Qed.
 
-(* x 範囲が重なる非隣接な閉端点長方形は上下に完全分離する。
-   指定端点の順序が、二通りある上下配置のうち t が上である方を選ぶ。 *)
-Lemma far_segment_rectangles_have_no_common_point :
-  forall l sub r i j s t p,
-    ClassificationContext l sub r ->
-    nth_error (l ++ sub ++ r) i = Some s ->
-    nth_error (l ++ sub ++ r) j = Some t ->
-    (S i < j \/ S j < i)%nat ->
-    in_segment_rect_or_endpoints s p ->
-    in_segment_rect_or_endpoints t p ->
-    False.
-Proof.
-  intros l sub r i j s t p Hctx Hs Ht Hfar Hps Hpt.
-  destruct (nth_error_far_in_nonadjacent_sides
-              (l ++ sub ++ r) i j s t Hs Ht Hfar)
-    as [before [after [Hsplit Hnonadjacent]]].
-  destruct (context_sparse l sub r Hctx before s after Hsplit)
-    as [_ Hrect].
-  exact (Hrect t p Hnonadjacent Hpt Hps).
-Qed.
-
-Lemma nonadjacent_overlapping_rectangles_vertical_order :
-  forall l sub r i j s t ps pt,
-    ClassificationContext l sub r ->
-    nth_error (l ++ sub ++ r) i = Some s ->
-    nth_error (l ++ sub ++ r) j = Some t ->
-    (S i < j \/ S j < i)%nat ->
-    segment_x_ranges_overlap s t ->
-    endpoint_of_seg s ps ->
-    endpoint_of_seg t pt ->
-    snd ps <= snd pt ->
-    ry1 (rect_of [s]) < ry0 (rect_of [t]).
-Proof.
-  intros l sub r i j s t ps pt Hctx Hs Ht Hfar Hover Hps Hpt Horder.
-  destruct Hover as [HoverST HoverTS].
-  apply Rnot_le_lt. intros HyOrder.
-  set (x := Rmax (rx0 (rect_of [s])) (rx0 (rect_of [t]))).
-  set (y := Rmax (ry0 (rect_of [s])) (ry0 (rect_of [t]))).
-  assert (HpsBounds :
-      ry0 (rect_of [s]) <= snd ps <= ry1 (rect_of [s])).
-  { destruct Hps as [-> | ->]; cbn; unfold Rmin, Rmax;
-      repeat destruct Rle_dec; lra. }
-  assert (HptBounds :
-      ry0 (rect_of [t]) <= snd pt <= ry1 (rect_of [t])).
-  { destruct Hpt as [-> | ->]; cbn; unfold Rmin, Rmax;
-      repeat destruct Rle_dec; lra. }
-  assert (HyST : ry0 (rect_of [s]) <= ry1 (rect_of [t])) by lra.
-  assert (HxS : rx0 (rect_of [s]) <= x <= rx1 (rect_of [s])).
-  { unfold x. split; [apply Rmax_l |]. apply Rmax_lub.
-    - cbn. apply Rminmax.
-    - exact HoverTS. }
-  assert (HxT : rx0 (rect_of [t]) <= x <= rx1 (rect_of [t])).
-  { unfold x. split; [apply Rmax_r |]. apply Rmax_lub.
-    - exact HoverST.
-    - cbn. apply Rminmax. }
-  assert (HyS : ry0 (rect_of [s]) <= y <= ry1 (rect_of [s])).
-  { unfold y. split; [apply Rmax_l |]. apply Rmax_lub.
-    - cbn. apply Rminmax.
-    - exact HyOrder. }
-  assert (HyT : ry0 (rect_of [t]) <= y <= ry1 (rect_of [t])).
-  { unfold y. split; [apply Rmax_r |]. apply Rmax_lub.
-    - exact HyST.
-    - cbn. apply Rminmax. }
-  eapply (far_segment_rectangles_have_no_common_point
-            l sub r i j s t (x, y)); eauto.
-  - split; cbn; assumption.
-  - split; cbn; assumption.
-Qed.
-
-(* 各セグメントの高い方の端点。上側長方形へ順序を渡す前に、
-   source の不変量をこの点へ正規化する。 *)
-Definition upper_endpoint (s : Segment) : Point :=
-  if Rle_dec (snd (init s)) (snd (term s)) then term s else init s.
-
-Lemma upper_endpoint_is_endpoint : forall s,
-  endpoint_of_seg s (upper_endpoint s).
-Proof.
-  intros s. unfold upper_endpoint. destruct Rle_dec; [now right | now left].
-Qed.
-
-Lemma endpoint_below_upper_endpoint : forall s p,
-  endpoint_of_seg s p -> snd p <= snd (upper_endpoint s).
-Proof.
-  intros s p [-> | ->]; unfold upper_endpoint;
-    destruct Rle_dec; cbn; lra.
-Qed.
-
-Lemma source_upper_endpoint_has_up_path_invariant :
-  forall l sub r s p,
-    ClassificationContext l sub r ->
-    In s (l ++ sub ++ r) ->
-    endpoint_of_seg s p ->
-    up_path_invariant l sub r p ->
-    up_path_invariant l sub r (upper_endpoint s).
-Proof.
-  intros l sub r s p Hctx Hs Hp Hinv.
-  eapply (same_segment_upward_preserves_up_path_invariant
-            l sub r s p (upper_endpoint s)); eauto.
-  - apply upper_endpoint_is_endpoint.
-  - now apply endpoint_below_upper_endpoint.
-Qed.
-
-(* sub の x 範囲では、x 単調連結性が与える一意な sub 点と
-   比較すれば、真に上か、sub 以下かのいずれかである。 *)
-Lemma sub_x_point_above_or_at_or_below : forall l sub r p,
-  ClassificationContext l sub r ->
-  in_sub_x_range sub p ->
-  strictly_above_sub_at_x sub p \/ at_or_below_sub_at_x sub p.
-Proof.
-  intros l sub r p Hctx Hrange.
-  destruct (x_monotone_sub_has_point sub (fst p)
-              (context_sub_nonempty l sub r Hctx)
-              (context_sub_connected l sub r Hctx)
-              (context_sub_x_monotone l sub r Hctx) Hrange)
-    as [q [Hq Hqx]].
-  destruct (Rlt_dec (snd q) (snd p)) as [Habove | Hbelow].
-  - left. intros q' Hq' Hq'x.
-    assert (HsameX : fst q' = fst q).
-    { rewrite <- Hq'x. now symmetry. }
-    assert (HsameY : snd q' = snd q).
-    { exact (connected_x_monotone_height_unique
-               sub q' q
-               (context_sub_nonempty l sub r Hctx)
-               (context_sub_connected l sub r Hctx)
-               (context_sub_x_monotone l sub r Hctx)
-               Hq' Hq HsameX). }
-    lra.
-  - right. exists q. repeat split; try assumption; lra.
-Qed.
-
 Lemma nonadjacent_body_trace_disjoint_from_sub : forall l sub r seg,
   sparse_embedding (l ++ sub ++ r) ->
   In seg (nonadjacent_sides l r) ->
   trace_disjoint_from_segmentlist TraceBody seg sub.
 Proof.
   intros l sub r seg Hsparse Hseg p Hp Hsub.
-  apply (sparse_nonadjacent_box_avoids_sub_points
+  apply (sparse_nonadjacent_triangle_avoids_sub_points
            l sub r seg p Hsparse Hseg Hsub).
-  change (in_segment_rect_or_endpoints seg p).
-  now apply segment_in_rect_or_endpoints.
+  now apply segment_in_endpoint_triangle.
 Qed.
-
-(* source の x 区間が sub と重なる中央の場合。 *)
-Lemma overlapping_upper_rectangle_excludes_sub_contact :
-  forall l sub r i j s t ps pt,
-    ClassificationContext l sub r ->
-    nth_error (l ++ sub ++ r) i = Some s ->
-    nth_error (l ++ sub ++ r) j = Some t ->
-    (S i < j \/ S j < i)%nat ->
-    segment_x_ranges_overlap s t ->
-    endpoint_of_seg s ps ->
-    endpoint_of_seg t pt ->
-    ~ onSegmentlist sub pt ->
-    ry1 (rect_of [s]) < ry0 (rect_of [t]) ->
-    endpoint_up_reachable l sub r ps ->
-    up_path_invariant l sub r ps ->
-    rx0 (rect_of [s]) <= fst (sub_right_anchor sub) ->
-    fst (sub_left_anchor sub) <= rx1 (rect_of [s]) ->
-    in_sub_x_range sub pt ->
-    at_or_below_sub_at_x sub pt ->
-    False.
-(* source と sub の共通 x 上での上下関係を target まで運び、
-   sub 本体または許されない隣接接触を排除する幾何が残る。 *)
-Admitted.
-
-(* source が sub の完全左にある場合。 *)
-Lemma left_upper_rectangle_excludes_sub_contact :
-  forall l sub r i j s t ps pt,
-    ClassificationContext l sub r ->
-    nth_error (l ++ sub ++ r) i = Some s ->
-    nth_error (l ++ sub ++ r) j = Some t ->
-    (S i < j \/ S j < i)%nat ->
-    segment_x_ranges_overlap s t ->
-    endpoint_of_seg s ps ->
-    endpoint_of_seg t pt ->
-    ~ onSegmentlist sub pt ->
-    ry1 (rect_of [s]) < ry0 (rect_of [t]) ->
-    rx1 (rect_of [s]) < fst (sub_left_anchor sub) ->
-    endpoint_up_reachable l sub r ps ->
-    up_path_invariant l sub r ps ->
-    in_sub_x_range sub pt ->
-    at_or_below_sub_at_x sub pt ->
-    False.
-(* source が低ければ rising 障壁、高ければ left anchor からの sub の
-   連続性を使い、target の閉長方形との接触を直接排除する。 *)
-Admitted.
-
-(* source が sub の完全右にある場合。 *)
-Lemma right_upper_rectangle_excludes_sub_contact :
-  forall l sub r i j s t ps pt,
-    ClassificationContext l sub r ->
-    nth_error (l ++ sub ++ r) i = Some s ->
-    nth_error (l ++ sub ++ r) j = Some t ->
-    (S i < j \/ S j < i)%nat ->
-    segment_x_ranges_overlap s t ->
-    endpoint_of_seg s ps ->
-    endpoint_of_seg t pt ->
-    ~ onSegmentlist sub pt ->
-    ry1 (rect_of [s]) < ry0 (rect_of [t]) ->
-    fst (sub_right_anchor sub) < rx0 (rect_of [s]) ->
-    endpoint_up_reachable l sub r ps ->
-    up_path_invariant l sub r ps ->
-    in_sub_x_range sub pt ->
-    at_or_below_sub_at_x sub pt ->
-    False.
-(* falling 障壁を用いる完全左枝の双対。 *)
-Admitted.
-
-(* target が sub の x 範囲へ入る場合、source の位置に応じた枝で
-   sub 以下への接触を排除する。 *)
-Lemma nonadjacent_upper_rectangle_preserves_sub_above :
-  forall l sub r i j s t ps pt,
-    ClassificationContext l sub r ->
-    nth_error (l ++ sub ++ r) i = Some s ->
-    nth_error (l ++ sub ++ r) j = Some t ->
-    (S i < j \/ S j < i)%nat ->
-    segment_x_ranges_overlap s t ->
-    endpoint_of_seg s ps ->
-    endpoint_of_seg t pt ->
-    ~ onSegmentlist sub pt ->
-    ry1 (rect_of [s]) < ry0 (rect_of [t]) ->
-    endpoint_up_reachable l sub r ps ->
-    up_path_invariant l sub r ps ->
-    in_sub_x_range sub pt ->
-    strictly_above_sub_at_x sub pt.
-Proof.
-  intros l sub r i j s t ps pt Hctx Hs Ht Hfar Hover Hps Hpt HptNotSub
-    Hvertical Hreachable Hinv HptRange.
-  assert (HsIn : In s (l ++ sub ++ r)) by now apply nth_error_In in Hs.
-  assert (HtopInv : up_path_invariant l sub r (upper_endpoint s)).
-  { eapply source_upper_endpoint_has_up_path_invariant; eauto. }
-  assert (HtopReachable : endpoint_up_reachable l sub r (upper_endpoint s)).
-  { eapply endpoint_up_reachable_step; [exact Hreachable |].
-    apply order_core_step.
-    eapply order_on_segment with (seg := s); eauto.
-    - apply upper_endpoint_is_endpoint.
-    - now apply endpoint_below_upper_endpoint. }
-  destruct (sub_x_point_above_or_at_or_below l sub r pt Hctx HptRange)
-    as [Habove | Hcontact]; [exact Habove | exfalso].
-  destruct (Rlt_dec (rx1 (rect_of [s]))
-                     (fst (sub_left_anchor sub))) as [Hleft | HnotLeft].
-  - eapply (left_upper_rectangle_excludes_sub_contact
-              l sub r i j s t (upper_endpoint s) pt); eauto.
-    apply upper_endpoint_is_endpoint.
-  - destruct (Rlt_dec (fst (sub_right_anchor sub))
-                       (rx0 (rect_of [s]))) as [Hright | HnotRight].
-    + eapply (right_upper_rectangle_excludes_sub_contact
-                l sub r i j s t (upper_endpoint s) pt); eauto.
-      apply upper_endpoint_is_endpoint.
-    + eapply (overlapping_upper_rectangle_excludes_sub_contact
-                l sub r i j s t (upper_endpoint s) pt); eauto.
-      * apply upper_endpoint_is_endpoint.
-      * lra.
-      * lra.
-Qed.
-
-(* 同じ上下分離に沿って左外側へ到達する場合、出現添字で非隣接性を
-   保ったまま rising な head/last 障壁を target 側へ移す。 *)
-Lemma nonadjacent_upper_rectangle_preserves_left_certificate :
-  forall l sub r i j s t ps pt,
-    ClassificationContext l sub r ->
-    nth_error (l ++ sub ++ r) i = Some s ->
-    nth_error (l ++ sub ++ r) j = Some t ->
-    (S i < j \/ S j < i)%nat ->
-    segment_x_ranges_overlap s t ->
-    endpoint_of_seg s ps ->
-    endpoint_of_seg t pt ->
-    ry1 (rect_of [s]) < ry0 (rect_of [t]) ->
-    endpoint_up_reachable l sub r ps ->
-    up_path_invariant l sub r ps ->
-    fst pt < fst (sub_left_anchor sub) ->
-    snd pt < snd (sub_left_anchor sub) ->
-    left_up_certificate l sub r pt.
-Admitted.
-
-(* 右外側では、同じ出現添字を使って falling 障壁を受け渡す。 *)
-Lemma nonadjacent_upper_rectangle_preserves_right_certificate :
-  forall l sub r i j s t ps pt,
-    ClassificationContext l sub r ->
-    nth_error (l ++ sub ++ r) i = Some s ->
-    nth_error (l ++ sub ++ r) j = Some t ->
-    (S i < j \/ S j < i)%nat ->
-    segment_x_ranges_overlap s t ->
-    endpoint_of_seg s ps ->
-    endpoint_of_seg t pt ->
-    ry1 (rect_of [s]) < ry0 (rect_of [t]) ->
-    endpoint_up_reachable l sub r ps ->
-    up_path_invariant l sub r ps ->
-    fst (sub_right_anchor sub) < fst pt ->
-    snd pt < snd (sub_right_anchor sub) ->
-    right_up_certificate l sub r pt.
-Admitted.
 
 (* x 範囲が重なる非隣接セグメント間の、下側端点から上側端点への辺。 *)
 Lemma nonadjacent_upward_preserves_up_path_invariant :
@@ -2918,24 +2628,9 @@ Lemma nonadjacent_upward_preserves_up_path_invariant :
     up_path_invariant l sub r ps ->
     up_path_invariant l sub r pt.
 Proof.
-  intros l sub r i j s t ps pt Hctx Hs Ht Hfar Hover Hps Hpt HptNotSub
-    Hy Hreachable Hinv.
-  assert (HsIn : In s (l ++ sub ++ r)) by now apply nth_error_In in Hs.
-  assert (HtIn : In t (l ++ sub ++ r)) by now apply nth_error_In in Ht.
-  assert (Hvertical : ry1 (rect_of [s]) < ry0 (rect_of [t])).
-  { eapply nonadjacent_overlapping_rectangles_vertical_order; eauto. }
-  split.
-  - intros Hrange.
-    eapply (nonadjacent_upper_rectangle_preserves_sub_above
-              l sub r i j s t ps pt); eauto.
-  - split.
-    + intros Hx Hy'.
-      eapply (nonadjacent_upper_rectangle_preserves_left_certificate
-                l sub r i j s t ps pt); eauto.
-    + intros Hx Hy'.
-      eapply (nonadjacent_upper_rectangle_preserves_right_certificate
-                l sub r i j s t ps pt); eauto.
-Qed.
+  (* 三角形は分離していても外接長方形は重なり得る。
+     旧証明の矩形上下分離を、曲線・三角形の順序証明に置き換える必要がある。 *)
+Admitted.
 
 (* 傾き保存のために加えた四種類の逆向き辺を、一つの生成関係で扱う。 *)
 Lemma barrier_reverse_step_preserves_up_path_invariant :
@@ -3034,7 +2729,7 @@ Lemma segment_below_last_preserves_up_path_invariant :
       (term (last_segment (l ++ sub ++ r))).
 Admitted.
 
-(* 非隣接セグメントの端点は、閉長方形 sparse 性により sub 上にはない。 *)
+(* 非隣接セグメントの端点は、閉三角形 sparse 性により sub 上にはない。 *)
 (* ----------------------------------------------------------------- *)
 (*  Up seed の非交差性と初期不変量                                 *)
 (* ----------------------------------------------------------------- *)
@@ -3046,12 +2741,12 @@ Lemma nonadjacent_endpoint_not_on_sub : forall l sub r seg p,
   ~ onSegmentlist sub p.
 Proof.
   intros l sub r seg p Hsparse Hseg [-> | ->] Hsub.
-  - eapply (sparse_nonadjacent_box_avoids_sub_points
+  - eapply (sparse_nonadjacent_triangle_avoids_sub_points
               l sub r seg (init seg) Hsparse Hseg Hsub).
-    apply segment_in_rect_or_endpoints, onInit.
-  - eapply (sparse_nonadjacent_box_avoids_sub_points
+    apply segment_in_endpoint_triangle, onInit.
+  - eapply (sparse_nonadjacent_triangle_avoids_sub_points
               l sub r seg (term seg) Hsparse Hseg Hsub).
-    apply segment_in_rect_or_endpoints, onTerm.
+    apply segment_in_endpoint_triangle, onTerm.
 Qed.
 
 (* セグメント本体を証人とする Up seed は sub 上の点にはならない。 *)
@@ -3146,10 +2841,8 @@ Proof.
                 before t after Hsplit) as [_ Hrect].
     apply (Hrect (hd_segment (l ++ (sl ++ t :: sr) ++ r))
              (init (hd_segment (l ++ (sl ++ t :: sr) ++ r))) Hin).
-    + apply segment_in_rect_or_endpoints, onInit.
-    + change (in_segment_rect_or_endpoints t
-        (init (hd_segment (l ++ (sl ++ t :: sr) ++ r)))).
-      now apply segment_in_rect_or_endpoints.
+    + apply segment_in_endpoint_triangle, onInit.
+    + now apply segment_in_endpoint_triangle.
 Qed.
 
 (* r が空でなければ、全体の末尾終点は先行する sub 上へ戻らない。 *)
@@ -3223,9 +2916,8 @@ Proof.
     destruct (context_sparse l (sl ++ t :: sr) r Hctx
                 before t after Hsplit) as [_ Hrect].
     apply (Hrect (last_segment whole) (term (last_segment whole)) Hin).
-    + apply segment_in_rect_or_endpoints, onTerm.
-    + change (in_segment_rect_or_endpoints t (term (last_segment whole))).
-      now apply segment_in_rect_or_endpoints.
+    + apply segment_in_endpoint_triangle, onTerm.
+    + now apply segment_in_endpoint_triangle.
 Qed.
 
 Lemma segment_down_seed_not_on_sub : forall l sub r p,
@@ -3243,7 +2935,7 @@ Proof.
            l sub r seg p Hsparse Hseg Hp).
 Qed.
 
-(* 各 seed は、閉長方形 sparse 性と非空側条件により sub 上にはない。 *)
+(* 各 seed は、閉三角形 sparse 性と非空側条件により sub 上にはない。 *)
 Lemma endpoint_up_seed_not_on_sub : forall l sub r p,
   ClassificationContext l sub r ->
   endpoint_up_seed l sub r p ->
@@ -3287,12 +2979,11 @@ Proof.
   - destruct Hextend as [[Hl Hhead] | [Hr Hlast]].
     + left. split.
       * intros Hnil. apply app_eq_nil in Hnil. tauto.
-      * now rewrite <- Hwhole.
+      * exact Hhead.
     + right. split.
       * intros Hnil. apply app_eq_nil in Hnil. tauto.
-      * now rewrite <- Hwhole.
-  - change (in_segment_rect_or_endpoints seg p).
-    now apply segment_in_rect_or_endpoints.
+      * exact Hlast.
+  - now apply segment_in_endpoint_triangle.
 Qed.
 
 Lemma external_head_trace_disjoint_from_sub : forall l sub r,

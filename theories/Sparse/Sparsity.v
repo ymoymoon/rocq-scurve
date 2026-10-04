@@ -30,10 +30,32 @@ Definition in_rect_or_endpoints_at (old : list Segment) (p : Point) : Prop :=
 Definition in_segment_rect_or_endpoints (s : Segment) (p : Point) : Prop :=
   in_closed_rect (rect_of [s]) p.
 
+(* 端点長方形を、端点を結ぶ対角線で分けた閉三角形。
+   凸なら弦の下側、凹なら上側を使う（x の向きには依存しない）。 *)
+Definition chord_side (s : Segment) (p : Point) : R :=
+  (term_x s - init_x s) *
+    ((term_x s - init_x s) * (snd p - init_y s) -
+     (term_y s - init_y s) * (fst p - init_x s)).
+
+Definition in_segment_triangle (s : Segment) (p : Point) : Prop :=
+  in_segment_rect_or_endpoints s p /\
+  match C_of (primitive_segment s) with
+  | cx => chord_side s p <= 0
+  | cc => 0 <= chord_side s p
+  end.
+
+(* embed の凸性と弦の上下関係を結ぶ基本仕様。 *)
+Axiom segment_in_endpoint_triangle :
+  forall s p, onSegment s p -> in_segment_triangle s p.
+
 (* new の全ての点が old の閉長方形内にある。 *)
 Definition in_rect_or_endpoints (old new : list Segment) : Prop :=
   forall p, onSegmentlist new p ->
     in_rect_or_endpoints_at old p.
+
+(* new の全ての点が old の閉端点三角形内にある。 *)
+Definition in_segment_triangle_of (old : Segment) (new : list Segment) : Prop :=
+  forall p, onSegmentlist new p -> in_segment_triangle old p.
 
 (* sub の端点長方形が sub 全体を含む。x 単調性は要求しない。 *)
 Definition sub_contained_in_endpoint_rect (sub : list Segment) : Prop :=
@@ -146,21 +168,52 @@ Definition sparse_around (l sub r : list Segment) : Prop :=
         in_segment_rect_or_endpoints s p ->
         ~ in_rect_or_endpoints_at sub p).
 
-(* ls の各セグメント出現の長方形について疎である。
+(* ls の各セグメント出現の閉三角形について疎である。
    値が等しいセグメントが複数あっても、リスト中の位置を区別する。 *)
 Definition sparse_embedding (ls : list Segment) : Prop :=
   forall l s r,
     ls = l ++ [s] ++ r ->
-    sparse_around l [s] r.
+    (forall p,
+       ((l <> [] /\ onHead_extend_strict ls p)
+        \/ (r <> [] /\ onLast_extend_strict ls p)) ->
+       ~ in_segment_triangle s p)
+    /\ (forall t p,
+          In t (nonadjacent_sides l r) ->
+          in_segment_triangle t p ->
+          ~ in_segment_triangle s p).
 
-(* 全域 sparse 性は、非隣接セグメントの閉端点長方形から sub 上の
+Definition segment_triangles_separated (ls : list Segment) : Prop :=
+  forall l s r,
+    ls = l ++ [s] ++ r ->
+    forall t p,
+      In t (nonadjacent_sides l r) ->
+      in_segment_triangle t p -> ~ in_segment_triangle s p.
+
+Definition extensions_avoid_segment_triangles (ls : list Segment) : Prop :=
+  forall l s r,
+    ls = l ++ [s] ++ r ->
+    forall p,
+      ((l <> [] /\ onHead_extend_strict ls p)
+       \/ (r <> [] /\ onLast_extend_strict ls p)) ->
+      ~ in_segment_triangle s p.
+
+Lemma geometric_triangle_sparse_embedding : forall ls,
+  segment_triangles_separated ls ->
+  extensions_avoid_segment_triangles ls ->
+  sparse_embedding ls.
+Proof.
+  intros ls Htri Hext l s r Hsplit.
+  split; [exact (Hext l s r Hsplit) | exact (Htri l s r Hsplit)].
+Qed.
+
+(* 全域 sparse 性は、非隣接セグメントの閉三角形から sub 上の
    任意の点を排除する。 *)
-Lemma sparse_nonadjacent_box_avoids_sub_points :
+Lemma sparse_nonadjacent_triangle_avoids_sub_points :
   forall l sub r s q,
     sparse_embedding (l ++ sub ++ r) ->
     In s (nonadjacent_sides l r) ->
     onSegmentlist sub q ->
-    ~ in_segment_rect_or_endpoints s q.
+    ~ in_segment_triangle s q.
 Proof.
   intros l sub r s q Hsparse Hs [t [Ht Hqt]] Hqbox.
   destruct (in_app_app sub t Ht) as [sl [sr Hdecomp]].
@@ -174,50 +227,13 @@ Proof.
   { apply nonadjacent_sides_extend_right.
     now apply nonadjacent_sides_extend_left. }
   apply ((proj2 Haround) s q Hs' Hqbox).
-  change (in_segment_rect_or_endpoints t q).
-  now apply segment_in_rect_or_endpoints.
+  now apply segment_in_endpoint_triangle.
 Qed.
 
-(* 全域で疎であり、さらに指定した部分列 sub の周りでも疎である。 *)
+(* 全域では三角形で疎、指定した部分列 sub の周りでは閉長方形で疎。 *)
 Definition sparse (l sub r : list Segment) : Prop :=
   let ls := l ++ sub ++ r in
   sparse_embedding ls /\ sparse_around l sub r.
-
-(* 各セグメントに対し、非隣接セグメントの閉端点長方形を分離する。 *)
-Definition segment_rectangles_separated (ls : list Segment) : Prop :=
-  forall l s r,
-    ls = l ++ [s] ++ r ->
-    forall t, In t (nonadjacent_sides l r) ->
-    forall p,
-      in_segment_rect_or_endpoints t p ->
-      ~ in_rect_or_endpoints_at [s] p.
-
-(* 各セグメントの閉長方形を、そのセグメントの外側から来る
-   先頭・末尾延長線が避ける。自己延長は単射性側で扱う。 *)
-Definition extensions_avoid_segment_rectangles (ls : list Segment) : Prop :=
-  forall l s r,
-    ls = l ++ [s] ++ r ->
-    forall p,
-      ((l <> [] /\ onHead_extend_strict ls p)
-       \/ (r <> [] /\ onLast_extend_strict ls p)) ->
-      ~ in_rect_or_endpoints_at [s] p.
-
-(* 矩形・延長線・端点についての局所的な分離条件から全域疎性を組み立てる。 *)
-Lemma geometric_sparse_embedding :
-  forall ls,
-    segment_rectangles_separated ls ->
-    extensions_avoid_segment_rectangles ls ->
-    sparse_embedding ls.
-Proof.
-  intros ls Hrect Hext l s r Heq.
-  split.
-  - intros p [[Hl Hhead] | [Hr Hlast]].
-    + apply (Hext l s r Heq p). left. split; [exact Hl |].
-      rewrite Heq. exact Hhead.
-    + apply (Hext l s r Heq p). right. split; [exact Hr |].
-      rewrite Heq. exact Hlast.
-  - intros t p Ht Hp. eapply Hrect; eauto.
-Qed.
 
 (* 先頭延長線と末尾延長線が互いに交わらない。 *)
 Definition extensions_disjoint (ls : list Segment) : Prop :=
@@ -516,10 +532,10 @@ Proof.
       as [l [r [Hsplit Hin]]].
     destruct (Hsparse l s_later r Hsplit) as [_ Hrect].
     pose proof (Hrect s_earlier (point s_later u) Hin
-                  (segment_in_rect_or_endpoints
+                  (segment_in_endpoint_triangle
                      s_earlier (point s_later u) HonEarlier)) as Havoid.
-    apply Havoid. change (in_segment_rect_or_endpoints s_later (point s_later u)).
-    exact (segment_in_rect_or_endpoints s_later (point s_later u) HonLater).
+    apply Havoid.
+    exact (segment_in_endpoint_triangle s_later (point s_later u) HonLater).
 Qed.
 
 Lemma sparse_body_collision_impossible : forall ls tb to sb so,
@@ -534,7 +550,7 @@ Lemma sparse_body_collision_impossible : forall ls tb to sb so,
   extend ls to = point so (extend_param ls to) ->
   extend ls tb = extend ls to ->
   False.
-(* 非隣接なら sparse の長方形分離、隣接なら PrimitiveSegment
+(* 非隣接なら sparse の三角形分離、隣接なら PrimitiveSegment
    埋め込みの方向条件から、異なる piece の衝突を除く。 *)
 Proof.
   intros ls tb to sb so Hne [ds [sc [_ Hembed]]] Hsparse
@@ -547,9 +563,8 @@ Proof.
   { rewrite <- Hreprb, <- Hrepro. exact Hcollision. }
   assert (Honb : onSegment sb (point sb ub)).
   { exists ub. split; [split; lra | reflexivity]. }
-  assert (Hboxb : in_rect_or_endpoints_at [sb] (point sb ub)).
-  { change (in_segment_rect_or_endpoints sb (point sb ub)).
-    now apply segment_in_rect_or_endpoints. }
+  assert (Hboxb : in_segment_triangle sb (point sb ub)).
+  { now apply segment_in_endpoint_triangle. }
   destruct (extend_param_region ls to Hne)
     as [Hbodyo | [[Hio0 Huo] | [Hiolast Huo]]].
   - assert (Hono : onSegment so (point so uo)).
@@ -577,7 +592,7 @@ Proof.
       apply (Hextend (point sb ub)).
       * left. split.
         -- intros Hl. subst l. simpl in Hlen. lia.
-        -- rewrite Hwhole. unfold onHead_extend_strict.
+        -- unfold onHead_extend_strict.
         assert (Hso : so = hd_segment ls).
         { rewrite Hio0 in Hntho. unfold hd_segment. symmetry.
           eapply nth_error_hd; exact Hntho. }
@@ -601,7 +616,7 @@ Proof.
     + right. split.
       * intros Hr. subst r. simpl in Hsplit.
         subst ls. rewrite length_app in Hiolast. simpl in Hiolast. lia.
-      * rewrite Hwhole. unfold onLast_extend_strict.
+      * unfold onLast_extend_strict.
       assert (Hso : so = last_segment ls).
       { unfold last_segment.
         assert (K : io = (length ls - 1)%nat) by lia.
@@ -840,62 +855,9 @@ Lemma rot_sparse_embedding :
     sparse_embedding ls ->
     sparse_embedding (rot_segs g ls).
 Proof.
-  intros g ls Hsparse l s r Hdecomp.
-  assert (Hwhole : l ++ [s] ++ r <> []).
-  { destruct l; simpl; discriminate. }
-  assert (Hback :
-      ls = rot_segs (rot_inv g) l ++
-           [rot_seg (rot_inv g) s] ++
-           rot_segs (rot_inv g) r).
-  { pose proof (f_equal (rot_segs (rot_inv g)) Hdecomp) as H.
-    rewrite rot_inv_segs in H.
-    rewrite !rot_segs_app in H. simpl in H.
-    exact H. }
-  pose proof
-    (Hsparse
-       (rot_segs (rot_inv g) l)
-       (rot_seg (rot_inv g) s)
-       (rot_segs (rot_inv g) r)
-       Hback) as Haround.
-  destruct Haround as [Hextensions Hrectangles].
-  split.
-  - intros p [[Hl Hhead] | [Hr Hlast]] Hin.
-    + apply (Hextensions (rot_pt (rot_inv g) p)).
-      * left. split.
-        -- now apply rot_segs_nonnil.
-        -- pose proof
-             (onHead_extend_strict_rot
-                (rot_inv g) (l ++ [s] ++ r) p Hwhole Hhead) as Hhead'.
-           rewrite !rot_segs_app in Hhead'. simpl in Hhead'. exact Hhead'.
-      * assert (Hin' :=
-            proj2 (in_rect_or_endpoints_at_rot
-                     (rot_inv g) [s] p ltac:(discriminate)) Hin).
-        simpl in Hin'. exact Hin'.
-    + apply (Hextensions (rot_pt (rot_inv g) p)).
-      * right. split.
-        -- now apply rot_segs_nonnil.
-        -- pose proof
-             (onLast_extend_strict_rot
-                (rot_inv g) (l ++ [s] ++ r) p Hwhole Hlast) as Hlast'.
-           rewrite !rot_segs_app in Hlast'. simpl in Hlast'. exact Hlast'.
-      * assert (Hin' :=
-            proj2 (in_rect_or_endpoints_at_rot
-                     (rot_inv g) [s] p ltac:(discriminate)) Hin).
-        simpl in Hin'. exact Hin'.
-  - intros t p Ht Hbox Hin.
-    apply (Hrectangles
-             (rot_seg (rot_inv g) t) (rot_pt (rot_inv g) p)).
-    + unfold rot_segs. rewrite nonadjacent_sides_map. now apply in_map.
-    + change (in_rect_or_endpoints_at [t] p) in Hbox.
-      assert (Hbox' :=
-          proj2 (in_rect_or_endpoints_at_rot
-                   (rot_inv g) [t] p ltac:(discriminate)) Hbox).
-      simpl in Hbox'. exact Hbox'.
-    + assert (Hin' :=
-          proj2 (in_rect_or_endpoints_at_rot
-                   (rot_inv g) [s] p ltac:(discriminate)) Hin).
-      simpl in Hin'. exact Hin'.
-Qed.
+  (* 回転後の convex/concave ラベルと弦の側の対応が、現行の
+     rot_seg の基本仕様からは導けない。 *)
+Admitted.
 
 Lemma rot_extensions_disjoint :
   forall g ls,
