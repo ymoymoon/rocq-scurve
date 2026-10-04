@@ -4,7 +4,7 @@ Import ListNotations.
 From Stdlib Require Import Lra.
 From Stdlib Require Import Lia.
 
-(* 長方形と sparse。 *)
+(* 端点長方形・端点三角形と sparse。 *)
 
 Lemma Rmin_opp : forall a b, Rmin (- a) (- b) = - Rmax a b.
 Proof. intros. unfold Rmin, Rmax. destruct (Rle_dec (-a) (-b)), (Rle_dec a b); lra. Qed.
@@ -56,6 +56,25 @@ Definition in_rect_or_endpoints (old new : list Segment) : Prop :=
 (* new の全ての点が old の閉端点三角形内にある。 *)
 Definition in_segment_triangle_of (old : Segment) (new : list Segment) : Prop :=
   forall p, onSegmentlist new p -> in_segment_triangle old p.
+
+(* sub の両端点を結ぶ弦から見た向き付き面積。Plus はその負側、
+   Minus は正側を使う。この符号は x の進行方向に依存しない。 *)
+Definition sub_chord_cross (sub : list Segment) (p : Point) : R :=
+  let a := init (hd_segment sub) in
+  let b := term (last_segment sub) in
+  (fst b - fst a) * (snd p - snd a) -
+  (snd b - snd a) * (fst p - fst a).
+
+Definition in_sub_triangle (d : Direction) (sub : list Segment) (p : Point) : Prop :=
+  in_rect_or_endpoints_at sub p /\
+  match d with
+  | Plus => sub_chord_cross sub p <= 0
+  | Minus => 0 <= sub_chord_cross sub p
+  end.
+
+Definition in_sub_triangle_of
+    (d : Direction) (old new : list Segment) : Prop :=
+  forall p, onSegmentlist new p -> in_sub_triangle d old p.
 
 (* sub の端点長方形が sub 全体を含む。x 単調性は要求しない。 *)
 Definition sub_contained_in_endpoint_rect (sub : list Segment) : Prop :=
@@ -167,6 +186,19 @@ Definition sparse_around (l sub r : list Segment) : Prop :=
         In s (nonadjacent_sides l r) ->
         in_segment_rect_or_endpoints s p ->
         ~ in_rect_or_endpoints_at sub p).
+
+(* 単一セグメントへの簡約用。sub の端点三角形を、外側の延長線と
+   非隣接セグメントの端点三角形が避ける。 *)
+Definition sparse_around_triangle
+    (d : Direction) (l sub r : list Segment) : Prop :=
+  (forall p,
+     ((l <> [] /\ onHead_extend_strict (l ++ sub ++ r) p)
+      \/ (r <> [] /\ onLast_extend_strict (l ++ sub ++ r) p)) ->
+     ~ in_sub_triangle d sub p)
+  /\ (forall s p,
+        In s (nonadjacent_sides l r) ->
+        in_segment_triangle s p ->
+        ~ in_sub_triangle d sub p).
 
 (* ls の各セグメント出現の閉三角形について疎である。
    値が等しいセグメントが複数あっても、リスト中の位置を区別する。 *)
