@@ -89,12 +89,13 @@ Proof.
     destruct Hfirst as [p next Hcore | p next Hend].
     + destruct Hcore as
         [seg p next Hin HpEnd HnextEnd Hheight
-        | i j s t ps pt Hs Ht Hfar Hover Hps Hpt HptNotSub Hheight].
+        | i j s t ps pt u v HnoTerminal HnoInitial Hs Ht Hfar Hps Hpt
+          Hu Hv Hx Hy].
       * exact (same_segment_upward_preserves_up_path_invariant
                  l sub r seg p next Hctx Hin HpEnd HnextEnd Hheight Hp).
       * exact (nonadjacent_upward_preserves_up_path_invariant
-                 l sub r i j s t ps pt Hctx Hs Ht Hfar Hover Hps Hpt
-                 HptNotSub Hheight Hreachable Hp).
+                 l sub r i j s t ps pt u v Hctx HnoTerminal HnoInitial
+                 Hs Ht Hfar Hps Hpt Hu Hv Hx Hy Hreachable Hp).
     + destruct Hend.
       * eapply barrier_reverse_step_preserves_up_path_invariant; eauto.
         now apply barrier_reverse_head_north_cx with (hor := hor).
@@ -772,8 +773,8 @@ Proof.
   - left. exists (xp, yz). repeat split; assumption.
 Qed.
 
-(* 具体的な端点分類器が三角形の順序を満たすかは別途検証する。
-   保存定理はこの仕様だけを使い、分類器の構成には依存しない。 *)
+(* 三角形の上下関係は core step そのものなので、seed の分離から
+   端点分類の順序を得る。 *)
 Lemma classify_nonadjacent_triangle_order_no_lid :
   forall l sub r,
     sub <> [] ->
@@ -799,7 +800,17 @@ Lemma classify_nonadjacent_triangle_order_no_lid :
       fst u = fst v ->
       snd u < snd v ->
       region_at_or_above (classify l sub r pt) (classify l sub r ps).
-Admitted.
+Proof.
+  intros l sub r Hne Hsep Hsparse Hembed Hextensions Hcompare
+    HnoTerminal HnoInitial i j s t ps pt u v Hs Ht Hfar Hps Hpt
+    Hu Hv Hx Hy.
+  eapply endpoint_order_classified_from_separation.
+  - exact Hsep.
+  - exists s. split; [eapply nth_error_In; eauto | exact Hps].
+  - exists t. split; [eapply nth_error_In; eauto | exact Hpt].
+  - apply rt_step. apply order_core_step.
+    apply (order_nonadjacent l sub r i j s t ps pt u v); assumption.
+Qed.
 
 (* seed の分離と延長線・sub の上下比較から
    x 単調版・prepared 版に共通する全仕様を組み立てる。 *)

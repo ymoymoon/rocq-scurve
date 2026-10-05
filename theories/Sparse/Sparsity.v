@@ -1042,15 +1042,6 @@ Proof.
   rewrite rot_seg_point, Hp. reflexivity.
 Qed.
 
-Lemma rot_sparse_embedding :
-  forall g ls,
-    sparse_embedding ls ->
-    sparse_embedding (rot_segs g ls).
-Proof.
-  (* 回転後の convex/concave ラベルと弦の側の対応が、現行の
-     rot_seg の基本仕様からは導けない。 *)
-Admitted.
-
 Lemma rot_extensions_disjoint :
   forall g ls,
     extensions_disjoint ls ->

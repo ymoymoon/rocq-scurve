@@ -2612,24 +2612,28 @@ Proof.
   now apply segment_in_endpoint_triangle.
 Qed.
 
-(* x 範囲が重なる非隣接セグメント間の、下側端点から上側端点への辺。 *)
+(* 非隣接の閉三角形が同じ x で上下に分離するとき、全端点の順序を保存する。
+   特に上側端点が sub 上の場合も排除する必要がある。 *)
 Lemma nonadjacent_upward_preserves_up_path_invariant :
-  forall l sub r i j s t ps pt,
+  forall l sub r i j s t ps pt u v,
     ClassificationContext l sub r ->
+    ~ terminal_lid l sub r ->
+    ~ initial_lid l sub r ->
     nth_error (l ++ sub ++ r) i = Some s ->
     nth_error (l ++ sub ++ r) j = Some t ->
     (S i < j \/ S j < i)%nat ->
-    segment_x_ranges_overlap s t ->
     endpoint_of_seg s ps ->
     endpoint_of_seg t pt ->
-    ~ onSegmentlist sub pt ->
-    snd ps <= snd pt ->
+    in_segment_triangle s u ->
+    in_segment_triangle t v ->
+    fst u = fst v ->
+    snd u < snd v ->
     endpoint_up_reachable l sub r ps ->
     up_path_invariant l sub r ps ->
     up_path_invariant l sub r pt.
 Proof.
-  (* 三角形は分離していても外接長方形は重なり得る。
-     旧証明の矩形上下分離を、曲線・三角形の順序証明に置き換える必要がある。 *)
+  (* 三角形の一点での上下から全端点の分類順序を導く幾何的核心。
+     sub 上の端点を経由する経路が生じないこともここで示す必要がある。 *)
 Admitted.
 
 (* 傾き保存のために加えた四種類の逆向き辺を、一つの生成関係で扱う。 *)

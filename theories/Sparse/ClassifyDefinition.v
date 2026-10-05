@@ -13,17 +13,20 @@ Inductive endpoint_core_step
       endpoint_of_seg seg q ->
       snd p <= snd q ->
       endpoint_core_step l sub r p q
-  (* x 範囲が重なる非隣接セグメント間では、低い端点から高い端点へ制約する。
-     target が sub 上なら [classified_sub_fixed] に任せ、core 辺を作らない。 *)
-  | order_nonadjacent : forall i j s t ps pt,
+  (* 蓋がない場合、非隣接の閉三角形が同じ x で上下に並べば、
+     下側の全端点から上側の全端点へ順序を付ける。 *)
+  | order_nonadjacent : forall i j s t ps pt u v,
+      ~ terminal_lid l sub r ->
+      ~ initial_lid l sub r ->
       nth_error (l ++ sub ++ r) i = Some s ->
       nth_error (l ++ sub ++ r) j = Some t ->
       (S i < j \/ S j < i)%nat ->
-      segment_x_ranges_overlap s t ->
       endpoint_of_seg s ps ->
       endpoint_of_seg t pt ->
-      ~ onSegmentlist sub pt ->
-      snd ps <= snd pt ->
+      in_segment_triangle s u ->
+      in_segment_triangle t v ->
+      fst u = fst v ->
+      snd u < snd v ->
       endpoint_core_step l sub r ps pt.
 
 (* 先頭・末尾に固有の例外順序。傾き保存のための逆向き辺と、
