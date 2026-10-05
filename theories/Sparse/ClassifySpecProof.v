@@ -235,77 +235,6 @@ Proof.
   now apply (proj1 (endpoint_order_path_iff l sub r upper lower)).
 Qed.
 
-(* 三種類の到達不能性を独立した名前で公開し、以後の証明が大きな論理和に
-   依存しないようにする。 *)
-Lemma up_seed_not_reaches_down_seed : forall l sub r,
-  ClassificationContext l sub r ->
-  forall upper lower,
-    endpoint_up_seed l sub r upper ->
-    endpoint_down_seed l sub r lower ->
-    ~ endpoint_order l sub r upper lower.
-Proof.
-  intros l sub r Hctx upper lower Hup Hdown.
-  now apply (endpoint_order_separates_sources l sub r Hctx upper lower),
-    or_introl; split; [exact Hup | left].
-Qed.
-
-Lemma up_seed_not_reaches_sub : forall l sub r,
-  ClassificationContext l sub r ->
-  forall upper lower,
-    endpoint_up_seed l sub r upper ->
-    onSegmentlist sub lower ->
-    ~ endpoint_order l sub r upper lower.
-Proof.
-  intros l sub r Hctx upper lower Hup Hsub.
-  now apply (endpoint_order_separates_sources l sub r Hctx upper lower),
-    or_introl; split; [exact Hup | right].
-Qed.
-
-Lemma sub_not_reaches_down_seed : forall l sub r,
-  ClassificationContext l sub r ->
-  forall upper lower,
-    onSegmentlist sub upper ->
-    endpoint_down_seed l sub r lower ->
-    ~ endpoint_order l sub r upper lower.
-Proof.
-  intros l sub r Hctx upper lower Hsub Hdown.
-  now apply (endpoint_order_separates_sources l sub r Hctx upper lower),
-    or_intror.
-Qed.
-
-(* 上の分離補題により、一点が Up/Down の双方から強制されることはない。 *)
-Lemma endpoint_forcing_disjoint :
-  forall l sub r,
-    ClassificationContext l sub r ->
-    forall p,
-      ~ (endpoint_forced_up l sub r p
-         /\ endpoint_forced_down l sub r p).
-Proof.
-  intros l sub r Hctx p [[up [Hup Hupp]] [down [Hdown Hpdown]]].
-  apply (up_seed_not_reaches_down_seed
-           l sub r Hctx up down Hup Hdown).
-  eapply rt_trans; eauto.
-Qed.
-
-(* sub 上の点は、Up/Down のどちらの到達閉包にも入らない。 *)
-Lemma sub_points_not_forced :
-  forall l sub r,
-    ClassificationContext l sub r ->
-    forall p,
-      onSegmentlist sub p ->
-      ~ endpoint_forced_up l sub r p
-      /\ ~ endpoint_forced_down l sub r p.
-Proof.
-  intros l sub r Hctx p Hsub. split.
-  - intros [up [Hup Horder]].
-    exact (up_seed_not_reaches_sub
-             l sub r Hctx up p Hup Hsub Horder).
-  - intros [down [Hdown Horder]].
-    exact (sub_not_reaches_down_seed
-             l sub r Hctx p down Hsub Hdown Horder).
-Qed.
-
-
 (* 元のセグメント自身が、元の両端点・向き・両傾きによる再接続を与える。 *)
 (* ----------------------------------------------------------------- *)
 (*  分類された先頭・末尾の傾き保存                                 *)
@@ -521,41 +450,6 @@ Proof.
   intros l sub r p Hseed. exists p. split; [exact Hseed | apply rt_refl].
 Qed.
 
-Lemma classify_forced_up : forall l sub r p
-  (Hctx : ClassificationContext l sub r),
-  endpoint_of (l ++ sub ++ r) p ->
-  endpoint_forced_up l sub r p ->
-  classify l sub r p = RegUp.
-Proof.
-  intros l sub r p Hctx Hend Hup.
-  unfold classify, constraint_classifier.
-  destruct (excluded_middle_informative (onSegmentlist sub p)) as [Hsub | Hsub].
-  - exfalso. exact (proj1 (sub_points_not_forced l sub r Hctx p Hsub) Hup).
-  - destruct (excluded_middle_informative (endpoint_of (l ++ sub ++ r) p));
-      [|contradiction].
-    destruct (excluded_middle_informative (endpoint_forced_up l sub r p));
-      [reflexivity | contradiction].
-Qed.
-
-Lemma classify_forced_down : forall l sub r p
-  (Hctx : ClassificationContext l sub r),
-  endpoint_of (l ++ sub ++ r) p ->
-  endpoint_forced_down l sub r p ->
-  classify l sub r p = RegDown.
-Proof.
-  intros l sub r p Hctx Hend Hdown.
-  unfold classify, constraint_classifier.
-  destruct (excluded_middle_informative (onSegmentlist sub p)) as [Hsub | Hsub].
-  - exfalso. exact (proj2 (sub_points_not_forced l sub r Hctx p Hsub) Hdown).
-  - destruct (excluded_middle_informative (endpoint_of (l ++ sub ++ r) p));
-      [|contradiction].
-    destruct (excluded_middle_informative (endpoint_forced_up l sub r p))
-      as [Hup | Hup].
-    + exfalso. exact (endpoint_forcing_disjoint l sub r Hctx p (conj Hup Hdown)).
-    + destruct (excluded_middle_informative (endpoint_forced_down l sub r p));
-        [reflexivity | contradiction].
-Qed.
-
 Lemma classify_up_forced : forall l sub r p,
   classify l sub r p = RegUp -> endpoint_forced_up l sub r p.
 Proof.
@@ -570,36 +464,6 @@ Proof.
   intros l sub r p Hclass.
   unfold classify, constraint_classifier in Hclass.
   repeat destruct excluded_middle_informative; try discriminate; assumption.
-Qed.
-
-Lemma endpoint_order_classified : forall l sub r p q,
-  ClassificationContext l sub r ->
-  endpoint_of (l ++ sub ++ r) p ->
-  endpoint_of (l ++ sub ++ r) q ->
-  endpoint_order l sub r p q ->
-  region_at_or_above (classify l sub r q) (classify l sub r p).
-Proof.
-  intros l sub r p q Hctx Hp Hq Horder.
-  destruct (classify l sub r p) eqn:Hcp;
-  destruct (classify l sub r q) eqn:Hcq.
-  - now left.
-  - now right; constructor.
-  - exfalso.
-    pose proof (classify_down_forced l sub r q Hcq) as Hdownq.
-    pose proof (endpoint_forced_down_order l sub r p q Horder Hdownq) as Hdownp.
-    pose proof (classify_forced_down l sub r p Hctx Hp Hdownp). congruence.
-  - exfalso.
-    pose proof (classify_up_forced l sub r p Hcp) as Hupp.
-    pose proof (endpoint_forced_up_order l sub r p q Horder Hupp) as Hupq.
-    pose proof (classify_forced_up l sub r q Hctx Hq Hupq). congruence.
-  - now left.
-  - exfalso.
-    pose proof (classify_up_forced l sub r p Hcp) as Hupp.
-    pose proof (endpoint_forced_up_order l sub r p q Horder Hupp) as Hupq.
-    pose proof (classify_forced_up l sub r q Hctx Hq Hupq). congruence.
-  - now right; constructor.
-  - now right; constructor.
-  - now left.
 Qed.
 
 (* prepared 幾何で置き換えるべき核心は、Up/Down seed と sub を
@@ -878,67 +742,9 @@ Proof.
       * intros p Hx Hy. eapply southwest_cc_lower_term_slope; eauto.
 Qed.
 
-Lemma head_classification_preserves_init_slope :
-  forall l sub r,
-    ClassificationContext l sub r ->
-    forall h,
-      0 <= h ->
-      l <> [] ->
-      classified_init_slope_reconnectable
-        (classify l sub r) h (hd_segment l).
-Proof.
-  intros l sub r Hctx h Hh Hl.
-  eapply head_classification_preserves_init_slope_from_separation.
-  - exact (endpoint_order_separates_sources l sub r Hctx).
-  - exact (context_whole_embedded l sub r Hctx).
-  - exact Hh.
-  - exact Hl.
-Qed.
-
-(* 末尾では始点の移動を共通平行移動として除き、四形ごとに
-   終点だけの上下移動または同領域の平行移動へ帰着する。 *)
-Lemma last_classification_preserves_term_slope :
-  forall l sub r,
-    ClassificationContext l sub r ->
-    forall h,
-      0 <= h ->
-      r <> [] ->
-      classified_term_slope_reconnectable
-        (classify l sub r) h (last_segment r).
-Proof.
-  intros l sub r Hctx h Hh Hr.
-  eapply last_classification_preserves_term_slope_from_separation.
-  - exact (endpoint_order_separates_sources l sub r Hctx).
-  - exact (context_whole_embedded l sub r Hctx).
-  - exact Hh.
-  - exact Hr.
-Qed.
-
 (* ----------------------------------------------------------------- *)
 (*  構成した分類器が ClassificationSpec を満たすこと                *)
 (* ----------------------------------------------------------------- *)
-
-Lemma strict_extension_above_or_below_sub : forall l sub r p,
-  ClassificationContext l sub r ->
-  ((l <> [] /\ onHead_extend_strict (l ++ sub ++ r) p)
-   \/ (r <> [] /\ onLast_extend_strict (l ++ sub ++ r) p)) ->
-  in_sub_x_range sub p ->
-  above_sub_at_x sub p \/ below_sub_at_x sub p.
-Proof.
-  intros l sub r [xp yp] Hctx Hextend Hx.
-  pose proof (context_sub_nonempty l sub r Hctx) as Hne.
-  pose proof (context_sub_connected l sub r Hctx) as Hconn.
-  pose proof (context_sub_x_monotone l sub r Hctx) as Hmono.
-  pose proof (context_sparse l sub r Hctx) as Hsparse.
-  destruct (x_monotone_sub_has_point sub xp Hne Hconn Hmono Hx)
-    as [[xz yz] [Hz Hxz]]. simpl in Hxz. subst xz.
-  assert (Hneq : yp <> yz).
-  { intros ->. eapply strict_extension_not_on_sub; eauto. }
-  destruct (total_order_T yp yz) as [[Hbelow | Heq] | Habove].
-  - right. exists (xp, yz). repeat split; assumption.
-  - contradiction.
-  - left. exists (xp, yz). repeat split; assumption.
-Qed.
 
 (* 非 x 単調でも、連結性により sub の x 範囲には比較点が存在する。 *)
 Lemma strict_extension_above_or_below_prepared : forall l sub r p,
@@ -966,24 +772,32 @@ Proof.
   - left. exists (xp, yz). repeat split; assumption.
 Qed.
 
-(* 蓋なしの場合に固定 sub 端点まで届く非隣接順序。具体的な分類器に
-   対する証明は、追加した core 辺と seed の整合性の検証を要する。 *)
-Lemma classify_nonadjacent_endpoint_order_to_sub_no_lid :
+(* 具体的な端点分類器が三角形の順序を満たすかは別途検証する。
+   保存定理はこの仕様だけを使い、分類器の構成には依存しない。 *)
+Lemma classify_nonadjacent_triangle_order_no_lid :
   forall l sub r,
+    sub <> [] ->
+    sources_separated l sub r ->
     sparse_embedding (l ++ sub ++ r) ->
     (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
     extensions_disjoint (l ++ sub ++ r) ->
+    (forall p,
+      ((l <> [] /\ onHead_extend_strict (l ++ sub ++ r) p)
+       \/ (r <> [] /\ onLast_extend_strict (l ++ sub ++ r) p)) ->
+      in_sub_x_range sub p ->
+      above_sub_at_x sub p \/ below_sub_at_x sub p) ->
     ~ terminal_lid l sub r ->
     ~ initial_lid l sub r ->
-    forall i j s t ps pt,
+    forall i j s t ps pt u v,
       nth_error (l ++ sub ++ r) i = Some s ->
       nth_error (l ++ sub ++ r) j = Some t ->
       (S i < j \/ S j < i)%nat ->
-      segment_x_ranges_overlap s t ->
       endpoint_of_seg s ps ->
       endpoint_of_seg t pt ->
-      onSegmentlist sub pt ->
-      snd ps <= snd pt ->
+      in_segment_triangle s u ->
+      in_segment_triangle t v ->
+      fst u = fst v ->
+      snd u < snd v ->
       region_at_or_above (classify l sub r pt) (classify l sub r ps).
 Admitted.
 
@@ -1028,19 +842,8 @@ Proof.
         -- now right.
         -- now left.
         -- lra.
-  - intros HnoTerminal HnoInitial i j s0 t ps pt
-      Hs Ht Hij Hover Hps Hpt Hy.
-    destruct (classic (onSegmentlist sub pt)) as [HptSub | HptNotSub].
-    + exact (classify_nonadjacent_endpoint_order_to_sub_no_lid
-               l sub r Hsparse Hembed Hextensions HnoTerminal HnoInitial
-               i j s0 t ps pt Hs Ht Hij Hover Hps Hpt HptSub Hy).
-    + eapply endpoint_order_classified_from_separation; eauto.
-      * exists s0. split; [eapply nth_error_In; eauto | exact Hps].
-      * exists t. split; [eapply nth_error_In; eauto | exact Hpt].
-      * apply rt_step.
-        apply order_core_step.
-        exact (order_nonadjacent l sub r i j s0 t ps pt
-                 Hs Ht Hij Hover Hps Hpt HptNotSub Hy).
+  - exact (classify_nonadjacent_triangle_order_no_lid
+             l sub r Hne Hsep Hsparse Hembed Hextensions Hcompare).
   - intros seg p Hseg Hon Hrange. split; intros Hside.
     + split; apply (classify_forced_up_from_separation l sub r _ Hsep).
       * exists seg. split; [now apply nonadjacent_sides_in_whole | now left].
@@ -1141,29 +944,6 @@ Proof.
   - now apply last_classification_preserves_term_slope_from_separation.
 Qed.
 
-(* 旧 x 単調仮定を使う補題のための互換ラッパ。開内部条件はここからは従わない。 *)
-Lemma classify_spec_x_monotone :
-  forall l sub r,
-    sub <> [] ->
-    x_monotone_segs sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
-    @ClassificationSpec l sub r (classify l sub r).
-Proof.
-  intros l sub r Hne Hmono Hsparse Hembed Hext.
-  pose (Hctx := Build_ClassificationContext
-                  l sub r Hne Hmono Hsparse Hembed Hext).
-  eapply (classify_spec_from_separation l sub r).
-  - exact Hne.
-  - exact (endpoint_order_separates_sources l sub r Hctx).
-  - exact Hsparse.
-  - exact Hembed.
-  - exact Hext.
-  - intros p Hside Hrange.
-    exact (strict_extension_above_or_below_sub l sub r p Hctx Hside Hrange).
-Qed.
-
 (* 分類された端点の上下移動。 *)
 
 Lemma shift_preserves_strict_vertical_order :
@@ -1177,22 +957,6 @@ Proof.
   - subst gq. destruct gp; simpl in Hy |- *; lra.
   - destruct Habove; simpl in Hy |- *; lra.
 Qed.
-
-(* Up 以外の分類は点を上昇させない。sub 隣接セグメントの固定端点と
-   下側長方形との分離を保存する際に用いる。 *)
-Lemma shift_not_up_nonincreasing :
-  forall h g p,
-    0 <= h ->
-    g <> RegUp ->
-    snd (shift h g p) <= snd p.
-Proof.
-  intros h g [x y] Hh Hnot.
-  destruct g; simpl; try lra; contradiction.
-Qed.
-
-Definition operate_point
-    (l sub r : list Segment) (h : R) (p : Point) : Point :=
-  shift h (classify l sub r p) p.
 
 Lemma shift_fst :
   forall h g p, fst (shift h g p) = fst p.

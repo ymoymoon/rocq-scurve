@@ -59,6 +59,23 @@ Proof.
   exfalso. apply (proj2 (nth_error_Some xs i) Hi). exact Hx.
 Qed.
 
+Definition region_delta (h : R) (g : Region) : R :=
+  match g with RegFix => 0 | RegUp => h | RegDown => -h end.
+
+Lemma region_delta_order : forall h g0 g1,
+  0 <= h -> region_at_or_above g1 g0 ->
+  region_delta h g0 <= region_delta h g1.
+Proof.
+  intros h g0 g1 Hh [Heq | Habove]; [subst; apply Rle_refl |].
+  destruct Habove; unfold region_delta; lra.
+Qed.
+
+Lemma shift_y_delta : forall h g p,
+  snd (shift h g p) - snd p = region_delta h g.
+Proof.
+  intros h g [x y]. destruct g; unfold shift, region_delta; simpl; lra.
+Qed.
+
 (* 十分大きな移動後、全体の延長線は sub の長方形を避ける。 *)
 Lemma reconnect_extensions_avoid_sub_rect_from_spec :
   forall l sub r h p,
@@ -189,6 +206,165 @@ Proof.
     + exact Hshift.
 Qed.
 
+(* 新しい閉三角形の点を、同じ出現の旧三角形へ引き戻す。 *)
+Lemma reconnected_triangle_preimage :
+  forall l sub r h i s s' z,
+    @ClassificationSpec l sub r (classify l sub r) ->
+    h_large h sub ->
+    nth_error (l ++ sub ++ r) i = Some s ->
+    nth_error (reconnect_whole l sub r h) i = Some s' ->
+    in_segment_triangle s' z ->
+    exists u,
+      in_segment_triangle s u /\ fst u = fst z /\
+      Rmin (region_delta h (classify l sub r (init s)))
+           (region_delta h (classify l sub r (term s))) <=
+        snd z - snd u <=
+      Rmax (region_delta h (classify l sub r (init s)))
+           (region_delta h (classify l sub r (term s))).
+Proof.
+  intros l sub r h i s s' z Hspec Hh Hold Hnew Hz.
+  assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
+  { exact (operate_endpoints_reconnectable_from_spec l sub r h Hspec Hh). }
+  destruct (reconnect_whole_nth_spec l sub r h i s s' Hrec Hold Hnew)
+    as [Horn [Hinit Hterm]].
+  assert (Hin : In s (l ++ sub ++ r)) by now apply nth_error_In in Hold.
+  destruct (operated_segment_axis_orders_from_spec
+              l sub r h s Hspec (proj1 Hh) Hin) as [Hx Hy].
+  rewrite <- Hinit, <- Hterm in Hx, Hy.
+  assert (Hprimitive : primitive_segment s' = primitive_segment s).
+  { exact (same_primitive_of_axis_orders s s' Hx Hy Horn). }
+  assert (Hix : init_x s' = init_x s).
+  { unfold init_x. rewrite Hinit. apply operate_point_fst. }
+  assert (Htx : term_x s' = term_x s).
+  { unfold term_x. rewrite Hterm. apply operate_point_fst. }
+  assert (Hsign :
+    0 < (term_y s - init_y s) * (term_y s' - init_y s')).
+  { unfold init_y, term_y in *.
+    destruct (Rlt_dec (snd (init s)) (snd (term s))) as [Hup | Hnotup].
+    - pose proof (proj1 Hy Hup) as Hup'. nra.
+    - assert (Hdown : snd (term s) < snd (init s)).
+      { pose proof (neq_init_term_y s). unfold init_y, term_y in *. nra. }
+      assert (Hdown' : snd (term s') < snd (init s')).
+      { pose proof (neq_init_term_y s'). unfold init_y, term_y in *.
+        destruct (Rlt_dec (snd (init s')) (snd (term s')))
+          as [Hnewup | Hnewnotup]; [apply (proj2 Hy) in Hnewup; lra |].
+        nra. }
+      nra. }
+  destruct (triangle_vertical_shift_preimage s s' z Hix Htx
+              ltac:(now rewrite Hprimitive) Hsign Hz)
+    as [u [Hu [Hux Hbounds]]].
+  exists u. split; [exact Hu |]. split; [exact Hux |].
+  assert (Hdi : init_y s' - init_y s =
+    region_delta h (classify l sub r (init s))).
+  { unfold init_y. rewrite Hinit. unfold operate_point.
+    apply shift_y_delta. }
+  assert (Hdt : term_y s' - term_y s =
+    region_delta h (classify l sub r (term s))).
+  { unfold term_y. rewrite Hterm. unfold operate_point.
+    apply shift_y_delta. }
+  now rewrite <- Hdi, <- Hdt.
+Qed.
+
+Lemma classified_triangle_delta_order :
+  forall l sub r h i j s t u v,
+    @ClassificationSpec l sub r (classify l sub r) ->
+    0 <= h ->
+    ~ terminal_lid l sub r ->
+    ~ initial_lid l sub r ->
+    nth_error (l ++ sub ++ r) i = Some s ->
+    nth_error (l ++ sub ++ r) j = Some t ->
+    (S i < j \/ S j < i)%nat ->
+    in_segment_triangle s u ->
+    in_segment_triangle t v ->
+    fst u = fst v ->
+    snd u < snd v ->
+    Rmax (region_delta h (classify l sub r (init s)))
+         (region_delta h (classify l sub r (term s))) <=
+    Rmin (region_delta h (classify l sub r (init t)))
+         (region_delta h (classify l sub r (term t))).
+Proof.
+  intros l sub r h i j s t u v Hspec Hh HnoT HnoI
+    Hs Ht Hfar Hu Hv Hx Hy.
+  assert (Horders :
+    forall ps pt,
+      endpoint_of_seg s ps -> endpoint_of_seg t pt ->
+      region_delta h (classify l sub r ps) <=
+      region_delta h (classify l sub r pt)).
+  { intros ps pt Hps Hpt.
+    apply region_delta_order; [exact Hh |].
+    exact (classified_nonadjacent_triangle_order l sub r Hspec
+      HnoT HnoI i j s t ps pt u v Hs Ht Hfar Hps Hpt Hu Hv Hx Hy). }
+  pose proof (Horders (init s) (init t) (or_introl eq_refl)
+                (or_introl eq_refl)) as Hii.
+  pose proof (Horders (init s) (term t) (or_introl eq_refl)
+                (or_intror eq_refl)) as Hit.
+  pose proof (Horders (term s) (init t) (or_intror eq_refl)
+                (or_introl eq_refl)) as Hti.
+  pose proof (Horders (term s) (term t) (or_intror eq_refl)
+                (or_intror eq_refl)) as Htt.
+  unfold Rmin, Rmax. repeat destruct Rle_dec; lra.
+Qed.
+
+(* 旧三角形の外側の点が、その縦断面との上下順序に従って動くなら、
+   再接続後の三角形にも入らない。先頭・末尾の延長線で共用する。 *)
+Lemma shifted_point_avoids_reconnected_triangle :
+  forall l sub r h i s s' q z g,
+    @ClassificationSpec l sub r (classify l sub r) ->
+    h_large h sub ->
+    nth_error (l ++ sub ++ r) i = Some s ->
+    nth_error (reconnect_whole l sub r h) i = Some s' ->
+    ~ in_segment_triangle s q ->
+    z = shift h g q ->
+    (forall e,
+       onSegment s e -> fst e = fst q ->
+       (snd q < snd e ->
+          region_at_or_above (classify l sub r (init s)) g /\
+          region_at_or_above (classify l sub r (term s)) g) /\
+       (snd e < snd q ->
+          region_at_or_above g (classify l sub r (init s)) /\
+          region_at_or_above g (classify l sub r (term s)))) ->
+    ~ in_segment_triangle s' z.
+Proof.
+  intros l sub r h i s s' q z g Hspec Hh Hold Hnew Houtside
+    Hshift Horder Hz.
+  destruct (reconnected_triangle_preimage
+              l sub r h i s s' z Hspec Hh Hold Hnew Hz)
+    as [u [Hu [Hux Hbounds]]].
+  assert (Hqz : fst q = fst z).
+  { subst z. destruct g; reflexivity. }
+  assert (Hqu : fst q = fst u) by congruence.
+  assert (Hqx : rx0 (rect_of [s]) <= fst q <= rx1 (rect_of [s])).
+  { destruct Hu as [[Hx _] _]. rewrite Hqu. exact Hx. }
+  destruct (segment_has_point_at_x s (fst q) Hqx)
+    as [e [He Hex]].
+  assert (HtriE : in_segment_triangle s e).
+  { now apply segment_in_endpoint_triangle. }
+  destruct (triangle_outside_vertical_order
+              s q u e Hu HtriE Hqu ltac:(symmetry; exact Hex) Houtside)
+    as [Hbelow Habove].
+  assert (Hneq : snd q <> snd u).
+  { intros Hy. apply Houtside.
+    destruct q as [xq yq], u as [xu yu]; simpl in *; congruence. }
+  assert (Hdy : snd z - snd q = region_delta h g).
+  { subst z. apply shift_y_delta. }
+  destruct (Rlt_dec (snd q) (snd u)) as [Hlower | Hlower].
+  - destruct (proj1 (Horder e He Hex) (Hbelow Hlower))
+      as [Hinit Hterm].
+    pose proof (region_delta_order h g (classify l sub r (init s))
+                  (Rlt_le _ _ (proj1 Hh)) Hinit) as Hdi.
+    pose proof (region_delta_order h g (classify l sub r (term s))
+                  (Rlt_le _ _ (proj1 Hh)) Hterm) as Hdt.
+    unfold Rmin, Rmax in *. repeat destruct Rle_dec; lra.
+  - assert (Hupper : snd u < snd q) by lra.
+    destruct (proj2 (Horder e He Hex) (Habove Hupper))
+      as [Hinit Hterm].
+    pose proof (region_delta_order h (classify l sub r (init s)) g
+                  (Rlt_le _ _ (proj1 Hh)) Hinit) as Hdi.
+    pose proof (region_delta_order h (classify l sub r (term s)) g
+                  (Rlt_le _ _ (proj1 Hh)) Hterm) as Hdt.
+    unfold Rmin, Rmax in *. repeat destruct Rle_dec; lra.
+Qed.
+
 (* 端点移動と再接続後も、非隣接出現の閉三角形は交わらない。
    旧証明の外接長方形分離は三角形疎性から従わない。 *)
 Lemma reconnect_preserves_triangle_separation_prepared :
@@ -200,7 +376,54 @@ Lemma reconnect_preserves_triangle_separation_prepared :
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     segment_triangles_separated (reconnect_whole l sub r h).
-Admitted.
+Proof.
+  intros ds l sub r h Hgeometry Hspec Hh Hsparse _ _
+    ls s' rs Hsplit t' z Hin HzT HzS.
+  destruct (split_nonadjacent_nth_errors
+              (reconnect_whole l sub r h) ls s' rs t' Hsplit Hin)
+    as [i [j [HnewS [HnewT Hfar]]]].
+  assert (Hlen : length (l ++ sub ++ r) =
+                 length (reconnect_whole l sub r h)).
+  { symmetry. apply reconnect_whole_length. }
+  destruct (nth_error_exists_at_equal_length
+              (l ++ sub ++ r) (reconnect_whole l sub r h) i s'
+              Hlen HnewS) as [s Hs].
+  destruct (nth_error_exists_at_equal_length
+              (l ++ sub ++ r) (reconnect_whole l sub r h) j t'
+              Hlen HnewT) as [t Ht].
+  destruct (reconnected_triangle_preimage
+              l sub r h i s s' z Hspec Hh Hs HnewS HzS)
+    as [u [Hu [Hux Hus]]].
+  destruct (reconnected_triangle_preimage
+              l sub r h j t t' z Hspec Hh Ht HnewT HzT)
+    as [v [Hv [Hvx Hvs]]].
+  assert (Hneq : snd u <> snd v).
+  { intros Hy.
+    assert (Heq : u = v).
+    { destruct u as [xu yu], v as [xv yv]; simpl in *; congruence. }
+    destruct (nth_error_far_in_nonadjacent_sides
+                (l ++ sub ++ r) i j s t Hs Ht Hfar)
+      as [lo [ro [HsplitOld Htin]]].
+    subst v.
+    exact ((proj2 (Hsparse lo s ro HsplitOld)) t u Htin Hv Hu). }
+  destruct (Rlt_dec (snd u) (snd v)) as [Huv | Huv].
+  - pose proof (classified_triangle_delta_order
+      l sub r h i j s t u v Hspec (Rlt_le _ _ (proj1 Hh))
+      (prepared_no_terminal_lid l sub r Hgeometry)
+      (prepared_no_initial_lid l sub r Hgeometry)
+      Hs Ht Hfar Hu Hv ltac:(transitivity (fst z); [exact Hux | symmetry; exact Hvx])
+      Huv) as Horder.
+    unfold Rmin, Rmax in *. repeat destruct Rle_dec; lra.
+  - assert (Hvu : snd v < snd u) by lra.
+    pose proof (classified_triangle_delta_order
+      l sub r h j i t s v u Hspec (Rlt_le _ _ (proj1 Hh))
+      (prepared_no_terminal_lid l sub r Hgeometry)
+      (prepared_no_initial_lid l sub r Hgeometry)
+      Ht Hs ltac:(lia) Hv Hu
+      ltac:(transitivity (fst z); [exact Hvx | symmetry; exact Hux])
+      Hvu) as Horder.
+    unfold Rmin, Rmax in *. repeat destruct Rle_dec; lra.
+Qed.
 
 (* strict 延長線は、再接続後も外側セグメントの閉三角形を避ける。 *)
 Lemma reconnect_preserves_triangle_extension_avoidance_prepared :
@@ -212,7 +435,67 @@ Lemma reconnect_preserves_triangle_extension_avoidance_prepared :
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     extensions_avoid_segment_triangles (reconnect_whole l sub r h).
-Admitted.
+Proof.
+  intros ds l sub r h Hgeometry Hspec Hh Hsparse _ _
+    ls s' rs Hsplit p Hextend.
+  assert (Hnew : nth_error (reconnect_whole l sub r h) (length ls) = Some s').
+  { rewrite Hsplit. rewrite nth_error_app2 by lia.
+    replace (length ls - length ls)%nat with 0%nat by lia.
+    reflexivity. }
+  assert (Hlen : length (l ++ sub ++ r) =
+                 length (reconnect_whole l sub r h)).
+  { symmetry. apply reconnect_whole_length. }
+  destruct (nth_error_exists_at_equal_length
+              (l ++ sub ++ r) (reconnect_whole l sub r h)
+              (length ls) s' Hlen Hnew) as [s Hold].
+  destruct (@nth_error_split Segment (l ++ sub ++ r)
+              (length ls) s Hold) as [lo [ro [HsplitOld HloLen]]].
+  assert (Hin : In s (l ++ sub ++ r)) by now apply nth_error_In in Hold.
+  destruct Hextend as [[Hls Hhead] | [Hrs Hlast]].
+  - destruct (reconnect_head_strict_extension_preimage_from_spec
+                l sub r h p
+                (prepared_sub_nonempty l sub r Hgeometry)
+                Hsparse Hspec (Rlt_le _ _ (proj1 Hh)) Hhead)
+      as [q [Hq Hshift]].
+    assert (Hlo : lo <> []).
+    { intros Heq. subst lo. simpl in HloLen.
+      destruct ls; [contradiction | simpl in HloLen; lia]. }
+    assert (Houtside : ~ in_segment_triangle s q).
+    { exact ((proj1 (Hsparse lo s ro HsplitOld)) q
+        (or_introl (conj Hlo Hq))). }
+    eapply (shifted_point_avoids_reconnected_triangle
+      l sub r h (length ls) s s' q p
+      (classify l sub r (init (hd_segment (l ++ sub ++ r)))))
+      ; try eassumption.
+    intros e He Hx.
+    exact (classified_head_segment_crossing_order
+      l sub r Hspec s e q Hin He Hq Hx).
+  - destruct (reconnect_last_strict_extension_preimage_from_spec
+                l sub r h p
+                (prepared_sub_nonempty l sub r Hgeometry)
+                Hsparse Hspec (Rlt_le _ _ (proj1 Hh)) Hlast)
+      as [q [Hq Hshift]].
+    assert (Hro : ro <> []).
+    { intros Heq. subst ro.
+      assert (HlengthNew :
+        length (reconnect_whole l sub r h) =
+        (length ls + 1 + length rs)%nat).
+      { rewrite Hsplit. repeat rewrite length_app. simpl. lia. }
+      assert (HlengthOld :
+        length (l ++ sub ++ r) = (length lo + 1)%nat).
+      { rewrite HsplitOld. repeat rewrite length_app. simpl. lia. }
+      destruct rs; [contradiction | simpl in *; lia]. }
+    assert (Houtside : ~ in_segment_triangle s q).
+    { exact ((proj1 (Hsparse lo s ro HsplitOld)) q
+        (or_intror (conj Hro Hq))). }
+    eapply (shifted_point_avoids_reconnected_triangle
+      l sub r h (length ls) s s' q p
+      (classify l sub r (term (last_segment (l ++ sub ++ r)))))
+      ; try eassumption.
+    intros e He Hx.
+    exact (classified_last_segment_crossing_order
+      l sub r Hspec s e q Hin He Hq Hx).
+Qed.
 
 Lemma prepared_no_lid_preserves_sparse_embedding :
   forall ds l sub r h,

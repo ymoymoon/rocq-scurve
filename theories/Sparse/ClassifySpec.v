@@ -31,18 +31,21 @@ Record ClassificationSpec
       (snd (term seg) < snd (init seg) ->
         region_at_or_above (classifier (init seg)) (classifier (term seg)));
 
-  (* 両側に蓋がなければ、非隣接セグメントの全端点順序を保存する。 *)
-  classified_nonadjacent_endpoint_order :
+  (* 非隣接の閉三角形が同じ x で上下に並ぶとき、その全端点の
+     移動方向も同じ順序にする。再接続後の三角形分離に用いる。 *)
+  classified_nonadjacent_triangle_order :
     ~ terminal_lid l sub r ->
     ~ initial_lid l sub r ->
-    forall i j s t ps pt,
+    forall i j s t ps pt u v,
       nth_error (l ++ sub ++ r) i = Some s ->
       nth_error (l ++ sub ++ r) j = Some t ->
       (S i < j \/ S j < i)%nat ->
-      segment_x_ranges_overlap s t ->
       endpoint_of_seg s ps ->
       endpoint_of_seg t pt ->
-      snd ps <= snd pt ->
+      in_segment_triangle s u ->
+      in_segment_triangle t v ->
+      fst u = fst v ->
+      snd u < snd v ->
       region_at_or_above (classifier pt) (classifier ps);
 
   (* sub の x 範囲でその上側・下側を通る非隣接セグメントは、

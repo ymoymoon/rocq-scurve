@@ -44,6 +44,166 @@ Definition in_segment_triangle (s : Segment) (p : Point) : Prop :=
   | cc => 0 <= chord_side s p
   end.
 
+Lemma chord_side_monotone_y : forall s x a b,
+  a <= b -> chord_side s (x, a) <= chord_side s (x, b).
+Proof.
+  intros s x a b Hab.
+  assert (Hsq : 0 <= (term_x s - init_x s) ^ 2).
+  { replace ((term_x s - init_x s) ^ 2)
+      with ((term_x s - init_x s) * (term_x s - init_x s)) by ring.
+    apply Rle_0_sqr. }
+  unfold chord_side. simpl.
+  replace ((term_x s - init_x s) *
+       ((term_x s - init_x s) * (b - init_y s) -
+        (term_y s - init_y s) * (x - init_x s)) -
+     (term_x s - init_x s) *
+       ((term_x s - init_x s) * (a - init_y s) -
+        (term_y s - init_y s) * (x - init_x s)))
+    with ((term_x s - init_x s) ^ 2 * (b - a)) by ring.
+  nra.
+Qed.
+
+(* 閉三角形の一つの縦断面は区間である。 *)
+Lemma triangle_vertical_fibre_convex : forall s x y0 y1 y,
+  in_segment_triangle s (x, y0) ->
+  in_segment_triangle s (x, y1) ->
+  Rmin y0 y1 <= y <= Rmax y0 y1 ->
+  in_segment_triangle s (x, y).
+Proof.
+  intros s x y0 y1 y H0 H1 Hy.
+  unfold in_segment_triangle, in_segment_rect_or_endpoints,
+    in_closed_rect, chord_side in *.
+  simpl in *.
+  destruct H0 as [[Hx0 Hy0] Hc0].
+  destruct H1 as [[_ Hy1] Hc1].
+  destruct (Rle_dec y0 y1) as [H01 | H10].
+  - rewrite Rmin_left, Rmax_right in Hy by lra.
+    split; [split; [exact Hx0 | lra] |].
+    destruct (C_of (primitive_segment s)); simpl in *.
+    + eapply Rle_trans with (r2 := chord_side s (x, y1));
+        [apply chord_side_monotone_y; lra | exact Hc1].
+    + eapply Rle_trans with (r2 := chord_side s (x, y0));
+        [exact Hc0 | apply chord_side_monotone_y; lra].
+  - rewrite Rmin_right, Rmax_left in Hy by lra.
+    split; [split; [exact Hx0 | lra] |].
+    destruct (C_of (primitive_segment s)); simpl in *.
+    + eapply Rle_trans with (r2 := chord_side s (x, y0));
+        [apply chord_side_monotone_y; lra | exact Hc0].
+    + eapply Rle_trans with (r2 := chord_side s (x, y1));
+        [exact Hc1 | apply chord_side_monotone_y; lra].
+Qed.
+
+Lemma triangle_outside_vertical_order : forall s q u e,
+  in_segment_triangle s u ->
+  in_segment_triangle s e ->
+  fst q = fst u -> fst q = fst e ->
+  ~ in_segment_triangle s q ->
+  (snd q < snd u -> snd q < snd e) /\
+  (snd u < snd q -> snd e < snd q).
+Proof.
+  intros s [xq yq] [xu yu] [xe ye] Hu He Hqu Hqe Houtside.
+  simpl in *. subst xu xe. split; intros Horder.
+  - destruct (Rlt_dec yq ye) as [H | H]; [exact H |].
+    exfalso. apply Houtside.
+    apply (triangle_vertical_fibre_convex s xq ye yu yq He Hu).
+    rewrite Rmin_left, Rmax_right by lra. lra.
+  - destruct (Rlt_dec ye yq) as [H | H]; [exact H |].
+    exfalso. apply Houtside.
+    apply (triangle_vertical_fibre_convex s xq yu ye yq Hu He).
+    rewrite Rmin_left, Rmax_right by lra. lra.
+Qed.
+
+Lemma triangle_y_parameter : forall s p,
+  in_segment_triangle s p ->
+  exists t, 0 <= t <= 1 /\
+    snd p = init_y s + t * (term_y s - init_y s).
+Proof.
+  intros s p [[_ Hy] _].
+  unfold in_segment_rect_or_endpoints, in_closed_rect in Hy.
+  unfold rect_of in Hy; simpl in Hy.
+  change (Rmin (init_y s) (term_y s) <= snd p <=
+          Rmax (init_y s) (term_y s)) in Hy.
+  set (dy := term_y s - init_y s).
+  assert (Hdy : dy <> 0).
+  { unfold dy. intros H. apply (neq_init_term_y s). lra. }
+  exists ((snd p - init_y s) / dy).
+  assert (Ht : (snd p - init_y s) / dy * dy = snd p - init_y s).
+  { field. exact Hdy. }
+  destruct (Rle_dec (init_y s) (term_y s)) as [Hup | Hdown].
+  - rewrite Rmin_left, Rmax_right in Hy by exact Hup.
+    split; [split |]; unfold dy in *; nra.
+  - rewrite Rmin_right, Rmax_left in Hy by lra.
+    split; [split |]; unfold dy in *; nra.
+Qed.
+
+(* 端点の x と三角形の向きが保たれるとき、新三角形の点は旧三角形へ
+   同じ x で引き戻せる。高さの差は両端点の高さの差の間にある。 *)
+Lemma triangle_vertical_shift_preimage : forall old new z,
+  init_x new = init_x old ->
+  term_x new = term_x old ->
+  C_of (primitive_segment new) = C_of (primitive_segment old) ->
+  0 < (term_y old - init_y old) * (term_y new - init_y new) ->
+  in_segment_triangle new z ->
+  exists u,
+    in_segment_triangle old u /\
+    fst u = fst z /\
+    Rmin (init_y new - init_y old) (term_y new - term_y old)
+      <= snd z - snd u <=
+    Rmax (init_y new - init_y old) (term_y new - term_y old).
+Proof.
+  intros old new z Hix Htx Hc Hsign Hz.
+  destruct (triangle_y_parameter new z Hz) as [t [[Ht0 Ht1] Hyt]].
+  set (u := (fst z, init_y old + t * (term_y old - init_y old))).
+  exists u. split; [|split; [reflexivity |]].
+  - destruct Hz as [Hrect Hside].
+    unfold in_segment_triangle. split.
+    + unfold in_segment_rect_or_endpoints, in_closed_rect in *.
+      destruct Hrect as [Hnx _].
+      split.
+      * unfold rect_of in *. simpl in *.
+        change (Rmin (init_x new) (term_x new) <= fst z <=
+                Rmax (init_x new) (term_x new)) in Hnx.
+        now rewrite Hix, Htx in Hnx.
+      * unfold rect_of. simpl.
+        change (Rmin (init_y old) (term_y old) <= snd u <=
+                Rmax (init_y old) (term_y old)).
+        unfold u; simpl.
+        destruct (Rle_dec (init_y old) (term_y old)) as [Hup | Hdown].
+        -- rewrite Rmin_left, Rmax_right by exact Hup. split; nra.
+        -- rewrite Rmin_right, Rmax_left by lra. split; nra.
+    + rewrite Hc in Hside.
+      set (dyold := term_y old - init_y old).
+      set (dynew := term_y new - init_y new).
+      set (k := (term_x old - init_x old) *
+        ((term_x old - init_x old) * t - (fst z - init_x old))).
+      assert (Hold : chord_side old u = dyold * k).
+      { unfold chord_side, u, k, dyold. simpl. ring. }
+      assert (Hnew : chord_side new z = dynew * k).
+      { unfold chord_side, k, dynew. simpl.
+        rewrite Hix, Htx, Hyt. ring. }
+      rewrite Hold. rewrite Hnew in Hside.
+      change (0 < dyold * dynew) in Hsign.
+      assert (Hsame :
+        (0 < dyold /\ 0 < dynew) \/ (dyold < 0 /\ dynew < 0)).
+      { destruct (Rlt_dec 0 dyold) as [Ho | Ho].
+        - left. split; [exact Ho | nra].
+        - destruct (Rlt_dec 0 dynew) as [Hn | Hn].
+          + exfalso. nra.
+          + right. split; nra. }
+      destruct Hsame as [[Ho Hn] | [Ho Hn]];
+        destruct (C_of (primitive_segment old)); simpl in *; nra.
+  - unfold u; simpl.
+    assert (Hd : snd z - (init_y old + t * (term_y old - init_y old)) =
+      (init_y new - init_y old) +
+        t * ((term_y new - term_y old) - (init_y new - init_y old))).
+    { rewrite Hyt. ring. }
+    rewrite Hd.
+    destruct (Rle_dec (init_y new - init_y old)
+                        (term_y new - term_y old)) as [Hup | Hdown].
+    + rewrite Rmin_left, Rmax_right by exact Hup. split; nra.
+    + rewrite Rmin_right, Rmax_left by lra. split; nra.
+Qed.
+
 (* embed の凸性と弦の上下関係を結ぶ基本仕様。 *)
 Axiom segment_in_endpoint_triangle :
   forall s p, onSegment s p -> in_segment_triangle s p.
