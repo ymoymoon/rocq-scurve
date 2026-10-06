@@ -30,18 +30,23 @@ Definition in_rect_or_endpoints_at (old : list Segment) (p : Point) : Prop :=
 Definition in_segment_rect_or_endpoints (s : Segment) (p : Point) : Prop :=
   in_closed_rect (rect_of [s]) p.
 
-(* 端点長方形を、端点を結ぶ対角線で分けた閉三角形。
-   凸なら弦の下側、凹なら上側を使う（x の向きには依存しない）。 *)
+(* dx = term_x s - init_x s (非零), dy = term_y s - init_y s,
+   p = (x, y) とすると、chord_side s p =
+     dx^2 * (y - (init_y s + (dy / dx) * (x - init_x s)))。
+   dx^2 > 0 なので、符号は弦の上下を表す。<= 0 は弦以下、
+   >= 0 は弦以上の閉半平面であり、x の進行方向には依存しない。 *)
 Definition chord_side (s : Segment) (p : Point) : R :=
   (term_x s - init_x s) *
     ((term_x s - init_x s) * (snd p - init_y s) -
      (term_y s - init_y s) * (fst p - init_x s)).
 
+(* 端点長方形と、上に凸な cx なら弦より上側、
+   下に凸な cc なら弦より下側の閉半平面との共通部分。 *)
 Definition in_segment_triangle (s : Segment) (p : Point) : Prop :=
   in_segment_rect_or_endpoints s p /\
   match C_of (primitive_segment s) with
-  | cx => chord_side s p <= 0
-  | cc => 0 <= chord_side s p
+  | cx => 0 <= chord_side s p
+  | cc => chord_side s p <= 0
   end.
 
 Lemma chord_side_monotone_y : forall s x a b,
@@ -80,17 +85,17 @@ Proof.
   - rewrite Rmin_left, Rmax_right in Hy by lra.
     split; [split; [exact Hx0 | lra] |].
     destruct (C_of (primitive_segment s)); simpl in *.
-    + eapply Rle_trans with (r2 := chord_side s (x, y1));
-        [apply chord_side_monotone_y; lra | exact Hc1].
     + eapply Rle_trans with (r2 := chord_side s (x, y0));
         [exact Hc0 | apply chord_side_monotone_y; lra].
+    + eapply Rle_trans with (r2 := chord_side s (x, y1));
+        [apply chord_side_monotone_y; lra | exact Hc1].
   - rewrite Rmin_right, Rmax_left in Hy by lra.
     split; [split; [exact Hx0 | lra] |].
     destruct (C_of (primitive_segment s)); simpl in *.
-    + eapply Rle_trans with (r2 := chord_side s (x, y0));
-        [apply chord_side_monotone_y; lra | exact Hc0].
     + eapply Rle_trans with (r2 := chord_side s (x, y1));
         [exact Hc1 | apply chord_side_monotone_y; lra].
+    + eapply Rle_trans with (r2 := chord_side s (x, y0));
+        [apply chord_side_monotone_y; lra | exact Hc0].
 Qed.
 
 Lemma triangle_outside_vertical_order : forall s q u e,
@@ -217,8 +222,9 @@ Definition in_rect_or_endpoints (old new : list Segment) : Prop :=
 Definition in_segment_triangle_of (old : Segment) (new : list Segment) : Prop :=
   forall p, onSegmentlist new p -> in_segment_triangle old p.
 
-(* sub の両端点を結ぶ弦から見た向き付き面積。Plus はその負側、
-   Minus は正側を使う。この符号は x の進行方向に依存しない。 *)
+(* sub の両端点を結ぶ弦から見た向き付き面積。
+   Plus は正側、Minus は負側を使う。東向きでは Plus が cx、
+   西向きでは Plus が cc となるので、凸性だけでは側を決められない。 *)
 Definition sub_chord_cross (sub : list Segment) (p : Point) : R :=
   let a := init (hd_segment sub) in
   let b := term (last_segment sub) in
@@ -228,8 +234,8 @@ Definition sub_chord_cross (sub : list Segment) (p : Point) : R :=
 Definition in_sub_triangle (d : Direction) (sub : list Segment) (p : Point) : Prop :=
   in_rect_or_endpoints_at sub p /\
   match d with
-  | Plus => sub_chord_cross sub p <= 0
-  | Minus => 0 <= sub_chord_cross sub p
+  | Plus => 0 <= sub_chord_cross sub p
+  | Minus => sub_chord_cross sub p <= 0
   end.
 
 Definition in_sub_triangle_of
