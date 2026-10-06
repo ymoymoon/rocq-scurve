@@ -242,6 +242,35 @@ Definition in_sub_triangle_of
     (d : Direction) (old new : list Segment) : Prop :=
   forall p, onSegmentlist new p -> in_sub_triangle d old p.
 
+(* 単一セグメントでは、時計回り・反時計回りで選ぶ三角形と、
+   水平向き・凸性から選ぶ端点三角形が一致する。 *)
+Lemma single_sub_triangle : forall s p,
+  in_sub_triangle (orn_seg s) [s] p <-> in_segment_triangle s p.
+Proof.
+  intros s p.
+  pose proof (primitive_segment_embed s) as Hembed.
+  rewrite orn_seg_primitive.
+  destruct (primitive_segment s) as [[v h] c] eqn:Hprimitive.
+  assert (Hdx :
+    match h with
+    | e => 0 < term_x s - init_x s
+    | w => term_x s - init_x s < 0
+    end).
+  { destruct h.
+    - pose proof (e_end_relation s v c Hembed).
+      unfold init_x, term_x. lra.
+    - pose proof (w_end_relation s v c Hembed).
+      unfold init_x, term_x. lra. }
+  assert (Hside : chord_side s p =
+    (term_x s - init_x s) * sub_chord_cross [s] p).
+  { reflexivity. }
+  unfold in_sub_triangle, in_segment_triangle,
+    in_rect_or_endpoints_at, in_segment_rect_or_endpoints.
+  rewrite Hprimitive, Hside.
+  destruct v, h, c; cbn [orn C_of snd] in *;
+    split; intros [Hrect Hcross]; split; try assumption; nra.
+Qed.
+
 (* sub の端点長方形が sub 全体を含む。x 単調性は要求しない。 *)
 Definition sub_contained_in_endpoint_rect (sub : list Segment) : Prop :=
   forall p, onSegmentlist sub p -> in_rect_or_endpoints_at sub p.
@@ -426,6 +455,29 @@ Proof.
     now apply nonadjacent_sides_extend_left. }
   apply ((proj2 Haround) s q Hs' Hqbox).
   now apply segment_in_endpoint_triangle.
+Qed.
+
+(* 同じ x の sub 点を上下から挟む非隣接セグメントの閉三角形は、
+   その sub 点を含むため三角形 sparse に反する。端での接触も排除する。 *)
+Lemma sparse_triangle_cannot_straddle_sub :
+  forall l sub r s q u v,
+    sparse_embedding (l ++ sub ++ r) ->
+    In s (nonadjacent_sides l r) ->
+    onSegmentlist sub q ->
+    in_segment_triangle s u ->
+    in_segment_triangle s v ->
+    fst u = fst q ->
+    fst v = fst q ->
+    snd u <= snd q <= snd v ->
+    False.
+Proof.
+  intros l sub r s [xq yq] [xu yu] [xv yv]
+    Hsparse Hs Hq Hu Hv Hux Hvx Hy.
+  cbn in Hux, Hvx, Hy. subst xu xv.
+  apply (sparse_nonadjacent_triangle_avoids_sub_points
+           l sub r s (xq, yq) Hsparse Hs Hq).
+  apply (triangle_vertical_fibre_convex s xq yu yv yq Hu Hv).
+  rewrite Rmin_left, Rmax_right by lra. exact Hy.
 Qed.
 
 (* 全域では三角形で疎、指定した部分列 sub の周りでは閉長方形で疎。 *)
