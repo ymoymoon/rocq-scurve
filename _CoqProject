@@ -23,5 +23,6 @@ theories/Sparse/Classify.v
 theories/Sparse/Reconnect.v
 theories/Sparse/ReconnectLocalProof.v
 theories/Sparse/ReconnectWholeProof.v
+theories/Sparse/PMPEmbedding.v
 theories/AdmissibilityPreservation.v
 theories/ConcreteExtend.v

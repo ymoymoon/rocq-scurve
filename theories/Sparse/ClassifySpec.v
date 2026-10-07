@@ -14,8 +14,8 @@ Record ClassificationContext
 }.
 
 
-(* 分類器に要求する外部仕様。 *)
-Record ClassificationSpec
+(* 再接続の埋め込み・全域三角形疎性・延長線に共通する仕様。 *)
+Record ReconnectClassificationSpec
     (l sub r : list Segment) {classifier : EndpointClassifier} : Prop := {
   (* sub は全点を固定する。特に左右との接続端点も動かない。 *)
   classified_sub_fixed :
@@ -34,8 +34,6 @@ Record ClassificationSpec
   (* 非隣接の閉三角形が同じ x で上下に並ぶとき、その全端点の
      移動方向も同じ順序にする。再接続後の三角形分離に用いる。 *)
   classified_nonadjacent_triangle_order :
-    ~ terminal_lid l sub r ->
-    ~ initial_lid l sub r ->
     forall i j s t ps pt u v,
       nth_error (l ++ sub ++ r) i = Some s ->
       nth_error (l ++ sub ++ r) j = Some t ->
@@ -47,39 +45,6 @@ Record ClassificationSpec
       fst u = fst v ->
       snd u < snd v ->
       region_at_or_above (classifier pt) (classifier ps);
-
-  (* sub の x 範囲でその上側・下側を通る非隣接セグメントは、
-     両端を同じ外側へ動かす。 *)
-  classified_segment_at_sub_x :
-    forall seg p,
-      In seg (nonadjacent_sides l r) ->
-      onSegment seg p ->
-      in_sub_x_range sub p ->
-      (above_sub_at_x sub p ->
-         classifier (init seg) = RegUp
-         /\ classifier (term seg) = RegUp)
-      /\
-      (below_sub_at_x sub p ->
-         classifier (init seg) = RegDown
-         /\ classifier (term seg) = RegDown);
-
-  (* strict 先頭延長線が sub の x 範囲へ入るなら、その基点を動かす。 *)
-  classified_head_extension_at_sub_x :
-    l <> [] ->
-    forall p,
-      onHead_extend_strict (l ++ sub ++ r) p ->
-      rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub) ->
-      classifier (init (hd_segment (l ++ sub ++ r))) = RegUp
-      \/ classifier (init (hd_segment (l ++ sub ++ r))) = RegDown;
-
-  (* strict 末尾延長線についても、その基点を固定しない。 *)
-  classified_last_extension_at_sub_x :
-    r <> [] ->
-    forall p,
-      onLast_extend_strict (l ++ sub ++ r) p ->
-      rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub) ->
-      classifier (term (last_segment (l ++ sub ++ r))) = RegUp
-      \/ classifier (term (last_segment (l ++ sub ++ r))) = RegDown;
 
   (* 同じ x にある先頭・末尾延長線の上下順序を基点分類へ移す。 *)
   classified_head_last_extension_order :
@@ -158,4 +123,67 @@ Record ClassificationSpec
       r <> [] ->
       classified_term_slope_reconnectable
         classifier h (last_segment r)
+}.
+
+(* PPMM・PM 用：共通仕様に、長方形から上下への退避条件を加える。 *)
+Record ClassificationSpec
+    (l sub r : list Segment) {classifier : EndpointClassifier} : Prop := {
+  classification_reconnect_spec :> @ReconnectClassificationSpec l sub r classifier;
+
+  (* sub の x 範囲でその上側・下側を通る非隣接セグメントは、
+     両端を同じ外側へ動かす。 *)
+  classified_segment_at_sub_x :
+    forall seg p,
+      In seg (nonadjacent_sides l r) ->
+      onSegment seg p ->
+      in_sub_x_range sub p ->
+      (above_sub_at_x sub p ->
+         classifier (init seg) = RegUp
+         /\ classifier (term seg) = RegUp)
+      /\
+      (below_sub_at_x sub p ->
+         classifier (init seg) = RegDown
+         /\ classifier (term seg) = RegDown);
+
+  (* strict 先頭延長線が sub の x 範囲へ入るなら、その基点を動かす。 *)
+  classified_head_extension_at_sub_x :
+    l <> [] ->
+    forall p,
+      onHead_extend_strict (l ++ sub ++ r) p ->
+      rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub) ->
+      classifier (init (hd_segment (l ++ sub ++ r))) = RegUp
+      \/ classifier (init (hd_segment (l ++ sub ++ r))) = RegDown;
+
+  (* strict 末尾延長線についても、その基点を固定しない。 *)
+  classified_last_extension_at_sub_x :
+    r <> [] ->
+    forall p,
+      onLast_extend_strict (l ++ sub ++ r) p ->
+      rx0 (rect_of sub) <= fst p <= rx1 (rect_of sub) ->
+      classifier (term (last_segment (l ++ sub ++ r))) = RegUp
+      \/ classifier (term (last_segment (l ++ sub ++ r))) = RegDown;
+}.
+
+(* PMP 用：下方向へは動かさず、Plus 側の三角形だけから退避する。 *)
+Record PMPClassificationSpec
+    (l sub r : list Segment) {classifier : EndpointClassifier} : Prop := {
+  pmp_reconnect_spec :> @ReconnectClassificationSpec l sub r classifier;
+  (* 分類は上移動または固定の二択。 *)
+  pmp_only_up_or_fix : forall p, classifier p = RegUp \/ classifier p = RegFix;
+  (* sub の x 範囲を通る非隣接セグメントは一律に動かす。 *)
+  pmp_segment_at_sub_x_uniform : forall seg p,
+    In seg (nonadjacent_sides l r) -> onSegment seg p ->
+    in_sub_x_range sub p -> classifier (init seg) = classifier (term seg);
+  (* 退避方向は入力側の Plus 三角形との接触から決める。 *)
+  pmp_triangle_meeting_moves_up : forall seg p,
+    In seg (nonadjacent_sides l r) ->
+    in_segment_triangle seg p -> in_sub_triangle Plus sub p ->
+    classifier (init seg) = RegUp /\ classifier (term seg) = RegUp;
+  (* 外側の延長線が目的三角形に入るとき、その基点を上げる。 *)
+  pmp_head_meeting_moves_up : l <> [] -> forall p,
+    onHead_extend_strict (l ++ sub ++ r) p -> in_sub_triangle Plus sub p ->
+    classifier (init (hd_segment (l ++ sub ++ r))) = RegUp;
+  pmp_last_meeting_moves_up : r <> [] -> forall p,
+    onLast_extend_strict (l ++ sub ++ r) p -> in_sub_triangle Plus sub p ->
+    classifier (term (last_segment (l ++ sub ++ r))) = RegUp
 }.

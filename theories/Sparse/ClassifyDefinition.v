@@ -13,11 +13,9 @@ Inductive endpoint_core_step
       endpoint_of_seg seg q ->
       snd p <= snd q ->
       endpoint_core_step l sub r p q
-  (* 蓋がない場合、非隣接の閉三角形が同じ x で上下に並べば、
+  (* 非隣接の閉三角形が同じ x で上下に並べば、
      下側の全端点から上側の全端点へ順序を付ける。 *)
   | order_nonadjacent : forall i j s t ps pt u v,
-      ~ terminal_lid l sub r ->
-      ~ initial_lid l sub r ->
       nth_error (l ++ sub ++ r) i = Some s ->
       nth_error (l ++ sub ++ r) j = Some t ->
       (S i < j \/ S j < i)%nat ->

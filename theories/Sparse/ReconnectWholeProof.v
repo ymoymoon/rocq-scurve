@@ -4,6 +4,46 @@ Import ListNotations.
 From Stdlib Require Import Lra.
 From Stdlib Require Import Lia.
 
+Module ReconnectWholeByClassifier.
+Section WithClassifier.
+Variable classify : list Segment -> list Segment -> list Segment -> EndpointClassifier.
+
+Local Notation operate_point := (ReconnectByClassifier.operate_point classify).
+Local Notation operate_point_fst := (ReconnectLocalByClassifier.operate_point_fst classify).
+Local Notation reconnectable_after := (ReconnectByClassifier.reconnectable_after classify).
+Local Notation reconnect_slope_after := (ReconnectByClassifier.reconnect_slope_after classify).
+Local Notation reconnect_init_slope_after := (ReconnectByClassifier.reconnect_init_slope_after classify).
+Local Notation reconnect_term_slope_after := (ReconnectByClassifier.reconnect_term_slope_after classify).
+Local Notation head_init_slope_after := (ReconnectByClassifier.head_init_slope_after classify).
+Local Notation last_term_slope_after := (ReconnectByClassifier.last_term_slope_after classify).
+Local Notation all_reconnectable := (ReconnectByClassifier.all_reconnectable classify).
+Local Notation reconnect_one := (ReconnectByClassifier.reconnect_one classify).
+Local Notation reconnect_segs := (ReconnectByClassifier.reconnect_segs classify).
+Local Notation reconnect_whole := (ReconnectByClassifier.reconnect_whole classify).
+Local Notation reconnect_one_endpoints_orn := (ReconnectLocalByClassifier.reconnect_one_endpoints_orn classify).
+Local Notation reconnect_one_init := (ReconnectLocalByClassifier.reconnect_one_init classify).
+Local Notation reconnect_one_term := (ReconnectLocalByClassifier.reconnect_one_term classify).
+Local Notation reconnect_one_orn := (ReconnectLocalByClassifier.reconnect_one_orn classify).
+Local Notation reconnect_one_head_slope_init := (ReconnectLocalByClassifier.reconnect_one_head_slope_init classify).
+Local Notation reconnect_one_last_slope_term := (ReconnectLocalByClassifier.reconnect_one_last_slope_term classify).
+Local Notation reconnect_one_head_extension_preimage := (ReconnectLocalByClassifier.reconnect_one_head_extension_preimage classify).
+Local Notation reconnect_one_last_extension_preimage := (ReconnectLocalByClassifier.reconnect_one_last_extension_preimage classify).
+Local Notation reconnect_head_extension_preimage_from_spec := (ReconnectLocalByClassifier.reconnect_head_extension_preimage_from_spec classify).
+Local Notation reconnect_last_extension_preimage_from_spec := (ReconnectLocalByClassifier.reconnect_last_extension_preimage_from_spec classify).
+Local Notation reconnect_head_strict_extension_preimage_from_spec := (ReconnectLocalByClassifier.reconnect_head_strict_extension_preimage_from_spec classify).
+Local Notation reconnect_last_strict_extension_preimage_from_spec := (ReconnectLocalByClassifier.reconnect_last_strict_extension_preimage_from_spec classify).
+Local Notation reconnect_segs_length := (ReconnectLocalByClassifier.reconnect_segs_length classify).
+Local Notation reconnect_segs_nth_error := (ReconnectLocalByClassifier.reconnect_segs_nth_error classify).
+Local Notation operation_height_safe_from_spec := (ReconnectLocalByClassifier.operation_height_safe_from_spec classify).
+Local Notation operated_segment_axis_orders_from_spec := (ReconnectLocalByClassifier.operated_segment_axis_orders_from_spec classify).
+Local Notation operate_endpoints_reconnectable_from_spec := (ReconnectLocalByClassifier.operate_endpoints_reconnectable_from_spec classify).
+Local Notation reconnect_whole_nth_spec := (ReconnectLocalByClassifier.reconnect_whole_nth_spec classify).
+Local Notation reconnect_whole_connected := (ReconnectLocalByClassifier.reconnect_whole_connected classify).
+Local Notation prepared_reconnect_whole_preserves_embed := (ReconnectLocalByClassifier.prepared_reconnect_whole_preserves_embed classify).
+Local Notation reconnect_whole_length := (ReconnectLocalByClassifier.reconnect_whole_length classify).
+Local Notation operated_nonadjacent_endpoints_separated_from_spec := (ReconnectLocalByClassifier.operated_nonadjacent_endpoints_separated_from_spec classify).
+Local Notation classified_shifted_extension_avoids_sub_rect_from_spec := (ReconnectLocalByClassifier.classified_shifted_extension_avoids_sub_rect_from_spec classify).
+
 (* 局所補題を組み合わせ、再接続後の曲線全体の疎性を示す。 *)
 
 Lemma split_nonadjacent_nth_errors : forall ls l s r t,
@@ -209,7 +249,7 @@ Qed.
 (* 新しい閉三角形の点を、同じ出現の旧三角形へ引き戻す。 *)
 Lemma reconnected_triangle_preimage :
   forall l sub r h i s s' z,
-    @ClassificationSpec l sub r (classify l sub r) ->
+    @ReconnectClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     nth_error (l ++ sub ++ r) i = Some s ->
     nth_error (reconnect_whole l sub r h) i = Some s' ->
@@ -225,7 +265,7 @@ Proof.
   intros l sub r h i s s' z Hspec Hh Hold Hnew Hz.
   assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
   { exact (operate_endpoints_reconnectable_from_spec l sub r h Hspec Hh). }
-  destruct (reconnect_whole_nth_spec l sub r h i s s' Hrec Hold Hnew)
+  destruct (reconnect_whole_nth_spec l sub r h i s s' Hspec Hrec Hold Hnew)
     as [Horn [Hinit Hterm]].
   assert (Hin : In s (l ++ sub ++ r)) by now apply nth_error_In in Hold.
   destruct (operated_segment_axis_orders_from_spec
@@ -267,10 +307,8 @@ Qed.
 
 Lemma classified_triangle_delta_order :
   forall l sub r h i j s t u v,
-    @ClassificationSpec l sub r (classify l sub r) ->
+    @ReconnectClassificationSpec l sub r (classify l sub r) ->
     0 <= h ->
-    ~ terminal_lid l sub r ->
-    ~ initial_lid l sub r ->
     nth_error (l ++ sub ++ r) i = Some s ->
     nth_error (l ++ sub ++ r) j = Some t ->
     (S i < j \/ S j < i)%nat ->
@@ -283,7 +321,7 @@ Lemma classified_triangle_delta_order :
     Rmin (region_delta h (classify l sub r (init t)))
          (region_delta h (classify l sub r (term t))).
 Proof.
-  intros l sub r h i j s t u v Hspec Hh HnoT HnoI
+  intros l sub r h i j s t u v Hspec Hh
     Hs Ht Hfar Hu Hv Hx Hy.
   assert (Horders :
     forall ps pt,
@@ -293,7 +331,7 @@ Proof.
   { intros ps pt Hps Hpt.
     apply region_delta_order; [exact Hh |].
     exact (classified_nonadjacent_triangle_order l sub r Hspec
-      HnoT HnoI i j s t ps pt u v Hs Ht Hfar Hps Hpt Hu Hv Hx Hy). }
+      i j s t ps pt u v Hs Ht Hfar Hps Hpt Hu Hv Hx Hy). }
   pose proof (Horders (init s) (init t) (or_introl eq_refl)
                 (or_introl eq_refl)) as Hii.
   pose proof (Horders (init s) (term t) (or_introl eq_refl)
@@ -309,7 +347,7 @@ Qed.
    再接続後の三角形にも入らない。先頭・末尾の延長線で共用する。 *)
 Lemma shifted_point_avoids_reconnected_triangle :
   forall l sub r h i s s' q z g,
-    @ClassificationSpec l sub r (classify l sub r) ->
+    @ReconnectClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     nth_error (l ++ sub ++ r) i = Some s ->
     nth_error (reconnect_whole l sub r h) i = Some s' ->
@@ -369,15 +407,15 @@ Qed.
    旧証明の外接長方形分離は三角形疎性から従わない。 *)
 Lemma reconnect_preserves_triangle_separation_prepared :
   forall ds l sub r h,
-    PreparedGeometry l sub r ->
-    @ClassificationSpec l sub r (classify l sub r) ->
+    sub <> [] ->
+    @ReconnectClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     segment_triangles_separated (reconnect_whole l sub r h).
 Proof.
-  intros ds l sub r h Hgeometry Hspec Hh Hsparse _ _
+  intros ds l sub r h Hne Hspec Hh Hsparse _ _
     ls s' rs Hsplit t' z Hin HzT HzS.
   destruct (split_nonadjacent_nth_errors
               (reconnect_whole l sub r h) ls s' rs t' Hsplit Hin)
@@ -409,16 +447,12 @@ Proof.
   destruct (Rlt_dec (snd u) (snd v)) as [Huv | Huv].
   - pose proof (classified_triangle_delta_order
       l sub r h i j s t u v Hspec (Rlt_le _ _ (proj1 Hh))
-      (prepared_no_terminal_lid l sub r Hgeometry)
-      (prepared_no_initial_lid l sub r Hgeometry)
       Hs Ht Hfar Hu Hv ltac:(transitivity (fst z); [exact Hux | symmetry; exact Hvx])
       Huv) as Horder.
     unfold Rmin, Rmax in *. repeat destruct Rle_dec; lra.
   - assert (Hvu : snd v < snd u) by lra.
     pose proof (classified_triangle_delta_order
       l sub r h j i t s v u Hspec (Rlt_le _ _ (proj1 Hh))
-      (prepared_no_terminal_lid l sub r Hgeometry)
-      (prepared_no_initial_lid l sub r Hgeometry)
       Ht Hs ltac:(lia) Hv Hu
       ltac:(transitivity (fst z); [exact Hvx | symmetry; exact Hux])
       Hvu) as Horder.
@@ -428,15 +462,15 @@ Qed.
 (* strict 延長線は、再接続後も外側セグメントの閉三角形を避ける。 *)
 Lemma reconnect_preserves_triangle_extension_avoidance_prepared :
   forall ds l sub r h,
-    PreparedGeometry l sub r ->
-    @ClassificationSpec l sub r (classify l sub r) ->
+    sub <> [] ->
+    @ReconnectClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     extensions_avoid_segment_triangles (reconnect_whole l sub r h).
 Proof.
-  intros ds l sub r h Hgeometry Hspec Hh Hsparse _ _
+  intros ds l sub r h Hne Hspec Hh Hsparse _ _
     ls s' rs Hsplit p Hextend.
   assert (Hnew : nth_error (reconnect_whole l sub r h) (length ls) = Some s').
   { rewrite Hsplit. rewrite nth_error_app2 by lia.
@@ -454,7 +488,7 @@ Proof.
   destruct Hextend as [[Hls Hhead] | [Hrs Hlast]].
   - destruct (reconnect_head_strict_extension_preimage_from_spec
                 l sub r h p
-                (prepared_sub_nonempty l sub r Hgeometry)
+                Hne
                 Hsparse Hspec (Rlt_le _ _ (proj1 Hh)) Hhead)
       as [q [Hq Hshift]].
     assert (Hlo : lo <> []).
@@ -472,7 +506,7 @@ Proof.
       l sub r Hspec s e q Hin He Hq Hx).
   - destruct (reconnect_last_strict_extension_preimage_from_spec
                 l sub r h p
-                (prepared_sub_nonempty l sub r Hgeometry)
+                Hne
                 Hsparse Hspec (Rlt_le _ _ (proj1 Hh)) Hlast)
       as [q [Hq Hshift]].
     assert (Hro : ro <> []).
@@ -497,36 +531,37 @@ Proof.
       l sub r Hspec s e q Hin He Hq Hx).
 Qed.
 
-Lemma prepared_no_lid_preserves_sparse_embedding :
+(* 蓋や局所退避条件ではなく、共通の三角形順序だけから全域疎性を保存する。 *)
+Lemma reconnect_preserves_sparse_embedding_from_spec :
   forall ds l sub r h,
-    PreparedGeometry l sub r ->
-    @ClassificationSpec l sub r (classify l sub r) ->
+    sub <> [] ->
+    @ReconnectClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     sparse_embedding (reconnect_whole l sub r h).
 Proof.
-  intros ds l sub r h Hgeometry Hspec Hh Hsparse Hembed Hext.
+  intros ds l sub r h Hne Hspec Hh Hsparse Hembed Hext.
   apply geometric_triangle_sparse_embedding.
   - exact (reconnect_preserves_triangle_separation_prepared
-             ds l sub r h Hgeometry Hspec Hh Hsparse Hembed Hext).
+             ds l sub r h Hne Hspec Hh Hsparse Hembed Hext).
   - exact (reconnect_preserves_triangle_extension_avoidance_prepared
-             ds l sub r h Hgeometry Hspec Hh Hsparse Hembed Hext).
+             ds l sub r h Hne Hspec Hh Hsparse Hembed Hext).
 Qed.
 
 (* 分類仕様の延長線順序を使い、再接続後の延長線非交差を示す。 *)
 Lemma ordinary_extensions_disjoint_prepared :
   forall ds l sub r h,
-    PreparedGeometry l sub r ->
-    @ClassificationSpec l sub r (classify l sub r) ->
+    sub <> [] ->
+    @ReconnectClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     extensions_disjoint (reconnect_whole l sub r h).
 Proof.
-  intros ds l sub r h Hgeometry Hspec Hh Hsparse Hembed Hext.
+  intros ds l sub r h Hne Hspec Hh Hsparse Hembed Hext.
   assert (HheadSlope :
       l <> [] -> reconnect_init_slope_after l sub r h (hd_segment l)).
   { intros Hl. unfold reconnect_init_slope_after, operate_point.
@@ -540,12 +575,12 @@ Proof.
   intros p Hhead Hlast.
   destruct (reconnect_head_extension_preimage_from_spec
               l sub r h p
-              (prepared_sub_nonempty l sub r Hgeometry)
+              Hne
               Hspec HheadSlope Hhead)
     as [ph [Hph HshiftHead]].
   destruct (reconnect_last_extension_preimage_from_spec
               l sub r h p
-              (prepared_sub_nonempty l sub r Hgeometry)
+              Hne
               Hspec Hsparse HlastSlope Hlast)
     as [pl [Hpl HshiftLast]].
   assert (Hx : fst ph = fst pl).
@@ -632,6 +667,25 @@ Proof.
     + exact Hp.
 Qed.
 
+
+End WithClassifier.
+End ReconnectWholeByClassifier.
+
+Definition split_nonadjacent_nth_errors := ReconnectWholeByClassifier.split_nonadjacent_nth_errors.
+Definition nth_error_exists_at_equal_length := ReconnectWholeByClassifier.nth_error_exists_at_equal_length.
+Definition region_delta := ReconnectWholeByClassifier.region_delta.
+Definition region_delta_order := ReconnectWholeByClassifier.region_delta_order.
+Definition shift_y_delta := ReconnectWholeByClassifier.shift_y_delta.
+Definition reconnect_extensions_avoid_sub_rect_from_spec := ReconnectWholeByClassifier.reconnect_extensions_avoid_sub_rect_from_spec classify.
+Definition reconnected_triangle_preimage := ReconnectWholeByClassifier.reconnected_triangle_preimage classify.
+Definition classified_triangle_delta_order := ReconnectWholeByClassifier.classified_triangle_delta_order classify.
+Definition shifted_point_avoids_reconnected_triangle := ReconnectWholeByClassifier.shifted_point_avoids_reconnected_triangle classify.
+Definition reconnect_preserves_triangle_separation_prepared := ReconnectWholeByClassifier.reconnect_preserves_triangle_separation_prepared classify.
+Definition reconnect_preserves_triangle_extension_avoidance_prepared := ReconnectWholeByClassifier.reconnect_preserves_triangle_extension_avoidance_prepared classify.
+Definition reconnect_preserves_sparse_embedding_from_spec := ReconnectWholeByClassifier.reconnect_preserves_sparse_embedding_from_spec classify.
+Definition ordinary_extensions_disjoint_prepared := ReconnectWholeByClassifier.ordinary_extensions_disjoint_prepared classify.
+Definition ordinary_sparse_around_prepared := ReconnectWholeByClassifier.ordinary_sparse_around_prepared classify.
+
 (* 準備済み埋め込みからの最終結論。 *)
 
 (* 選んだ同一の分割埋め込みが三角形疎性を満たす。 *)
@@ -674,7 +728,7 @@ Proof.
               (reconnect_whole l sub r h)).
     exact (prepared_reconnect_whole_preserves_embed
              (ds1 ++ sub_ds ++ ds2) l sub r h
-             Hgeometry Hspec Hh Hsparse Hwhole Hext). }
+             (prepared_sub_nonempty l sub r Hgeometry) Hspec Hh Hsparse Hwhole Hext). }
   assert (HlenL : length ds1 = length l').
   { pose proof (embedding_listDir_length_consis ds1 l Hl) as Hlen.
     unfold l'. rewrite reconnect_segs_length. exact Hlen. }
@@ -692,14 +746,14 @@ Proof.
                     sub_ds ds2 sub r' HtailEmbed HlenSub)). }
   assert (Hsparse' : sparse_embedding (l' ++ sub ++ r')).
   { change (sparse_embedding (reconnect_whole l sub r h)).
-    exact (prepared_no_lid_preserves_sparse_embedding
+    exact (reconnect_preserves_sparse_embedding_from_spec
              (ds1 ++ sub_ds ++ ds2) l sub r h
-             Hgeometry Hspec Hh Hsparse Hwhole Hext). }
+             (prepared_sub_nonempty l sub r Hgeometry) Hspec Hh Hsparse Hwhole Hext). }
   assert (Hext' : extensions_disjoint (l' ++ sub ++ r')).
   { change (extensions_disjoint (reconnect_whole l sub r h)).
     exact (ordinary_extensions_disjoint_prepared
              (ds1 ++ sub_ds ++ ds2) l sub r h
-             Hgeometry Hspec Hh Hsparse Hwhole Hext). }
+             (prepared_sub_nonempty l sub r Hgeometry) Hspec Hh Hsparse Hwhole Hext). }
   assert (Hnonempty : l' ++ sub ++ r' <> []).
   { intro Hnil. apply app_eq_nil in Hnil as [_ Htail].
     apply app_eq_nil in Htail as [Hsubnil _].

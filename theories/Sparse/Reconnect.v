@@ -3,6 +3,14 @@ Require Import Stdlib.Logic.ClassicalDescription.
 Require Import Stdlib.Lists.List.
 Import ListNotations.
 
+(* 同じ再接続を、用途別の分類器に適用する。 *)
+Module ReconnectByClassifier.
+Section WithClassifier.
+Variable classify : list Segment -> list Segment -> list Segment -> EndpointClassifier.
+
+Definition operate_point (l sub r : list Segment) (h : R) (p : Point) : Point :=
+  shift h (classify l sub r p) p.
+
 (* 分類後の端点から各セグメントを作り直す通常再接続。 *)
 Definition reconnectable_after
   (l sub r : list Segment) (h : R) (s : Segment) : Prop :=
@@ -86,3 +94,18 @@ Definition reconnect_segs
 Definition reconnect_whole
   (l sub r : list Segment) (h : R) : list Segment :=
   reconnect_segs l sub r h l ++ sub ++ reconnect_segs l sub r h r.
+
+End WithClassifier.
+End ReconnectByClassifier.
+
+(* 既存の PPMM・PM 呼び出し形は保持する。 *)
+Definition reconnectable_after := ReconnectByClassifier.reconnectable_after classify.
+Definition reconnect_slope_after := ReconnectByClassifier.reconnect_slope_after classify.
+Definition reconnect_init_slope_after := ReconnectByClassifier.reconnect_init_slope_after classify.
+Definition reconnect_term_slope_after := ReconnectByClassifier.reconnect_term_slope_after classify.
+Definition head_init_slope_after := ReconnectByClassifier.head_init_slope_after classify.
+Definition last_term_slope_after := ReconnectByClassifier.last_term_slope_after classify.
+Definition all_reconnectable := ReconnectByClassifier.all_reconnectable classify.
+Definition reconnect_one := ReconnectByClassifier.reconnect_one classify.
+Definition reconnect_segs := ReconnectByClassifier.reconnect_segs classify.
+Definition reconnect_whole := ReconnectByClassifier.reconnect_whole classify.

@@ -7,6 +7,7 @@ Require Import Segment.
 Require Import SegmentsTranslation.
 Require Import ListExt.
 Require Import Sparse.ReconnectWholeProof.
+Require Import Sparse.PMPEmbedding.
 Require Import Stdlib.Logic.ClassicalDescription.
 Import ListNotations.
 From Stdlib Require Import Lra.
@@ -742,6 +743,15 @@ Lemma AdmissibleDirs_has_prepared_MP :
     exists l sub r, PreparedSparseEmbedding ds1 [Minus; Plus] ds2 l sub r.
 Admitted.
 
+(* PMP の terminal 側の蓋除去と端点傾きを満たす幾何学的な証人を選ぶ。
+   Up/Fix 分類の整合性は、選択後に classify_pmp_sources_safe で別に示す。 *)
+Lemma sparse_PMP_can_be_prepared : forall ds1 ds2,
+  AdmissibleDirs (ds1 ++ [Plus; Minus; Plus] ++ ds2) ->
+  (exists ls, embed_listDir (ds1 ++ [Plus; Minus; Plus] ++ ds2) ls /\
+    sparse_embedding ls /\ extensions_disjoint ls) ->
+  exists l sub r, PreparedPMPEmbedding ds1 ds2 l sub r.
+Admitted.
+
 (* PMP は全域で三角形疎、簡約部分の端点から作る Plus 側の三角形でも疎。
    両端と端点傾きは、単一の Plus セグメントへ接続できるように選ぶ。 *)
 Lemma embed_sparsely_listDir_PMP (ds1 ds2 : list Direction) :
@@ -756,7 +766,38 @@ Lemma embed_sparsely_listDir_PMP (ds1 ds2 : list Direction) :
 		/\ sparse_embedding (l ++ [seg1; seg2; seg3] ++ r)
 		/\ ~ close (l ++ [seg1; seg2; seg3] ++ r)
 		/\ sparse_around_triangle Plus l [seg1; seg2; seg3] r.
-Proof. Admitted.
+Proof.
+  intro Hadm.
+  destruct (sparse_PMP_can_be_prepared ds1 ds2 Hadm
+              (AdmissibleDirs_has_sparse_embedding _ Hadm))
+    as [old_l [sub [old_r Hprepared]]].
+  assert (Hembed : exists ds, embed_listDir ds (old_l ++ sub ++ old_r)).
+  { exists (ds1 ++ [Plus; Minus; Plus] ++ ds2).
+    exact (pmp_whole_embed _ _ _ _ _ Hprepared). }
+  assert (Hspec : @PMPClassificationSpec old_l sub old_r
+                   (classify_pmp old_l sub old_r)).
+  { apply classify_pmp_spec; [|exact Hembed].
+    intros p [seed [Hseed Hpath]] Hon.
+    exact (classify_pmp_sources_safe old_l sub old_r
+             (pmp_sub_embed _ _ _ _ _ Hprepared)
+             (pmp_whole_sparse _ _ _ _ _ Hprepared) Hembed
+             (pmp_extensions_disjoint _ _ _ _ _ Hprepared)
+             (pmp_no_terminal_lid _ _ _ _ _ Hprepared)
+             seed p Hseed Hon Hpath). }
+  pose proof (pmp_replacement_slope _ _ _ _ _ Hprepared) as Hslope.
+  pose proof (embedding_listDir_length_consis _ _
+                (pmp_sub_embed _ _ _ _ _ Hprepared)) as Hlen.
+  destruct sub as [|seg1 [|seg2 [|seg3 rest]]]; simpl in Hlen; try discriminate.
+  destruct rest; simpl in Hlen; [|discriminate].
+  destruct (embed_sparsely_PMP_prepared_from_spec classify_pmp
+              ds1 ds2 old_l [seg1; seg2; seg3] old_r Hprepared Hspec)
+    as [l [r [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]].
+  exists l, r, seg1, seg2, seg3.
+  split; [exact Hslope |].
+  split; [exact Hl |]. split; [exact Hsub |]. split; [exact Hr |].
+  split; [exact Hwhole |]. split; [exact Hsparse |].
+  split; assumption.
+Qed.
 
 (* embed_sparsely_listDir_PMP の Minus 側の三角形を使う対称版。 *)
 Lemma embed_sparsely_listDir_MPM (ds1 ds2 : list Direction) :

@@ -2613,7 +2613,7 @@ Proof.
 Qed.
 
 (* 非隣接の閉三角形が同じ x で上下に分離するとき、全端点の順序を保存する。
-   特に上側端点が sub 上の場合も排除する必要がある。 *)
+   PPMM の分類証明では両側の蓋を除き、上側端点が sub 上の場合も排除する。 *)
 Lemma nonadjacent_upward_preserves_up_path_invariant :
   forall l sub r i j s t ps pt u v,
     ClassificationContext l sub r ->
