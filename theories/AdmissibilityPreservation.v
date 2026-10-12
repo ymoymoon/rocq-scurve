@@ -241,7 +241,8 @@ Qed.
 
 (* 2つ以上離れたセグメントが１点を共有していれば，それらのセグメントを含む曲線は閉 *)
 Lemma two_segs_have_same_point_close : forall s1 s2 p ls,
-	onSegment s1 p
+	connected ls
+	-> onSegment s1 p
 	-> onSegment s2 p
 	-> (exists l1 l2 l3, ls = l1 ++ s1 :: l2 ++ s2 :: l3 /\ l2 <> [])  (* 逆順は不要 *)
 	-> close ls.
@@ -879,8 +880,9 @@ Admitted.
 		sub_ls をその領域に収まる開な sub_ls' に置き換えても開のまま *)
 (* TODO : もうちょっと自動化できるはず．．． *)
 (* TODO : 隣接セグメントが交わらないことを使い，内部で場合分けを増やす必要がある *)
-Lemma seg_in_rectangle_keep_openness : forall (ls rs sub_ls sub_ls' : list Segment),
-	sub_ls <> []
+Lemma seg_in_rectangle_keep_openness : forall ds (ls rs sub_ls sub_ls' : list Segment),
+	embed_listDir ds (ls ++ sub_ls ++ rs)
+	-> sub_ls <> []
 	-> sub_ls' <> [] 
 	-> ~ close sub_ls'
 	-> ~ close (ls ++ sub_ls ++ rs)
@@ -931,8 +933,9 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
-			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2; seg3] [segP]); 
-				try assumption; try (symmetry; assumption); try congruence.
+			apply (seg_in_rectangle_keep_openness (l ++ [Plus; Minus; Plus] ++ r) _ _ [seg1; seg2; seg3] [segP]);
+				try assumption; try (unfold embed_listDir; exists sc; split; assumption);
+				try (symmetry; assumption); try congruence.
 			(* 残った subgoal もほぼ自明 *)
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Plus]); try assumption.
 				apply P_is_oneway.
@@ -971,8 +974,9 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *)
-			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2; seg3] [segM]);
-				try assumption; try (symmetry; assumption); try congruence;
+			apply (seg_in_rectangle_keep_openness (l ++ [Minus; Plus; Minus] ++ r) _ _ [seg1; seg2; seg3] [segM]);
+				try assumption; try (unfold embed_listDir; exists sc; split; assumption);
+				try (symmetry; assumption); try congruence;
 				try (apply in_rect_implies_or_endpoints; assumption).
 			(* 残った subgoal もほぼ自明 *)
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus]); try assumption.
@@ -1026,7 +1030,8 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
-			apply (seg_in_rectangle_keep_openness _ _ [segP] _ ); try assumption; try congruence;
+			apply (seg_in_rectangle_keep_openness (l ++ [Plus] ++ r) _ _ [segP] _ );
+				try assumption; try (unfold embed_listDir; exists sc; split; assumption); try congruence;
 				try (apply in_rect_implies_or_endpoints; assumption).
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Plus; Minus; Plus]); try assumption.
 				apply PMP_is_oneway.
@@ -1078,7 +1083,8 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *)
-			apply (seg_in_rectangle_keep_openness _ _ [segM] _ ); try assumption; try congruence;
+			apply (seg_in_rectangle_keep_openness (l ++ [Minus] ++ r) _ _ [segM] _ );
+				try assumption; try (unfold embed_listDir; exists sc; split; assumption); try congruence;
 				try (apply in_rect_implies_or_endpoints; assumption).
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus; Plus; Minus]); try assumption.
 				apply MPM_is_oneway.
@@ -1117,8 +1123,9 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
-			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2; seg3; seg4] [seg1'; seg2']); 
-				try assumption; try (symmetry; assumption); try congruence;
+			apply (seg_in_rectangle_keep_openness (l ++ [Plus; Plus; Minus; Minus] ++ r) _ _ [seg1; seg2; seg3; seg4] [seg1'; seg2']);
+				try assumption; try (unfold embed_listDir; exists sc; split; assumption);
+				try (symmetry; assumption); try congruence;
 				try (apply in_rect_implies_or_endpoints; assumption).
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Plus; Minus]); try assumption.
 			apply PM_is_oneway.
@@ -1157,8 +1164,9 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *)
-			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2; seg3; seg4] [seg1'; seg2']);
-				try assumption; try (symmetry; assumption); try congruence;
+			apply (seg_in_rectangle_keep_openness (l ++ [Minus; Minus; Plus; Plus] ++ r) _ _ [seg1; seg2; seg3; seg4] [seg1'; seg2']);
+				try assumption; try (unfold embed_listDir; exists sc; split; assumption);
+				try (symmetry; assumption); try congruence;
 				try (apply in_rect_implies_or_endpoints; assumption).
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus; Plus]); try assumption.
 			apply MP_is_oneway.
@@ -1205,7 +1213,8 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
-			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2] _ ); try assumption; try congruence;
+			apply (seg_in_rectangle_keep_openness (l ++ [Plus; Minus] ++ r) _ _ [seg1; seg2] _ );
+				try assumption; try (unfold embed_listDir; exists sc; split; assumption); try congruence;
 				try (apply in_rect_implies_or_endpoints; assumption).
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Plus; Plus; Minus; Minus]); try assumption.
 				apply PPMM_is_oneway.
@@ -1252,7 +1261,8 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *)
-			apply (seg_in_rectangle_keep_openness _ _ [seg1; seg2] _ ); try assumption; try congruence;
+			apply (seg_in_rectangle_keep_openness (l ++ [Minus; Plus] ++ r) _ _ [seg1; seg2] _ );
+				try assumption; try (unfold embed_listDir; exists sc; split; assumption); try congruence;
 				try (apply in_rect_implies_or_endpoints; assumption).
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus; Minus; Plus; Plus]); try assumption.
 				apply MMPP_is_oneway.
