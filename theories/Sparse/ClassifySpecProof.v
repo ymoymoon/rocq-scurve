@@ -492,27 +492,6 @@ Definition sources_separated (l sub r : list Segment) : Prop :=
      \/ (onSegmentlist sub upper /\ endpoint_down_seed l sub r lower)) ->
     ~ endpoint_order l sub r upper lower.
 
-Lemma prepared_sources_separated : forall l sub r,
-  PreparedGeometry l sub r ->
-  sparse_embedding (l ++ sub ++ r) ->
-  (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-  extensions_disjoint (l ++ sub ++ r) ->
-  sources_separated l sub r.
-Proof.
-  intros l sub r Hgeometry Hsparse Hembed Hext.
-  destruct (classic (x_monotone_segs sub)) as [Hmono | Hnonmono].
-  - unfold sources_separated. intros upper lower Hsources.
-    apply (endpoint_order_separates_sources l sub r).
-    + exact (Build_ClassificationContext l sub r
-               (prepared_sub_nonempty l sub r Hgeometry)
-               Hmono Hsparse Hembed Hext).
-    + exact (prepared_no_terminal_lid l sub r Hgeometry).
-    + exact (prepared_no_initial_lid l sub r Hgeometry).
-    + exact Hsources.
-  - (* 非 x 単調枝では、開内部条件と gap 回避によるパス分離が未証明。 *)
-    admit.
-Admitted.
-
 Lemma sub_points_not_forced_from_separation : forall l sub r,
   sources_separated l sub r ->
   forall p, onSegmentlist sub p ->
@@ -831,178 +810,6 @@ Proof.
   - left. exists (xp, yz). repeat split; assumption.
 Qed.
 
-(* 三角形の上下関係は core step そのものなので、seed の分離から
-   端点分類の順序を得る。 *)
-Lemma classify_nonadjacent_triangle_order_from_separation :
-  forall l sub r,
-    sources_separated l sub r ->
-    forall i j s t ps pt u v,
-      nth_error (l ++ sub ++ r) i = Some s ->
-      nth_error (l ++ sub ++ r) j = Some t ->
-      (S i < j \/ S j < i)%nat ->
-      endpoint_of_seg s ps ->
-      endpoint_of_seg t pt ->
-      in_segment_triangle s u ->
-      in_segment_triangle t v ->
-      fst u = fst v ->
-      snd u < snd v ->
-      region_at_or_above (classify l sub r pt) (classify l sub r ps).
-Proof.
-  intros l sub r Hsep i j s t ps pt u v Hs Ht Hfar Hps Hpt
-    Hu Hv Hx Hy.
-  eapply endpoint_order_classified_from_separation.
-  - exact Hsep.
-  - exists s. split; [eapply nth_error_In; eauto | exact Hps].
-  - exists t. split; [eapply nth_error_In; eauto | exact Hpt].
-  - apply rt_step. apply order_core_step.
-    apply (order_nonadjacent l sub r i j s t ps pt u v); assumption.
-Qed.
-
-(* seed の分離と延長線・sub の上下比較から
-   x 単調版・prepared 版に共通する全仕様を組み立てる。 *)
-Lemma classify_spec_from_separation :
-  forall l sub r,
-    sub <> [] ->
-    sources_separated l sub r ->
-    sparse_embedding (l ++ sub ++ r) ->
-    (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
-    extensions_disjoint (l ++ sub ++ r) ->
-    (forall p,
-      ((l <> [] /\ onHead_extend_strict (l ++ sub ++ r) p)
-       \/ (r <> [] /\ onLast_extend_strict (l ++ sub ++ r) p)) ->
-      in_sub_x_range sub p ->
-      above_sub_at_x sub p \/ below_sub_at_x sub p) ->
-    @ClassificationSpec l sub r (classify l sub r).
-Proof.
-  intros l sub r Hne Hsep Hsparse Hembed Hextensions Hcompare.
-  assert (HwholeNe : l ++ sub ++ r <> []) by now apply whole_nonempty.
-  constructor.
-  - { constructor.
-    - intros p Hp. unfold classify, constraint_classifier.
-      destruct (excluded_middle_informative (onSegmentlist sub p));
-        [reflexivity | contradiction].
-    - intros seg Hseg. split; intros Hy.
-      + eapply endpoint_order_classified_from_separation; eauto.
-        * exists seg. split; [exact Hseg | now left].
-        * exists seg. split; [exact Hseg | now right].
-        * apply rt_step. apply order_core_step.
-          eapply order_on_segment with (seg := seg).
-          -- exact Hseg.
-          -- now left.
-          -- now right.
-          -- lra.
-      + eapply endpoint_order_classified_from_separation; eauto.
-        * exists seg. split; [exact Hseg | now right].
-        * exists seg. split; [exact Hseg | now left].
-        * apply rt_step. apply order_core_step.
-          eapply order_on_segment with (seg := seg).
-          -- exact Hseg.
-          -- now right.
-          -- now left.
-          -- lra.
-    - exact (classify_nonadjacent_triangle_order_from_separation
-               l sub r Hsep).
-    - intros ph pl Hph Hpl Hx. split; intros Hy.
-      + eapply endpoint_order_classified_from_separation; eauto using head_endpoint_of, last_endpoint_of.
-        apply rt_step. apply order_end_step.
-        eapply order_head_last; eauto. lra.
-      + eapply endpoint_order_classified_from_separation; eauto using head_endpoint_of, last_endpoint_of.
-        apply rt_step. apply order_end_step.
-        eapply order_last_head; eauto. lra.
-    - intros seg e q Hseg He Hq Hx. split; intros Hy; split.
-      + eapply endpoint_order_classified_from_separation; eauto using head_endpoint_of.
-        * exists seg. split; [exact Hseg | now left].
-        * apply rt_step. apply order_end_step.
-          eapply order_head_below_segment; eauto; [lra | now left].
-      + eapply endpoint_order_classified_from_separation; eauto using head_endpoint_of.
-        * exists seg. split; [exact Hseg | now right].
-        * apply rt_step. apply order_end_step.
-          eapply order_head_below_segment; eauto; [lra | now right].
-      + eapply endpoint_order_classified_from_separation; eauto using head_endpoint_of.
-        * exists seg. split; [exact Hseg | now left].
-        * apply rt_step. apply order_end_step.
-          eapply order_segment_below_head; eauto; [lra | now left].
-      + eapply endpoint_order_classified_from_separation; eauto using head_endpoint_of.
-        * exists seg. split; [exact Hseg | now right].
-        * apply rt_step. apply order_end_step.
-          eapply order_segment_below_head; eauto; [lra | now right].
-    - intros seg e q Hseg He Hq Hx. split; intros Hy; split.
-      + eapply endpoint_order_classified_from_separation; eauto using last_endpoint_of.
-        * exists seg. split; [exact Hseg | now left].
-        * apply rt_step. apply order_end_step.
-          eapply order_last_below_segment; eauto; [lra | now left].
-      + eapply endpoint_order_classified_from_separation; eauto using last_endpoint_of.
-        * exists seg. split; [exact Hseg | now right].
-        * apply rt_step. apply order_end_step.
-          eapply order_last_below_segment; eauto; [lra | now right].
-      + eapply endpoint_order_classified_from_separation; eauto using last_endpoint_of.
-        * exists seg. split; [exact Hseg | now left].
-        * apply rt_step. apply order_end_step.
-          eapply order_segment_below_last; eauto; [lra | now left].
-      + eapply endpoint_order_classified_from_separation; eauto using last_endpoint_of.
-        * exists seg. split; [exact Hseg | now right].
-        * apply rt_step. apply order_end_step.
-          eapply order_segment_below_last; eauto; [lra | now right].
-    - now apply head_classification_preserves_init_slope_from_separation.
-    - now apply last_classification_preserves_term_slope_from_separation. }
-
-  - intros seg p Hseg Hon Hrange. split; intros Hside.
-    + split; apply (classify_forced_up_from_separation l sub r _ Hsep).
-      * exists seg. split; [now apply nonadjacent_sides_in_whole | now left].
-      * apply endpoint_seed_forced_up. split.
-        -- exists seg. split; [now apply nonadjacent_sides_in_whole | now left].
-        -- left. exists seg, p. split; [exact Hseg |].
-           split; [now left |]. split; [exact Hon |].
-           split; assumption.
-      * exists seg. split; [now apply nonadjacent_sides_in_whole | now right].
-      * apply endpoint_seed_forced_up. split.
-        -- exists seg. split; [now apply nonadjacent_sides_in_whole | now right].
-        -- left. exists seg, p. split; [exact Hseg |].
-           split; [now right |]. split; [exact Hon |].
-           split; assumption.
-    + split; apply (classify_forced_down_from_separation l sub r _ Hsep).
-      * exists seg. split; [now apply nonadjacent_sides_in_whole | now left].
-      * apply endpoint_seed_forced_down. split.
-        -- exists seg. split; [now apply nonadjacent_sides_in_whole | now left].
-        -- left. exists seg, p. split; [exact Hseg |].
-           split; [now left |]. split; [exact Hon |].
-           split; assumption.
-      * exists seg. split; [now apply nonadjacent_sides_in_whole | now right].
-      * apply endpoint_seed_forced_down. split.
-        -- exists seg. split; [now apply nonadjacent_sides_in_whole | now right].
-        -- left. exists seg, p. split; [exact Hseg |].
-           split; [now right |]. split; [exact Hon |].
-           split; assumption.
-  - intros Hl p Hext Hrange.
-    destruct (Hcompare p (or_introl (conj Hl Hext)) Hrange) as [Habove | Hbelow].
-    + left. apply (classify_forced_up_from_separation l sub r _ Hsep).
-      * now apply head_endpoint_of.
-      * apply endpoint_seed_forced_up. split; [now apply head_endpoint_of |].
-        right; left. split; [exact Hl |]. split; [reflexivity |].
-        destruct Habove as [z [Hz [Hx Hy]]].
-        exists p, z. repeat split; assumption.
-    + right. apply (classify_forced_down_from_separation l sub r _ Hsep).
-      * now apply head_endpoint_of.
-      * apply endpoint_seed_forced_down. split; [now apply head_endpoint_of |].
-        right; left. split; [exact Hl |]. split; [reflexivity |].
-        destruct Hbelow as [z [Hz [Hx Hy]]].
-        exists p, z. repeat split; assumption.
-  - intros Hr p Hext Hrange.
-    destruct (Hcompare p (or_intror (conj Hr Hext)) Hrange) as [Habove | Hbelow].
-    + left. apply (classify_forced_up_from_separation l sub r _ Hsep).
-      * now apply last_endpoint_of.
-      * apply endpoint_seed_forced_up. split; [now apply last_endpoint_of |].
-        right; right. split; [exact Hr |]. split; [reflexivity |].
-        destruct Habove as [z [Hz [Hx Hy]]].
-        exists p, z. repeat split; assumption.
-    + right. apply (classify_forced_down_from_separation l sub r _ Hsep).
-      * now apply last_endpoint_of.
-      * apply endpoint_seed_forced_down. split; [now apply last_endpoint_of |].
-        right; right. split; [exact Hr |]. split; [reflexivity |].
-        destruct Hbelow as [z [Hz [Hx Hy]]].
-        exists p, z. repeat split; assumption.
-Qed.
-
 (* 分類された端点の上下移動。 *)
 
 Lemma shift_preserves_strict_vertical_order :
@@ -1055,25 +862,14 @@ Proof.
   now apply classify_sub_endpoint.
 Qed.
 
-(* prepared 幾何での分類仕様。順序パス分離と通常境界の下側排除を
-   幾何補題に分け、各仕様への論理的な組み立ては旧証明と共有する。 *)
-Lemma classify_spec :
+(* PPMM・PM の新仕様を満たす分類器の構成は、再接続の保存証明から独立させる。
+   旧 classify の no-gap 依存の seed 分離は、この存在証明には流用しない。 *)
+Lemma prepared_classification_exists :
   forall l sub r,
     PreparedGeometry l sub r ->
     sparse_embedding (l ++ sub ++ r) ->
     (exists ds, embed_listDir ds (l ++ sub ++ r)) ->
     extensions_disjoint (l ++ sub ++ r) ->
-    @ClassificationSpec l sub r (classify l sub r).
-Proof.
-  intros l sub r Hgeometry Hsparse Hembed Hext.
-  eapply (classify_spec_from_separation l sub r).
-  - exact (prepared_sub_nonempty l sub r Hgeometry).
-  - exact (prepared_sources_separated
-             l sub r Hgeometry Hsparse Hembed Hext).
-  - exact Hsparse.
-  - exact Hembed.
-  - exact Hext.
-  - intros p Hside Hrange.
-    exact (strict_extension_above_or_below_prepared
-             l sub r p Hgeometry Hsparse Hembed Hside Hrange).
-Qed.
+    exists classifier : EndpointClassifier,
+      @ClassificationSpec l sub r classifier.
+Admitted.

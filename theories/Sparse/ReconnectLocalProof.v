@@ -27,7 +27,7 @@ Lemma operate_point_fst : forall l sub r h p,
   fst (operate_point l sub r h p) = fst p.
 Proof. intros. unfold ReconnectByClassifier.operate_point. apply shift_fst. Qed.
 
-Lemma operate_sub_endpoint : forall l sub r h p, @ReconnectClassificationSpec l sub r (classify l sub r) ->
+Lemma operate_sub_endpoint : forall l sub r h p, @EndpointMovementSpec l sub r (classify l sub r) ->
   endpoint_of sub p -> operate_point l sub r h p = p.
 Proof.
   intros l sub r h p Hspec [s [Hin [Hp | Hp]]]; subst p;
@@ -261,7 +261,7 @@ Qed.
 (* 再接続後の先頭延長線は，旧先頭延長線の一律な上下移動である。 *)
 Lemma reconnect_head_extension_preimage_from_spec :
   forall l sub r h p, sub <> [] ->
-    @ReconnectClassificationSpec l sub r (classify l sub r) ->
+    @EndpointMovementSpec l sub r (classify l sub r) ->
     (l <> [] -> reconnect_init_slope_after l sub r h (hd_segment l)) ->
     onHead_extend (reconnect_whole l sub r h) p ->
     exists q, onHead_extend (l ++ sub ++ r) q
@@ -290,7 +290,7 @@ Qed.
 Lemma reconnect_last_extension_preimage_from_spec :
   forall l sub r h p,
     sub <> [] ->
-    @ReconnectClassificationSpec l sub r (classify l sub r) ->
+    @EndpointMovementSpec l sub r (classify l sub r) ->
     sparse_embedding (l ++ sub ++ r) ->
     (r <> [] -> reconnect_term_slope_after l sub r h (last_segment r)) ->
     onLast_extend (reconnect_whole l sub r h) p ->
@@ -357,7 +357,7 @@ Lemma reconnect_head_strict_extension_preimage_from_spec :
   forall l sub r h p,
     sub <> [] ->
     sparse_embedding (l ++ sub ++ r) ->
-    @ReconnectClassificationSpec l sub r (classify l sub r) ->
+    @EndpointMovementSpec l sub r (classify l sub r) ->
     0 <= h ->
     onHead_extend_strict (reconnect_whole l sub r h) p ->
     exists q,
@@ -432,7 +432,7 @@ Qed.
 Lemma reconnect_last_strict_extension_preimage_from_spec :
   forall l sub r h p, sub <> [] ->
     sparse_embedding (l ++ sub ++ r) ->
-    @ReconnectClassificationSpec l sub r (classify l sub r) ->
+    @EndpointMovementSpec l sub r (classify l sub r) ->
     0 <= h ->
     onLast_extend_strict (reconnect_whole l sub r h) p ->
     exists q, onLast_extend_strict (l ++ sub ++ r) q
@@ -556,7 +556,7 @@ Qed.
 
 (* 十分大きい移動では、各セグメントの二端点の y 座標は一致しない。 *)
 Lemma operation_height_safe_from_spec :
-  forall l sub r h s, @ReconnectClassificationSpec l sub r (classify l sub r) ->
+  forall l sub r h s, @EndpointMovementSpec l sub r (classify l sub r) ->
     h_large h sub ->
     In s (l ++ sub ++ r) ->
     snd (operate_point l sub r h (init s)) <>
@@ -586,7 +586,7 @@ Qed.
 
 (* 分類仕様は各セグメントの y 方向を保存する。x 方向は操作で不変。 *)
 Lemma operated_segment_axis_orders_from_spec :
-  forall l sub r h seg, @ReconnectClassificationSpec l sub r (classify l sub r) ->
+  forall l sub r h seg, @EndpointMovementSpec l sub r (classify l sub r) ->
     0 < h ->
     In seg (l ++ sub ++ r) ->
     (fst (init seg) < fst (term seg) <->
@@ -621,7 +621,7 @@ Qed.
 
 (* 一つのセグメントについて、分類された両端点を元の向きで再接続できる。 *)
 Lemma operate_endpoints_reconnectable_from_spec :
-  forall l sub r h, @ReconnectClassificationSpec l sub r (classify l sub r) ->
+  forall l sub r h, @EndpointMovementSpec l sub r (classify l sub r) ->
     h_large h sub ->
     all_reconnectable l sub r h (l ++ sub ++ r).
 Proof.
@@ -633,7 +633,7 @@ Qed.
 
 (* split の同じ位置にある新旧セグメントは向きと operate 後の端点を共有する。 *)
 Lemma reconnect_whole_nth_spec :
-  forall l sub r h i s s', @ReconnectClassificationSpec l sub r (classify l sub r) ->
+  forall l sub r h i s s', @EndpointMovementSpec l sub r (classify l sub r) ->
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     nth_error (l ++ sub ++ r) i = Some s ->
     nth_error (reconnect_whole l sub r h) i = Some s' ->
@@ -701,7 +701,7 @@ Qed.
 
 Lemma reconnect_whole_connected :
   forall l sub r h ds,
-    @ReconnectClassificationSpec l sub r (classify l sub r) ->
+    @EndpointMovementSpec l sub r (classify l sub r) ->
     all_reconnectable l sub r h (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
     connected (reconnect_whole l sub r h).
@@ -734,7 +734,7 @@ Qed.
 Lemma prepared_reconnect_whole_preserves_embed :
   forall ds l sub r h,
     sub <> [] ->
-    @ReconnectClassificationSpec l sub r (classify l sub r) ->
+    @EndpointMovementSpec l sub r (classify l sub r) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
@@ -976,21 +976,17 @@ Proof.
   apply closed_intervals_have_common_point; lra.
 Qed.
 
-(* 三角形疎性で sub との実際の接触を除き、十分な移動量で
-   非隣接セグメントの端点長方形を sub の上下へ出す。 *)
+(* x 範囲が重なる非隣接セグメントは一律移動し、端点長方形全体を上下へ出す。 *)
 Lemma operated_nonadjacent_endpoints_separated_from_spec :
   forall l sub r h s,
-    sub <> [] ->
-    connected sub ->
     height_clears_sub h l sub r ->
-    sparse_embedding (l ++ sub ++ r) ->
     @ClassificationSpec l sub r (classify l sub r) ->
     In s (nonadjacent_sides l r) ->
     endpoint_box_separated_from_sub sub
       (operate_point l sub r h (init s))
       (operate_point l sub r h (term s)).
 Proof.
-  intros l sub r h s Hne Hconn Hclear Hsparse Hspec Hs.
+  intros l sub r h s Hclear Hspec Hs.
   destruct (classic (both_left_of_sub sub (init s) (term s)))
     as [Hleft | Hleft].
   - right; right; left. unfold both_left_of_sub in *.
@@ -999,48 +995,19 @@ Proof.
       as [Hright | Hright].
     + right; right; right. unfold both_right_of_sub in *.
       now rewrite !operate_point_fst.
-    + destruct (nonhorizontal_sides_have_common_x
-                  sub s Hleft Hright)
+    + destruct (nonhorizontal_sides_have_common_x sub s Hleft Hright)
         as [x [Hsubx Hsegx]].
-      destruct (segment_has_point_at_x s x ltac:(lra))
-        as [p [Hp Hpx]].
-      destruct (connected_sub_has_point_at_x sub x Hne Hconn ltac:(lra))
-        as [q [Hq Hqx]].
-      assert (Hprange : in_sub_x_range sub p).
-      { unfold in_sub_x_range. rewrite Hpx. lra. }
-      assert (Hsamex : fst p = fst q) by lra.
-      assert (Hpneq : p <> q).
-      { intro Heq. subst q.
-        apply (sparse_nonadjacent_triangle_avoids_sub_points
-                 l sub r s p Hsparse Hs Hq).
-        now apply segment_in_endpoint_triangle. }
-      pose proof (classified_segment_at_sub_x
-                    l sub r
-                    Hspec
-                    s p Hs Hp Hprange) as [Hup Hdown].
-      assert (Hy : snd q < snd p \/ snd p < snd q).
-      { destruct (total_order_T (snd q) (snd p))
-          as [[Hlt | Heq] | Hgt].
-        - now left.
-        - exfalso. apply Hpneq.
-          destruct p as [xp yp], q as [xq yq].
-          simpl in Hsamex, Heq |- *. f_equal; lra.
-        - now right. }
+      destruct (segment_has_point_at_x s x Hsegx) as [p [Hp Hpx]].
+      assert (Hrange : in_sub_x_range sub p).
+      { unfold in_sub_x_range. now rewrite Hpx. }
       pose proof (Hclear s (nonadjacent_sides_in_whole l sub r s Hs))
         as [[HinitUp HtermUp] [HinitDown HtermDown]].
-      destruct Hy as [Hy | Hy].
-      * assert (Habove : above_sub_at_x sub p).
-        { exists q. repeat split; assumption. }
-        destruct (Hup Habove) as [Hinit Hterm].
-        left. unfold both_above_of_sub, shift, ReconnectByClassifier.operate_point.
-        rewrite Hinit, Hterm. simpl.
-        now split.
-      * assert (Hbelow : below_sub_at_x sub p).
-        { exists q. repeat split; assumption. }
-        destruct (Hdown Hbelow) as [Hinit Hterm].
-        right; left. unfold both_below_of_sub, shift, ReconnectByClassifier.operate_point.
-        rewrite Hinit, Hterm. simpl.
-        now split.
+      destruct (classified_segment_at_sub_x l sub r Hspec s p Hs Hp Hrange)
+        as [[Hinit Hterm] | [Hinit Hterm]].
+      * left. unfold both_above_of_sub, shift, ReconnectByClassifier.operate_point.
+        rewrite Hinit, Hterm. simpl. now split.
+      * right; left. unfold both_below_of_sub, shift, ReconnectByClassifier.operate_point.
+        rewrite Hinit, Hterm. simpl. now split.
 Qed.
 
 Lemma in_rect_or_endpoints_at_closed_bounds :
@@ -1131,16 +1098,18 @@ Lemma classified_shifted_extension_avoids_sub_rect_from_spec :
   forall l sub r h p q g,
     sub <> [] ->
     connected sub ->
-    @ReconnectClassificationSpec l sub r (classify l sub r) ->
+    @EndpointMovementSpec l sub r (classify l sub r) ->
     h_large h sub ->
     (onHead_extend_strict (l ++ sub ++ r) q
      \/ onLast_extend_strict (l ++ sub ++ r) q) ->
     (g = RegUp -> forall z,
       onSegmentlist sub z ->
-      fst q = fst z -> snd q < snd z -> classify l sub r z = RegUp) ->
+      fst q = fst z -> snd q < snd z ->
+      avoids_sub_vertical_gap sub q -> classify l sub r z = RegUp) ->
     (g = RegDown -> forall z,
       onSegmentlist sub z ->
-      fst q = fst z -> snd z < snd q -> classify l sub r z = RegDown) ->
+      fst q = fst z -> snd z < snd q ->
+      avoids_sub_vertical_gap sub q -> classify l sub r z = RegDown) ->
     (rx0 (rect_of sub) <= fst q <= rx1 (rect_of sub) ->
       g = RegUp \/ g = RegDown) ->
     p = shift h g q ->
@@ -1164,12 +1133,22 @@ Proof.
   - assert (Hqz : snd q < snd z).
     { pose proof (f_equal snd Hshift) as Hyshift.
       simpl in Hyshift. unfold h_large, rect_height in Hh. lra. }
-    pose proof (Habove eq_refl z Hz ltac:(lra) Hqz) as Hzup.
+    assert (Hgap : avoids_sub_vertical_gap sub q).
+    { intros [lo [hi [Hlo [Hhi [Hxl [Hxh Hy]]]]]].
+      pose proof (bbox_of_bounds sub lo Hlo).
+      unfold h_large, rect_height in Hh.
+      pose proof (f_equal snd Hshift) as HshiftY. simpl in HshiftY. lra. }
+    pose proof (Habove eq_refl z Hz ltac:(lra) Hqz Hgap) as Hzup.
     congruence.
   - assert (Hzq : snd z < snd q).
     { pose proof (f_equal snd Hshift) as Hyshift.
       simpl in Hyshift. unfold h_large, rect_height in Hh. lra. }
-    pose proof (Hbelow eq_refl z Hz ltac:(lra) Hzq) as Hzdown.
+    assert (Hgap : avoids_sub_vertical_gap sub q).
+    { intros [lo [hi [Hlo [Hhi [Hxl [Hxh Hy]]]]]].
+      pose proof (bbox_of_bounds sub hi Hhi).
+      unfold h_large, rect_height in Hh.
+      pose proof (f_equal snd Hshift) as HshiftY. simpl in HshiftY. lra. }
+    pose proof (Hbelow eq_refl z Hz ltac:(lra) Hzq Hgap) as Hzdown.
     congruence.
 Qed.
 

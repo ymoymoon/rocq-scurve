@@ -134,13 +134,6 @@ Definition avoids_sub_vertical_gap (sub : list Segment) (p : Point) : Prop :=
       /\ fst p = fst qlo /\ fst p = fst qhi
       /\ snd qlo < snd p < snd qhi.
 
-Definition external_points_avoid_sub_vertical_gap
-    (l sub r : list Segment) : Prop :=
-  forall p,
-    onSegmentlist (l ++ r) p ->
-    ~ onSegmentlist sub p ->
-    avoids_sub_vertical_gap sub p.
-
 (* sub の全点は、全体の始点・終点という二つの出現を除き、
    その両端を対角線とする開長方形の内部にある。 *)
 Definition sub_strictly_inside_endpoint_rect (sub : list Segment) : Prop :=
@@ -157,7 +150,6 @@ Record PreparedGeometry (l sub r : list Segment) : Prop := {
   prepared_sub_strictly_inside : sub_strictly_inside_endpoint_rect sub;
   prepared_sub_x_order :
     fst (init (hd_segment sub)) < fst (term (last_segment sub));
-  prepared_external_no_gap : external_points_avoid_sub_vertical_gap l sub r;
   prepared_no_terminal_lid : ~ terminal_lid l sub r;
   prepared_no_initial_lid : ~ initial_lid l sub r
 }.
@@ -421,6 +413,41 @@ Proof.
   - split; intro Hglobal.
     + rewrite Rmin_left in HyLo by lra. lra.
     + rewrite Rmax_left in HyHi by lra. lra.
+Qed.
+
+(* 東向きセグメントへ接続するものは東向きか、同じ上下方向を持つ。
+   dc は水平・垂直の向きを同時には反転しない。 *)
+Lemma incoming_east_segment_axis_separation : forall a b pa pb,
+  embed pa a -> embed pb b -> dc pa pb ->
+  init_x b < term_x b ->
+  init_x a < term_x a
+  \/ (init_y a < term_y a /\ init_y b < term_y b)
+  \/ (term_y a < init_y a /\ term_y b < init_y b).
+Proof.
+  intros a b pa pb Ha Hb Hdc Hx.
+  inversion Hdc; subst; destruct h; simpl in *;
+    first [left; eapply e_end_relation; exact Ha
+          |exfalso; pose proof (w_end_relation b _ _ Hb);
+             unfold init_x, term_x in *; lra
+          |right; left; split; eapply n_end_relation; eassumption
+          |right; right; split; eapply s_end_relation; eassumption].
+Qed.
+
+(* 東向きセグメントから接続する場合の双対。 *)
+Lemma outgoing_east_segment_axis_separation : forall a b pa pb,
+  embed pa a -> embed pb b -> dc pa pb ->
+  init_x a < term_x a ->
+  init_x b < term_x b
+  \/ (init_y a < term_y a /\ init_y b < term_y b)
+  \/ (term_y a < init_y a /\ term_y b < init_y b).
+Proof.
+  intros a b pa pb Ha Hb Hdc Hx.
+  inversion Hdc; subst; destruct h; simpl in *;
+    first [left; eapply e_end_relation; exact Hb
+          |exfalso; pose proof (w_end_relation a _ _ Ha);
+             unfold init_x, term_x in *; lra
+          |right; left; split; eapply n_end_relation; eassumption
+          |right; right; split; eapply s_end_relation; eassumption].
 Qed.
 
 Lemma sub_endpoint_y_distinct : forall sub,

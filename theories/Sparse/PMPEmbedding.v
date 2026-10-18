@@ -123,26 +123,31 @@ Proof.
     now apply pmp_common_order. }
   constructor.
   - { constructor.
-    - now apply classify_pmp_sub_fixed.
-    - intros seg Hin. split; intros Hy; apply Horder;
-        apply rt_step; apply order_core_step.
-      + eapply order_on_segment with (seg := seg).
-        * exact Hin.
-        * now left.
-        * now right.
-        * lra.
-      + eapply order_on_segment with (seg := seg).
-        * exact Hin.
-        * now right.
-        * now left.
-        * lra.
+    - { constructor.
+      - now apply classify_pmp_sub_fixed.
+      - intros seg Hin. split; intros Hy; apply Horder;
+          apply rt_step; apply order_core_step.
+        + eapply order_on_segment with (seg := seg).
+          * exact Hin.
+          * now left.
+          * now right.
+          * lra.
+        + eapply order_on_segment with (seg := seg).
+          * exact Hin.
+          * now right.
+          * now left.
+          * lra.
+      - intros ph pl Hph Hpl Hx. split; intros Hy; apply Horder;
+          apply rt_step; apply order_end_step.
+        + eapply order_head_last; eauto; lra.
+        + eapply order_last_head; eauto; lra.
+      - eapply head_classification_preserves_init_slope_from_order; [|exact Hembed].
+        intros. now apply Horder.
+      - eapply last_classification_preserves_term_slope_from_order; [|exact Hembed].
+        intros. now apply Horder. }
     - intros i j s t ps pt u v Hs Ht Hfar Hps Hpt Hu Hv Hx Hy.
       apply Horder. apply rt_step. apply order_core_step.
       apply (order_nonadjacent l sub r i j s t ps pt u v); assumption.
-    - intros ph pl Hph Hpl Hx. split; intros Hy; apply Horder;
-        apply rt_step; apply order_end_step.
-      + eapply order_head_last; eauto; lra.
-      + eapply order_last_head; eauto; lra.
     - intros seg e q Hin He Hq Hx. split; intros Hy; split; apply Horder;
         apply rt_step; apply order_end_step.
       + eapply order_head_below_segment; eauto; [lra | now left].
@@ -154,11 +159,7 @@ Proof.
       + eapply order_last_below_segment; eauto; [lra | now left].
       + eapply order_last_below_segment; eauto; [lra | now right].
       + eapply order_segment_below_last; eauto; [lra | now left].
-      + eapply order_segment_below_last; eauto; [lra | now right].
-    - eapply head_classification_preserves_init_slope_from_order; [|exact Hembed].
-      intros. now apply Horder.
-    - eapply last_classification_preserves_term_slope_from_order; [|exact Hembed].
-      intros. now apply Horder. }
+      + eapply order_segment_below_last; eauto; [lra | now right]. }
   - apply classify_pmp_only_up_or_fix.
   - intros seg p Hin Hon Hx. apply region_at_or_above_antisym;
       eapply pmp_order_classified; try exact Hsafe; apply rt_step;
