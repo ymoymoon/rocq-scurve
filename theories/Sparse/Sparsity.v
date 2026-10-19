@@ -409,6 +409,24 @@ Definition sparse_embedding (ls : list Segment) : Prop :=
           in_segment_triangle t p ->
           ~ in_segment_triangle s p).
 
+(* 単一セグメント周りの局所三角形疎性は、全域疎性から従う。 *)
+Lemma sparse_embedding_single_sub_triangle : forall l s r,
+  sparse_embedding (l ++ [s] ++ r) ->
+  sparse_around_triangle (orn_seg s) l [s] r.
+Proof.
+  intros l s r Hsparse.
+  destruct (Hsparse l s r eq_refl) as [Hext Hbody].
+  split.
+  - intros p Hextend Htriangle.
+    apply (Hext p Hextend).
+    apply (proj1 (single_sub_triangle s p)).
+    exact Htriangle.
+  - intros t p Hin Ht Htriangle.
+    apply (Hbody t p Hin Ht).
+    apply (proj1 (single_sub_triangle s p)).
+    exact Htriangle.
+Qed.
+
 Definition segment_triangles_separated (ls : list Segment) : Prop :=
   forall l s r,
     ls = l ++ [s] ++ r ->

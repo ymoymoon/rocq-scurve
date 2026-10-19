@@ -1427,23 +1427,8 @@ Lemma seg_in_rectangle_keep_openness : forall ds (ls rs sub_ls sub_ls' : list Se
 (* strict 延長線と非隣接部分は疎性で、隣接部分は元の埋め込みの dc を用いて扱う。 *)
 Admitted.
 
-(* 単一セグメントの三角形版。非隣接部分と外側の延長線は三角形疎性で、
-   隣接部分は元の埋め込みの dc と座標単調性で共有端点以外を排除する。 *)
-Lemma seg_in_triangle_keep_openness :
-	forall ds (ls rs : list Segment) (seg : Segment) (replacement : list Segment),
-		embed_listDir ds (ls ++ [seg] ++ rs)
-		-> replacement <> []
-		-> ~ close replacement
-		-> ~ close (ls ++ [seg] ++ rs)
-		-> sparse_embedding (ls ++ [seg] ++ rs)
-		-> in_segment_triangle_of seg replacement
-		-> same_init_and_term [seg] replacement
-		-> same_slope_init_and_term [seg] replacement
-		-> ~ close (ls ++ replacement ++ rs).
-Admitted.
-
-(* PMP/MPM の単一セグメントへの簡約に使う三角形版。
-   複数セグメントから作る三角形なので、全域疎性とは別に局所疎性を仮定する。 *)
+(* sub の端点三角形内の置換は開性を保つ。
+   singleton の局所疎性は全域疎性から従い、複数セグメントでは別途仮定する。 *)
 Lemma sub_in_triangle_keep_openness :
 	forall ds d (ls rs sub replacement : list Segment),
 		embed_listDir ds (ls ++ sub ++ rs)
@@ -1626,9 +1611,14 @@ Proof.
   exists (ls1 ++ [seg1; seg2; seg3] ++ ls3).
   split; [exact HnewEmbed |].
   (* 局所置換によって開性を保存する。 *)
-  apply (seg_in_triangle_keep_openness
-           (l ++ [Plus] ++ r) ls1 ls3 segP [seg1; seg2; seg3]);
+  apply (sub_in_triangle_keep_openness
+           (l ++ [Plus] ++ r) (orn_seg segP)
+           ls1 ls3 [segP] [seg1; seg2; seg3]);
     try assumption; try discriminate.
+  - exact (sparse_embedding_single_sub_triangle ls1 segP ls3 HwholeSparse).
+  - intros p Hp.
+    apply (proj2 (single_sub_triangle segP p)).
+    exact (Hin_triangle p Hp).
 Qed.
 
 Lemma AdmissibleDirs_r1_Minus_inv: forall l r,
@@ -1687,9 +1677,14 @@ Proof.
   exists (ls1 ++ [seg1; seg2; seg3] ++ ls3).
   split; [exact HnewEmbed |].
   (* 局所置換によって開性を保存する。 *)
-  apply (seg_in_triangle_keep_openness
-           (l ++ [Minus] ++ r) ls1 ls3 segM [seg1; seg2; seg3]);
+  apply (sub_in_triangle_keep_openness
+           (l ++ [Minus] ++ r) (orn_seg segM)
+           ls1 ls3 [segM] [seg1; seg2; seg3]);
     try assumption; try discriminate.
+  - exact (sparse_embedding_single_sub_triangle ls1 segM ls3 HwholeSparse).
+  - intros p Hp.
+    apply (proj2 (single_sub_triangle segM p)).
+    exact (Hin_triangle p Hp).
 Qed.
 
 Lemma AdmissibleDirs_r2_Plus: forall l r,
