@@ -179,9 +179,17 @@ Proof.
       split; [simpl; assumption |].
       split; [simpl; assumption |].
       split; [exact Hcase' |].
-      simpl. destruct (Rle_dec t b1); [contradiction |]. 
-      simpl. 
-Admitted.
+      change
+        ((if Rle_dec t b1 then
+            (O, s0, (t - b0) / (b1 - b0))
+          else
+            let '(n, s, u) :=
+              concrete_extend_pick (s1 :: segs'') (b1 :: bs'') t
+            in (S n, s, u))
+          = (S n', s', (t - bn') / (bn1' - bn'))).
+      destruct (Rle_dec t b1); [contradiction |].
+      rewrite Heq. reflexivity.
+Qed.
 
 Lemma concrete_extend_pick_spec : forall ls t,
   ls <> [] ->
@@ -196,6 +204,60 @@ Proof.
   apply concrete_extend_pick_spec_aux; auto.
   - apply border_length.
   - apply segment_border_increasing.
+Qed.
+
+
+(* 指定した区間に属する大域パラメータは、その区間のセグメントを選ぶ。 *)
+Lemma concrete_extend_pick_at : forall segs bs n s bn bn1 t,
+  length bs = S (length segs) ->
+  Increasing bs ->
+  nth_error segs n = Some s ->
+  nth_error bs n = Some bn ->
+  nth_error bs (S n) = Some bn1 ->
+  (n = O \/ bn < t) ->
+  (S n = length segs \/ t <= bn1) ->
+  concrete_extend_pick segs bs t = (n, s, (t - bn) / (bn1 - bn)).
+Proof.
+  induction segs as [|s0 segs IH];
+    intros bs n s bn bn1 t Hlen Hinc Hseg Hbn Hbn1 Hlo Hhi.
+  - destruct n; discriminate Hseg.
+  - destruct bs as [|b0 bs]; [simpl in Hlen; lia |].
+    destruct bs as [|b1 bs]; [simpl in Hlen; lia |].
+    destruct n as [|n].
+    + simpl in Hseg, Hbn, Hbn1.
+      injection Hseg as <-. injection Hbn as <-. injection Hbn1 as <-.
+      destruct segs as [|s1 segs].
+      * destruct bs; [reflexivity | simpl in Hlen; lia].
+      * assert (Ht : t <= b1) by (destruct Hhi; [simpl in H; lia | assumption]).
+        simpl. destruct (Rle_dec t b1); [reflexivity | contradiction].
+    + destruct segs as [|s1 segs]; [destruct n; discriminate Hseg |].
+      assert (Hb1 : b1 <= bn).
+      { destruct n as [|n].
+        - simpl in Hbn. injection Hbn as <-. lra.
+        - apply Rlt_le. eapply Increasing_lt with (i := O) (j := S n).
+          + apply (Increasing_tl b0). exact Hinc.
+          + lia.
+          + reflexivity.
+          + exact Hbn. }
+      assert (Ht : b1 < t) by (destruct Hlo; [discriminate | lra]).
+      assert (Hpick :
+        concrete_extend_pick (s1 :: segs) (b1 :: bs) t =
+          (n, s, (t - bn) / (bn1 - bn))).
+      { apply IH.
+        - simpl in Hlen |- *. lia.
+        - apply (Increasing_tl b0). exact Hinc.
+        - exact Hseg.
+        - exact Hbn.
+        - exact Hbn1.
+        - right. destruct Hlo; [discriminate | assumption].
+        - destruct Hhi as [Hlast | Hupper];
+            [left; simpl in Hlast |- *; lia | right; exact Hupper]. }
+      change
+        ((if Rle_dec t b1 then (O, s0, (t - b0) / (b1 - b0))
+          else let '(k, seg, u) := concrete_extend_pick (s1 :: segs) (b1 :: bs) t
+               in (S k, seg, u)) = (S n, s, (t - bn) / (bn1 - bn))).
+      destruct (Rle_dec t b1); [lra |].
+      rewrite Hpick. reflexivity.
 Qed.
 
 
@@ -218,6 +280,34 @@ Definition extend (ls : list Segment) (t : R) : R * R :=
       ls (segment_border ls) t
   in point s t'.
   
+
+(* 各局所位置を、対応する境界区間のアフィン変換で実現する。 *)
+Lemma extend_onto_sound : forall ls q,
+  ls <> [] -> in_range ls q ->
+  exists t, (extend_index ls t, extend_param ls t) = q.
+Proof.
+  intros ls [n u] Hne Hrange.
+  destruct Hrange as [Hn [Hlo Hhi]]. simpl in Hn, Hlo, Hhi.
+  assert (Hborder := border_length ls).
+  destruct (nth_error ls n) as [s|] eqn:Hseg.
+  2: { apply nth_error_None in Hseg. lia. }
+  destruct (nth_error (segment_border ls) n) as [bn|] eqn:Hbn.
+  2: { apply nth_error_None in Hbn. lia. }
+  destruct (nth_error (segment_border ls) (S n)) as [bn1|] eqn:Hbn1.
+  2: { apply nth_error_None in Hbn1. lia. }
+  assert (Hlt : bn < bn1) by (eapply border_increasing; eauto).
+  assert (Haffine : (bn + u * (bn1 - bn) - bn) / (bn1 - bn) = u)
+    by (field; lra).
+  exists (bn + u * (bn1 - bn)).
+  assert (Hpick : concrete_extend_pick ls (segment_border ls)
+      (bn + u * (bn1 - bn)) = (n, s, u)).
+  { rewrite <- Haffine at 2.
+    apply concrete_extend_pick_at; try assumption.
+    - apply segment_border_increasing.
+    - destruct Hlo as [Hzero | Hpositive]; [left; exact Hzero | right; nra].
+    - destruct Hhi as [Hlast | Hupper]; [left; exact Hlast | right; nra]. }
+  unfold extend_index, extend_param. rewrite Hpick. reflexivity.
+Qed.
 
 Lemma extend_repr_sound : forall ls t,
   ls <> [] ->
