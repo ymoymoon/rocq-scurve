@@ -752,12 +752,12 @@ Proof.
 Qed.
 
 (* Plus (の向きを持つ Primitive Segment) の埋め込みを，端点とそこでの傾きを保存したまま
-		[Plus; Minus; Plus] の埋め込みとなる３つに矩形内で分割できる *)
-Lemma embedding_P_to_PMP_in_rect : forall (seg : Segment),
+		[Plus; Minus; Plus] の埋め込みとなる３つに端点三角形内で分割できる *)
+Lemma embedding_P_to_PMP_in_triangle : forall (seg : Segment),
 	embed_listDir [Plus] [seg]
 	-> exists seg1 seg2 seg3,
 		embed_listDir [Plus; Minus; Plus] [seg1; seg2; seg3] (* この内部で seg1-3 が連結していることは示されてほしい *)
-		/\ in_rect_or_endpoints [seg] [seg1; seg2; seg3]
+		/\ in_segment_triangle_of seg [seg1; seg2; seg3]
 		/\ same_init_and_term [seg] [seg1; seg2; seg3]
 		/\ same_slope_init_and_term [seg] [seg1; seg2; seg3].
 Proof. 
@@ -767,12 +767,12 @@ Proof.
 		seg3 の始点での傾きが seg1 の終点での傾きより大きくなるようにすれば良い． *)
 Admitted.
 
-(* embedding_P_to_PMP_in_rect の Minus 版 *)
-Lemma embedding_M_to_MPM_in_rect : forall (seg : Segment),
+(* embedding_P_to_PMP_in_triangle の Minus 版 *)
+Lemma embedding_M_to_MPM_in_triangle : forall (seg : Segment),
 	embed_listDir [Minus] [seg]
 	-> exists seg1 seg2 seg3,
 		embed_listDir [Minus; Plus; Minus] [seg1; seg2; seg3]
-		/\ in_rect_or_endpoints [seg] [seg1; seg2; seg3]
+		/\ in_segment_triangle_of seg [seg1; seg2; seg3]
 		/\ same_init_and_term [seg] [seg1; seg2; seg3]
 		/\ same_slope_init_and_term [seg] [seg1; seg2; seg3].
 Proof. Admitted.
@@ -896,6 +896,22 @@ Lemma seg_in_rectangle_keep_openness : forall ds (ls rs sub_ls sub_ls' : list Se
 Admitted.
 
 
+(* 単一セグメントの三角形版。非隣接部分と外側の延長線は三角形疎性で、
+   隣接部分は元の埋め込みの dc と座標単調性で共有端点以外を排除する。 *)
+Lemma seg_in_triangle_keep_openness :
+	forall ds (ls rs : list Segment) (seg : Segment) (replacement : list Segment),
+		embed_listDir ds (ls ++ [seg] ++ rs)
+		-> replacement <> []
+		-> ~ close replacement
+		-> ~ close (ls ++ [seg] ++ rs)
+		-> sparse_embedding (ls ++ [seg] ++ rs)
+		-> in_segment_triangle_of seg replacement
+		-> same_init_and_term [seg] replacement
+		-> same_slope_init_and_term [seg] replacement
+		-> ~ close (ls ++ replacement ++ rs).
+Admitted.
+
+
 (* --------------------------------------------------------------------------- *)
 (* 許容可能性保持に関する主張８つと，その系 *)
 
@@ -999,7 +1015,6 @@ Proof.
 		assert (Hne : ls1 ++ [segP] ++ ls3 <> []).
 		{ intro Hnil. apply app_eq_nil in Hnil as [_ Htail]. discriminate Htail. }
 		pose proof (sparse_extensions_open _ _ Hne Hls HwholeSparse Hext) as Hopen.
-		pose proof (HwholeSparse ls1 segP ls3 eq_refl) as Hsparse.
 		destruct Hls as [sc [Hdir_sc Hembed]].
 	simpl in *.
 	assert (Hdir: hd Plus (l ++ Plus :: Minus :: Plus :: r) = orn (hd_scurve sc)). {
@@ -1018,8 +1033,8 @@ Proof.
 		assert (H: embed_listDir (l ++ [Plus] ++ r) (ls1 ++ [segP] ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
 			unfold embed_listDir. exists sc. split; assumption.
 		}
-		pose proof (embedding_P_to_PMP_in_rect segP Hls2) 
-			as [seg1 [seg2 [seg3 [HPMP [Hin_rect [Hinit_term Hslope]]]]]].
+		pose proof (embedding_P_to_PMP_in_triangle segP Hls2)
+			as [seg1 [seg2 [seg3 [HPMP [Hin_triangle [Hinit_term Hslope]]]]]].
 		(* 欲しかった埋め込み *) 
 		exists (ls1 ++ [seg1; seg2; seg3] ++ ls3). 
 		unfold admissible. 
@@ -1030,9 +1045,8 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *) 
-			apply (seg_in_rectangle_keep_openness (l ++ [Plus] ++ r) _ _ [segP] _ );
-				try assumption; try (unfold embed_listDir; exists sc; split; assumption); try congruence;
-				try (apply in_rect_implies_or_endpoints; assumption).
+			apply (seg_in_triangle_keep_openness (l ++ [Plus] ++ r) _ _ segP _ );
+				try assumption; try (unfold embed_listDir; exists sc; split; assumption); try congruence.
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Plus; Minus; Plus]); try assumption.
 				apply PMP_is_oneway.
 Qed.
@@ -1052,7 +1066,6 @@ Proof.
 		assert (Hne : ls1 ++ [segM] ++ ls3 <> []).
 		{ intro Hnil. apply app_eq_nil in Hnil as [_ Htail]. discriminate Htail. }
 		pose proof (sparse_extensions_open _ _ Hne Hls HwholeSparse Hext) as Hopen.
-		pose proof (HwholeSparse ls1 segM ls3 eq_refl) as Hsparse.
 		destruct Hls as [sc [Hdir_sc Hembed]].
 	simpl in *.
 	assert (Hdir: hd Minus (l ++ Minus :: Plus :: Minus :: r) = orn (hd_scurve sc)). {
@@ -1071,8 +1084,8 @@ Proof.
 		assert (H: embed_listDir (l ++ [Minus] ++ r) (ls1 ++ [segM] ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
 			unfold embed_listDir. exists sc. split; assumption.
 		}
-		pose proof (embedding_M_to_MPM_in_rect segM Hls2)
-			as [seg1 [seg2 [seg3 [HMPM [Hin_rect [Hinit_term Hslope]]]]]].
+		pose proof (embedding_M_to_MPM_in_triangle segM Hls2)
+			as [seg1 [seg2 [seg3 [HMPM [Hin_triangle [Hinit_term Hslope]]]]]].
 		(* 欲しかった埋め込み *)
 		exists (ls1 ++ [seg1; seg2; seg3] ++ ls3).
 		unfold admissible.
@@ -1083,9 +1096,8 @@ Proof.
 			* rewrite Hdir_sc'. rewrite <- Hdir. apply list_hd_tl. destruct l; discriminate.
 			* symmetry. assumption.
 		+ (* その埋め込みが開であること *)
-			apply (seg_in_rectangle_keep_openness (l ++ [Minus] ++ r) _ _ [segM] _ );
-				try assumption; try (unfold embed_listDir; exists sc; split; assumption); try congruence;
-				try (apply in_rect_implies_or_endpoints; assumption).
+			apply (seg_in_triangle_keep_openness (l ++ [Minus] ++ r) _ _ segM _ );
+				try assumption; try (unfold embed_listDir; exists sc; split; assumption); try congruence.
 			* apply oneway_then_open. apply (embedding_oneway_listDir [Minus; Plus; Minus]); try assumption.
 				apply MPM_is_oneway.
 Qed.
