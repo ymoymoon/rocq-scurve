@@ -318,7 +318,7 @@ Proof.
     rewrite <- HshiftLast, <- HshiftHead in Hshifted. lra.
 Qed.
 
-(* 固定した sub の長方形周りの局所疎性。 *)
+(* 外側の三角形と延長線を、固定した sub の閉長方形から退避する。 *)
 Lemma ordinary_sparse_around_prepared :
   forall ds l sub r h,
     PreparedGeometry l sub r ->
@@ -337,9 +337,6 @@ Proof.
   assert (Hconn : connected sub).
   { eapply connected_middle.
     exact (embed_listDir_connected ds _ Hembed). }
-  assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
-  { exact (operate_endpoints_reconnectable_from_spec
-             l sub r h Hspec Hh). }
   split.
   - intros p Hextend.
     apply (reconnect_extensions_avoid_sub_rect_from_spec
@@ -362,15 +359,8 @@ Proof.
     rewrite nonadjacent_sides_map in Hs'.
     apply in_map_iff in Hs'.
     destruct Hs' as [s [Heq Hs]]. subst s'.
-    apply (separated_endpoint_box_avoids_sub sub
-             (reconnect_one l sub r h s) p Hne).
-    + rewrite (reconnect_one_init _ _ _ _ _
-                 (Hrec s (nonadjacent_sides_in_whole l sub r s Hs))).
-      rewrite (reconnect_one_term _ _ _ _ _
-                 (Hrec s (nonadjacent_sides_in_whole l sub r s Hs))).
-      exact (operated_nonadjacent_endpoints_separated_from_spec
-               l sub r h s Hne Hconn Hh Hsparse Hspec Hs).
-    + exact Hp.
+    exact (reconnect_nonadjacent_triangle_avoids_sub_rect_from_spec
+             l sub r h s Hne Hconn Hh Hsparse Hspec Hs p Hp).
 Qed.
 
 (* 準備済み埋め込みからの最終結論。 *)

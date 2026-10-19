@@ -135,7 +135,7 @@ Proof.
   rewrite in_app_iff. left. now apply in_removelast_in.
 Qed.
 
-(* sub の外側に実在する strict 延長線と非隣接セグメントは、sub の
+(* 外側の strict 延長線と非隣接セグメントの閉三角形は、sub の
    閉長方形を避ける。sub 自身の延長線と共有端点はここでは扱わない。 *)
 Definition sparse_around (l sub r : list Segment) : Prop :=
   (forall p,
@@ -144,7 +144,7 @@ Definition sparse_around (l sub r : list Segment) : Prop :=
      ~ in_rect_or_endpoints_at sub p)
   /\ (forall s p,
         In s (nonadjacent_sides l r) ->
-        in_segment_rect_or_endpoints s p ->
+        in_segment_triangle s p ->
         ~ in_rect_or_endpoints_at sub p).
 
 (* 単一セグメントへの簡約用。sub の端点三角形を、外側の延長線と

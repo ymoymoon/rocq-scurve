@@ -1493,9 +1493,9 @@ Proof.
   apply closed_intervals_have_common_point; lra.
 Qed.
 
-(* 非隣接セグメントの両端を十分大きく上下移動すると、その端点長方形は
-   sub の上下左右いずれかへ分離し、長方形内の再接続セグメントも sub を避ける。 *)
-Lemma operated_nonadjacent_endpoints_separated_from_spec :
+(* 非隣接セグメントの端点を移動して再接続すると、その閉三角形が
+   固定した sub の閉長方形を避ける。端点長方形全体の分離は要求しない。 *)
+Lemma reconnect_nonadjacent_triangle_avoids_sub_rect_from_spec :
   forall l sub r h s,
     sub <> [] ->
     connected sub ->
@@ -1503,9 +1503,9 @@ Lemma operated_nonadjacent_endpoints_separated_from_spec :
     sparse_embedding (l ++ sub ++ r) ->
     ClassificationSpec l sub r ->
     In s (nonadjacent_sides l r) ->
-    endpoint_box_separated_from_sub sub
-      (operate_point l sub r h (init s))
-      (operate_point l sub r h (term s)).
+    forall p,
+      in_segment_triangle (reconnect_one l sub r h s) p ->
+      ~ in_rect_or_endpoints_at sub p.
 (* 三角形 sparse からの局所幾何の証明を残す。 *)
 Admitted.
 
