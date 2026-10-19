@@ -890,12 +890,69 @@ Proof.
   rewrite rot_seg_point, Hp. reflexivity.
 Qed.
 
+(* 端点と方向を同時に回転すると、閉端点三角形への所属も保存される。 *)
+Lemma in_segment_triangle_rot : forall g s p,
+  in_segment_triangle (rot_seg g s) (rot_pt g p) <->
+  in_segment_triangle s p.
+Admitted.
+
 Lemma rot_sparse_embedding :
   forall g ls,
     sparse_embedding ls ->
     sparse_embedding (rot_segs g ls).
-(* 三角形 sparse による証明への置換を残す。 *)
-Admitted.
+Proof.
+  intros g ls Hsparse l s r Hdecomp.
+  assert (Hwhole : l ++ [s] ++ r <> []).
+  { destruct l; simpl; discriminate. }
+  assert (Hback :
+      ls = rot_segs (rot_inv g) l ++
+           [rot_seg (rot_inv g) s] ++
+           rot_segs (rot_inv g) r).
+  { pose proof (f_equal (rot_segs (rot_inv g)) Hdecomp) as H.
+    rewrite rot_inv_segs in H.
+    rewrite !rot_segs_app in H. simpl in H.
+    exact H. }
+  pose proof
+    (Hsparse
+       (rot_segs (rot_inv g) l)
+       (rot_seg (rot_inv g) s)
+       (rot_segs (rot_inv g) r)
+       Hback) as Haround.
+  destruct Haround as [Hextensions Hrectangles].
+  split.
+  - intros p [[Hl Hhead] | [Hr Hlast]] Hin.
+    + apply (Hextensions (rot_pt (rot_inv g) p)).
+      * left. split.
+        -- now apply rot_segs_nonnil.
+        -- pose proof
+             (onHead_extend_strict_rot
+                (rot_inv g) (l ++ [s] ++ r) p Hwhole Hhead) as Hhead'.
+           rewrite !rot_segs_app in Hhead'. simpl in Hhead'. exact Hhead'.
+      * assert (Hin' :=
+            proj2 (in_segment_triangle_rot (rot_inv g) s p) Hin).
+        simpl in Hin'. exact Hin'.
+    + apply (Hextensions (rot_pt (rot_inv g) p)).
+      * right. split.
+        -- now apply rot_segs_nonnil.
+        -- pose proof
+             (onLast_extend_strict_rot
+                (rot_inv g) (l ++ [s] ++ r) p Hwhole Hlast) as Hlast'.
+           rewrite !rot_segs_app in Hlast'. simpl in Hlast'. exact Hlast'.
+      * assert (Hin' :=
+            proj2 (in_segment_triangle_rot (rot_inv g) s p) Hin).
+        simpl in Hin'. exact Hin'.
+  - intros t p Ht Hbox Hin.
+    apply (Hrectangles
+             (rot_seg (rot_inv g) t) (rot_pt (rot_inv g) p)).
+    + unfold rot_segs. rewrite nonadjacent_sides_map. now apply in_map.
+    + change (in_segment_triangle t p) in Hbox.
+      assert (Hbox' :=
+          proj2 (in_segment_triangle_rot (rot_inv g) t p) Hbox).
+      simpl in Hbox'. exact Hbox'.
+    + assert (Hin' :=
+          proj2 (in_segment_triangle_rot (rot_inv g) s p) Hin).
+      simpl in Hin'. exact Hin'.
+Qed.
 
 Lemma rot_extensions_disjoint :
   forall g ls,

@@ -1280,8 +1280,49 @@ Proof.
              (Rlt_le _ _ Hy)).
 Qed.
 
+(* 非隣接出現の分類順序と旧三角形の分離を、新しい端点・向きを持つ
+   二つの三角形へ移す。長方形の軸方向分離は要求しない。 *)
+Lemma operated_triangles_separated_from_spec :
+  forall l sub r h i j s t s' t',
+    ClassificationSpec l sub r ->
+    ~ terminal_lid l sub r ->
+    ~ initial_lid l sub r ->
+    0 < h ->
+    nth_error (l ++ sub ++ r) i = Some s ->
+    nth_error (l ++ sub ++ r) j = Some t ->
+    (S i < j \/ S j < i)%nat ->
+    init s' = operate_point l sub r h (init s) ->
+    term s' = operate_point l sub r h (term s) ->
+    init t' = operate_point l sub r h (init t) ->
+    term t' = operate_point l sub r h (term t) ->
+    orn_seg s' = orn_seg s ->
+    orn_seg t' = orn_seg t ->
+    (forall p, in_segment_triangle t p -> ~ in_segment_triangle s p) ->
+    forall p, in_segment_triangle t' p -> ~ in_segment_triangle s' p.
+Admitted.
+
 (* 延長線点と同じ x の旧セグメント点が与える分類順序から，
    延長線点は移動後の端点長方形にも入らない。 *)
+(* 旧三角形の外点を、縦断面との分類順序に従って動かすと、
+   同じ primitive と移動後の端点で定まる三角形にも入らない。 *)
+Lemma shifted_crossing_avoids_endpoint_triangle :
+  forall h s s' q g gi gt,
+    0 < h ->
+    primitive_segment s' = primitive_segment s ->
+    init s' = shift h gi (init s) ->
+    term s' = shift h gt (term s) ->
+    ~ in_segment_triangle s q ->
+    (forall e,
+      onSegment s e ->
+      fst e = fst q ->
+      (snd q < snd e ->
+         region_at_or_above gi g /\ region_at_or_above gt g)
+      /\
+      (snd e < snd q ->
+         region_at_or_above g gi /\ region_at_or_above g gt)) ->
+    ~ in_segment_triangle s' (shift h g q).
+Admitted.
+
 Lemma shifted_crossing_avoids_endpoint_rect :
   forall h s s' q g gi gt,
     0 < h ->

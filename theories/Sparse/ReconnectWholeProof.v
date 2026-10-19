@@ -62,6 +62,97 @@ Proof.
   exfalso. apply (proj2 (nth_error_Some xs i) Hi). exact Hx.
 Qed.
 
+(* 再接続した全体の延長線は、外側セグメントの閉三角形を避ける。 *)
+Lemma reconnect_preserves_extensions_avoid_triangles_from_spec :
+  forall l sub r h,
+    sub <> [] ->
+    ClassificationSpec l sub r ->
+    h_large h sub ->
+    all_reconnectable l sub r h (l ++ sub ++ r) ->
+    sparse_embedding (l ++ sub ++ r) ->
+    extensions_avoid_segment_triangles (reconnect_whole l sub r h).
+Proof.
+  intros l sub r h Hne Hspec Hh Hrec Hsparse.
+  unfold extensions_avoid_segment_triangles.
+  intros l' s' r' Hsplit p Hextension Hp.
+  assert (Hs' :
+    nth_error (reconnect_whole l sub r h) (length l') = Some s').
+  { rewrite Hsplit, nth_error_app2 by lia.
+    replace (length l' - length l')%nat with 0%nat by lia.
+    reflexivity. }
+  assert (Hlen :
+    length (l ++ sub ++ r) = length (reconnect_whole l sub r h)).
+  { symmetry. apply reconnect_whole_length. }
+  destruct (nth_error_exists_at_equal_length
+              (l ++ sub ++ r) (reconnect_whole l sub r h)
+              (length l') s' Hlen Hs') as [s Hs].
+  assert (Hin : In s (l ++ sub ++ r)).
+  { now apply nth_error_In in Hs. }
+  destruct (@nth_error_split Segment (l ++ sub ++ r) (length l') s Hs)
+    as [oldl [oldr [HoldSplit HoldLen]]].
+  destruct (Hsparse oldl s oldr HoldSplit) as [HoldExtension _].
+  pose proof (reconnect_whole_nth_spec
+                l sub r h (length l') s s' Hspec Hrec Hs Hs')
+    as [Horn [Hinit Hterm]].
+  destruct (operated_segment_axis_orders_from_spec
+              l sub r h s Hspec (proj1 Hh) Hin) as [Hx Hy].
+  assert (Hprimitive : primitive_segment s' = primitive_segment s).
+  { apply same_primitive_of_axis_orders; [| |exact Horn];
+      rewrite Hinit, Hterm; assumption. }
+  destruct Hextension as [[Hl' Hhead] | [Hr' Hlast]].
+  - destruct (reconnect_head_strict_extension_preimage_from_spec
+                l sub r h p Hne Hsparse Hspec
+                (Rlt_le _ _ (proj1 Hh)) Hhead)
+      as [q [Hq Hpoint]].
+    rewrite Hpoint in Hp.
+    eapply (shifted_crossing_avoids_endpoint_triangle
+              h s s' q
+              (classify l sub r
+                 (init (hd_segment (l ++ sub ++ r))))
+              (classify l sub r (init s))
+              (classify l sub r (term s))).
+    + exact (proj1 Hh).
+    + exact Hprimitive.
+    + unfold operate_point in Hinit. exact Hinit.
+    + unfold operate_point in Hterm. exact Hterm.
+    + apply (HoldExtension q). left. split.
+      * intros Holdnil. subst oldl. simpl in HoldLen.
+        apply Hl'. apply length_zero_iff_nil. lia.
+      * change (onHead_extend_strict (oldl ++ s :: oldr) q).
+        now rewrite <- HoldSplit.
+    + intros e He Hxe.
+      exact (classified_head_segment_crossing_order
+               l sub r Hspec s e q Hin He Hq Hxe).
+    + exact Hp.
+  - destruct (reconnect_last_strict_extension_preimage_from_spec
+                l sub r h p Hne Hsparse Hspec
+                (Rlt_le _ _ (proj1 Hh)) Hlast)
+      as [q [Hq Hpoint]].
+    rewrite Hpoint in Hp.
+    eapply (shifted_crossing_avoids_endpoint_triangle
+              h s s' q
+              (classify l sub r
+                 (term (last_segment (l ++ sub ++ r))))
+              (classify l sub r (init s))
+              (classify l sub r (term s))).
+    + exact (proj1 Hh).
+    + exact Hprimitive.
+    + unfold operate_point in Hinit. exact Hinit.
+    + unfold operate_point in Hterm. exact Hterm.
+    + apply (HoldExtension q). right. split.
+      * intros Holdnil. subst oldr. simpl in HoldSplit.
+        assert (Hlengths := Hlen).
+        rewrite HoldSplit, Hsplit in Hlengths.
+        rewrite !length_app in Hlengths. simpl in Hlengths.
+        apply Hr'. apply length_zero_iff_nil. lia.
+      * change (onLast_extend_strict (oldl ++ s :: oldr) q).
+        now rewrite <- HoldSplit.
+    + intros e He Hxe.
+      exact (classified_last_segment_crossing_order
+               l sub r Hspec s e q Hin He Hq Hxe).
+    + exact Hp.
+Qed.
+
 (* 十分大きな移動後、全体の延長線は sub の長方形を避ける。 *)
 Lemma reconnect_extensions_avoid_sub_rect_from_spec :
   forall l sub r h p,
@@ -192,38 +283,41 @@ Proof.
     + exact Hshift.
 Qed.
 
-(* 添字ごとの閉長方形分離と延長線回避を全域 sparse に変換する。 *)
-Lemma indexed_far_rectangles_give_sparse_embedding :
+(* 元の sparse 列では、非隣接出現の閉端点三角形は交わらない。 *)
+Lemma sparse_far_triangles_separated :
+  forall ls i j s t,
+    sparse_embedding ls ->
+    nth_error ls i = Some s ->
+    nth_error ls j = Some t ->
+    (S i < j \/ S j < i)%nat ->
+    forall p, in_segment_triangle t p -> ~ in_segment_triangle s p.
+Proof.
+  intros ls i j s t Hsparse Hs Ht Hfar.
+  destruct (nth_error_far_in_nonadjacent_sides ls i j s t Hs Ht Hfar)
+    as [before [after [Hsplit Hin]]].
+  intros p Htp.
+  exact ((proj2 (sparse_embedding_at _ _ _ _ Hsparse Hsplit)) t p Hin Htp).
+Qed.
+
+(* 添字ごとの閉三角形分離と延長線回避を全域 sparse に変換する。 *)
+Lemma indexed_far_triangles_give_sparse_embedding :
   forall ls,
     (forall i j s t,
       nth_error ls i = Some s ->
       nth_error ls j = Some t ->
       (S i < j \/ S j < i)%nat ->
-      endpoint_rectangles_axis_separated s t) ->
-    extensions_avoid_segment_rectangles ls ->
+      forall p, in_segment_triangle t p -> ~ in_segment_triangle s p) ->
+    extensions_avoid_segment_triangles ls ->
     sparse_embedding ls.
 Proof.
   intros ls Hfar Hext.
-  apply geometric_sparse_embedding; [|exact Hext].
-  unfold segment_rectangles_separated.
-  intros left s right Hsplit t Hin p Hp.
+  apply geometric_triangle_sparse_embedding; [|exact Hext].
+  unfold segment_triangles_separated.
+  intros left s right Hsplit t p Hin Hp.
   destruct (split_nonadjacent_nth_errors ls left s right t Hsplit Hin)
     as [i [j [Hs [Ht Hij]]]].
-  exact (axis_separated_boxes_avoid s t (Hfar i j s t Hs Ht Hij) p Hp).
+  exact (Hfar i j s t Hs Ht Hij p Hp).
 Qed.
-
-(* 再接続後の非隣接セグメントの閉三角形は分離している。 *)
-Lemma reconnect_preserves_triangle_separation_prepared :
-  forall ds l sub r h,
-    PreparedGeometry l sub r ->
-    ClassificationSpec l sub r ->
-    h_large h sub ->
-    sparse_embedding (l ++ sub ++ r) ->
-    embed_listDir ds (l ++ sub ++ r) ->
-    extensions_disjoint (l ++ sub ++ r) ->
-    segment_triangles_separated (reconnect_whole l sub r h).
-(* 参照先の三角形の逆像・分類順序による証明を残す。 *)
-Admitted.
 
 (* 旧長方形回避の代わりに、再接続後の閉三角形を strict 延長線が避ける。 *)
 Lemma reconnect_preserves_triangle_extension_avoidance_prepared :
@@ -235,8 +329,14 @@ Lemma reconnect_preserves_triangle_extension_avoidance_prepared :
     embed_listDir ds (l ++ sub ++ r) ->
     extensions_disjoint (l ++ sub ++ r) ->
     extensions_avoid_segment_triangles (reconnect_whole l sub r h).
-(* 参照先の延長線の逆像と三角形回避による証明を残す。 *)
-Admitted.
+Proof.
+  intros ds l sub r h Hgeometry Hspec Hh Hsparse Hembed Hext.
+  assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
+  { exact (operate_endpoints_reconnectable_from_spec l sub r h Hspec Hh). }
+  exact (reconnect_preserves_extensions_avoid_triangles_from_spec
+           l sub r h (prepared_sub_nonempty l sub r Hgeometry)
+           Hspec Hh Hrec Hsparse).
+Qed.
 
 (* 本体の三角形分離と延長線の三角形回避を組み合わせる。 *)
 Lemma prepared_no_lid_preserves_sparse_embedding :
@@ -250,9 +350,47 @@ Lemma prepared_no_lid_preserves_sparse_embedding :
     sparse_embedding (reconnect_whole l sub r h).
 Proof.
   intros ds l sub r h Hgeometry Hspec Hh Hsparse Hembed Hext.
-  apply geometric_triangle_sparse_embedding.
-  - exact (reconnect_preserves_triangle_separation_prepared
-             ds l sub r h Hgeometry Hspec Hh Hsparse Hembed Hext).
+  assert (Hconn : connected sub).
+  { eapply connected_middle.
+    exact (embed_listDir_connected ds _ Hembed). }
+  assert (Hrec : all_reconnectable l sub r h (l ++ sub ++ r)).
+  { exact (operate_endpoints_reconnectable_from_spec
+             l sub r h Hspec Hh). }
+  apply indexed_far_triangles_give_sparse_embedding.
+  - intros i j s t Hs Ht Hfar.
+    assert (Hlen :
+        length (l ++ sub ++ r) =
+        length (reconnect_whole l sub r h)).
+    { symmetry. apply reconnect_whole_length. }
+    destruct (nth_error_exists_at_equal_length
+                (l ++ sub ++ r) (reconnect_whole l sub r h)
+                i s Hlen Hs) as [old_s HoldS].
+    destruct (nth_error_exists_at_equal_length
+                (l ++ sub ++ r) (reconnect_whole l sub r h)
+                j t Hlen Ht) as [old_t HoldT].
+    pose proof (reconnect_whole_nth_spec
+                  l sub r h i old_s s Hspec Hrec HoldS Hs)
+      as [HornS [HinitS HtermS]].
+    pose proof (reconnect_whole_nth_spec
+                  l sub r h j old_t t Hspec Hrec HoldT Ht)
+      as [HornT [HinitT HtermT]].
+    eapply operated_triangles_separated_from_spec.
+    + exact Hspec.
+    + exact (prepared_no_terminal_lid l sub r Hgeometry).
+    + exact (prepared_no_initial_lid l sub r Hgeometry).
+    + exact (proj1 Hh).
+    + exact HoldS.
+    + exact HoldT.
+    + exact Hfar.
+    + exact HinitS.
+    + exact HtermS.
+    + exact HinitT.
+    + exact HtermT.
+    + exact HornS.
+    + exact HornT.
+    + exact (sparse_far_triangles_separated
+               (l ++ sub ++ r) i j old_s old_t
+               Hsparse HoldS HoldT Hfar).
   - exact (reconnect_preserves_triangle_extension_avoidance_prepared
              ds l sub r h Hgeometry Hspec Hh Hsparse Hembed Hext).
 Qed.
