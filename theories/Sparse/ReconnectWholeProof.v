@@ -310,12 +310,7 @@ Lemma shifted_point_avoids_reconnected_triangle :
     z = shift h g q ->
     (forall e,
        onSegment s e -> fst e = fst q ->
-       (snd q < snd e ->
-          region_at_or_above (classify l sub r (init s)) g /\
-          region_at_or_above (classify l sub r (term s)) g) /\
-       (snd e < snd q ->
-          region_at_or_above g (classify l sub r (init s)) /\
-          region_at_or_above g (classify l sub r (term s)))) ->
+       segment_extension_order (classify l sub r) s g e q) ->
     ~ in_segment_triangle s' z.
 Proof.
   intros l sub r h i s s' q z g Hspec Hh Hold Hnew Houtside
@@ -457,8 +452,8 @@ Proof.
       (classify l sub r (init (hd_segment (l ++ sub ++ r)))))
       ; try eassumption; try exact (pmp_endpoint_spec l sub r Hspec).
     intros e He Hx.
-    exact (classified_head_segment_crossing_order
-      l sub r Hspec s e q Hin He Hq Hx).
+    exact (classified_extension_segment_order
+      l sub r Hspec HeadEnd s e q Hin He Hq Hx).
   - destruct (reconnect_last_strict_extension_preimage_from_spec
                 l sub r h p
                 Hne
@@ -482,8 +477,8 @@ Proof.
       (classify l sub r (term (last_segment (l ++ sub ++ r)))))
       ; try eassumption; try exact (pmp_endpoint_spec l sub r Hspec).
     intros e He Hx.
-    exact (classified_last_segment_crossing_order
-      l sub r Hspec s e q Hin He Hq Hx).
+    exact (classified_extension_segment_order
+      l sub r Hspec LastEnd s e q Hin He Hq Hx).
 Qed.
 
 (* 蓋や局所退避条件ではなく、共通の三角形順序だけから全域疎性を保存する。 *)

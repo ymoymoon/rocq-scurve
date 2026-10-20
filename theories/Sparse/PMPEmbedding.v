@@ -143,34 +143,33 @@ Proof.
     - eapply head_classification_preserves_init_slope_from_order; [|exact Hembed].
       intros. now apply Horder.
     - eapply last_classification_preserves_term_slope_from_order; [|exact Hembed].
-      intros. now apply Horder. }
+      intros. now apply Horder.
+    - intros seg p Hin Hon Hx. apply region_at_or_above_antisym;
+        eapply pmp_order_classified; try exact Hsafe; apply rt_step;
+        eapply pmp_uniform_step with (seg := seg) (p := p);
+        eauto; unfold endpoint_of_seg; auto. }
   - intros i j s t ps pt u v Hs Ht Hfar Hps Hpt Hu Hv Hx Hy.
     apply Horder. apply rt_step. apply order_core_step.
     apply (order_nonadjacent l sub r i j s t ps pt u v); assumption.
-  - intros seg e q Hin He Hq Hx. split; intros Hy; split; apply Horder;
+  - intros which seg e q Hin He Hq Hx. destruct which;
+      split; intros Hy; split; apply Horder;
       apply rt_step; apply order_end_step.
     + eapply order_head_below_segment; eauto; [lra | now left].
     + eapply order_head_below_segment; eauto; [lra | now right].
     + eapply order_segment_below_head; eauto; [lra | now left].
     + eapply order_segment_below_head; eauto; [lra | now right].
-  - intros seg e q Hin He Hq Hx. split; intros Hy; split; apply Horder;
-      apply rt_step; apply order_end_step.
     + eapply order_last_below_segment; eauto; [lra | now left].
     + eapply order_last_below_segment; eauto; [lra | now right].
     + eapply order_segment_below_last; eauto; [lra | now left].
     + eapply order_segment_below_last; eauto; [lra | now right].
   - apply classify_pmp_only_up_or_fix.
-  - intros seg p Hin Hon Hx. apply region_at_or_above_antisym;
-      eapply pmp_order_classified; try exact Hsafe; apply rt_step;
-      eapply pmp_uniform_step with (seg := seg) (p := p);
-      eauto; unfold endpoint_of_seg; auto.
   - intros seg p Hin Htri Htarget. split; apply pmp_seed_classified_up;
       try exact Hsafe; eapply pmp_body_seed with (seg := seg) (p := p);
       eauto; unfold endpoint_of_seg; auto.
-  - intros Hl p Hon Htri. apply pmp_seed_classified_up; [exact Hsafe |].
-    eapply pmp_head_seed; eauto.
-  - intros Hr p Hon Htri. apply pmp_seed_classified_up; [exact Hsafe |].
-    eapply pmp_last_seed; eauto.
+  - intros which Hend p Hon Htri. destruct which;
+      apply pmp_seed_classified_up; try exact Hsafe.
+    + eapply pmp_head_seed; eauto.
+    + eapply pmp_last_seed; eauto.
 Qed.
 
 (* PMP の幾何学的な証人。terminal 側の蓋だけを除き、分類に関する条件は含めない。 *)
@@ -268,7 +267,7 @@ Proof.
   destruct (segment_has_point_at_x s (fst p) Hpx) as [q [Hon Hqx]].
   assert (Hrange : in_sub_x_range sub q).
   { unfold in_sub_x_range. rewrite Hqx. exact (proj1 (proj1 Htarget)). }
-  pose proof (pmp_segment_at_sub_x_uniform l sub r Hspec s q Hin Hon Hrange) as Hsame.
+  pose proof (classified_segment_at_sub_x_uniform l sub r Hspec s q Hin Hon Hrange) as Hsame.
   destruct (pmp_only_up_or_fix l sub r Hspec (init s)) as [Hi | Hi].
   - assert (Ht : classifier l sub r (term s) = RegUp) by congruence.
     destruct (Hclear s Hwhole) as [[Hiy Hty] _].
@@ -327,12 +326,14 @@ Proof.
       try eassumption.
     + now left.
     + exact (pmp_only_up_or_fix l sub r Hspec _).
-    + intros Hfix Htarget. pose proof (pmp_head_meeting_moves_up l sub r Hspec Hl q Hq Htarget).
-      congruence.
+    + intros Hfix Htarget.
+      pose proof (pmp_extension_meeting_moves_up l sub r Hspec HeadEnd Hl q Hq Htarget) as Hmove.
+      cbn [extension_anchor] in Hmove. congruence.
     + intros Hup z [s [Hs Hon]] Hx Hy.
       assert (Hin : In s (l ++ sub ++ r)) by (rewrite !in_app_iff; tauto).
-      destruct (proj1 (classified_head_segment_crossing_order l sub r Hspec s z q Hin Hon Hq ltac:(symmetry; exact Hx)) Hy)
+      destruct (proj1 (classified_extension_segment_order l sub r Hspec HeadEnd s z q Hin Hon Hq ltac:(symmetry; exact Hx)) Hy)
         as [Horder _].
+      cbn [extension_anchor] in Horder.
       rewrite Hup in Horder. apply region_at_or_above_RegUp_inv in Horder.
       pose proof (classified_sub_fixed l sub r Hspec (init s)
         (ex_intro _ s (conj Hs (onInit s)))). congruence.
@@ -344,12 +345,14 @@ Proof.
       try eassumption.
     + now right.
     + exact (pmp_only_up_or_fix l sub r Hspec _).
-    + intros Hfix Htarget. pose proof (pmp_last_meeting_moves_up l sub r Hspec Hr q Hq Htarget).
-      congruence.
+    + intros Hfix Htarget.
+      pose proof (pmp_extension_meeting_moves_up l sub r Hspec LastEnd Hr q Hq Htarget) as Hmove.
+      cbn [extension_anchor] in Hmove. congruence.
     + intros Hup z [s [Hs Hon]] Hx Hy.
       assert (Hin : In s (l ++ sub ++ r)) by (rewrite !in_app_iff; tauto).
-      destruct (proj1 (classified_last_segment_crossing_order l sub r Hspec s z q Hin Hon Hq ltac:(symmetry; exact Hx)) Hy)
+      destruct (proj1 (classified_extension_segment_order l sub r Hspec LastEnd s z q Hin Hon Hq ltac:(symmetry; exact Hx)) Hy)
         as [Horder _].
+      cbn [extension_anchor] in Horder.
       rewrite Hup in Horder. apply region_at_or_above_RegUp_inv in Horder.
       pose proof (classified_sub_fixed l sub r Hspec (init s)
         (ex_intro _ s (conj Hs (onInit s)))). congruence.

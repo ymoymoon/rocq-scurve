@@ -13,8 +13,20 @@ Record ClassificationContext
   context_extensions_disjoint : extensions_disjoint (l ++ sub ++ r)
 }.
 
+(* 本体上の比較点 e と延長線点 q の上下順序を、両端点と延長線基点の領域へ移す。
+   比較を要求する範囲は PMP・PPMM の各仕様で指定する。 *)
+Definition segment_extension_order
+    (classifier : EndpointClassifier) (seg : Segment) (g : Region)
+    (e q : Point) : Prop :=
+  (snd q < snd e ->
+     region_at_or_above (classifier (init seg)) g /\
+     region_at_or_above (classifier (term seg)) g)
+  /\
+  (snd e < snd q ->
+     region_at_or_above g (classifier (init seg)) /\
+     region_at_or_above g (classifier (term seg))).
 
-(* 端点移動・先頭末尾の傾き・延長線二本の順序に共通する仕様。 *)
+(* PMP・PPMM に共通する固定・端点移動・延長線の順序と傾きの仕様。 *)
 Record EndpointMovementSpec
     (l sub r : list Segment) {classifier : EndpointClassifier} : Prop := {
   (* sub は全点を固定する。特に左右との接続端点も動かない。 *)
@@ -61,8 +73,32 @@ Record EndpointMovementSpec
       0 <= h ->
       r <> [] ->
       classified_term_slope_reconnectable
-        classifier h (last_segment r)
+        classifier h (last_segment r);
+
+  (* sub の x 範囲を通る非隣接セグメントでは、両端を同じ領域にする。
+     その領域を Fix にできるか、どちらへ動かすかは各仕様で指定する。 *)
+  classified_segment_at_sub_x_uniform : forall seg p,
+    In seg (nonadjacent_sides l r) -> onSegment seg p ->
+    in_sub_x_range sub p -> classifier (init seg) = classifier (term seg)
 }.
+
+(* 先頭・末尾の延長線を、基点と strict な半直線で一様に扱う。 *)
+Inductive CurveEnd := HeadEnd | LastEnd.
+
+Definition extension_anchor (which : CurveEnd) (ls : list Segment) : Point :=
+  match which with
+  | HeadEnd => init (hd_segment ls)
+  | LastEnd => term (last_segment ls)
+  end.
+
+Definition on_strict_extension (which : CurveEnd) (ls : list Segment) : Point -> Prop :=
+  match which with
+  | HeadEnd => onHead_extend_strict ls
+  | LastEnd => onLast_extend_strict ls
+  end.
+
+Definition external_end_nonempty (which : CurveEnd) (l r : list Segment) : Prop :=
+  match which with HeadEnd => l <> [] | LastEnd => r <> [] end.
 
 (* PMP 用：共通の端点移動に加え、全域の順序と Plus 三角形からの上方退避を要求する。 *)
 Record PMPClassificationSpec
@@ -84,89 +120,31 @@ Record PMPClassificationSpec
       snd u < snd v ->
       region_at_or_above (classifier pt) (classifier ps);
 
-  (* 先頭延長線と一セグメントの上下順序を三つの端点分類へ移す。 *)
-  classified_head_segment_crossing_order :
-    forall seg e q,
+  (* 両端の延長線と一セグメントの上下順序を三つの端点分類へ移す。 *)
+  classified_extension_segment_order :
+    forall which seg e q,
       In seg (l ++ sub ++ r) ->
       onSegment seg e ->
-      onHead_extend_strict (l ++ sub ++ r) q ->
+      on_strict_extension which (l ++ sub ++ r) q ->
       fst e = fst q ->
-      (snd q < snd e ->
-         region_at_or_above
-           (classifier (init seg))
-           (classifier (init (hd_segment (l ++ sub ++ r))))
-         /\ region_at_or_above
-           (classifier (term seg))
-           (classifier (init (hd_segment (l ++ sub ++ r)))))
-      /\
-      (snd e < snd q ->
-         region_at_or_above
-           (classifier (init (hd_segment (l ++ sub ++ r))))
-           (classifier (init seg))
-         /\ region_at_or_above
-           (classifier (init (hd_segment (l ++ sub ++ r))))
-           (classifier (term seg)));
-
-  (* 末尾延長線についても同じ端点順序を要求する。 *)
-  classified_last_segment_crossing_order :
-    forall seg e q,
-      In seg (l ++ sub ++ r) ->
-      onSegment seg e ->
-      onLast_extend_strict (l ++ sub ++ r) q ->
-      fst e = fst q ->
-      (snd q < snd e ->
-         region_at_or_above
-           (classifier (init seg))
-           (classifier (term (last_segment (l ++ sub ++ r))))
-         /\ region_at_or_above
-           (classifier (term seg))
-           (classifier (term (last_segment (l ++ sub ++ r)))))
-      /\
-      (snd e < snd q ->
-         region_at_or_above
-           (classifier (term (last_segment (l ++ sub ++ r))))
-           (classifier (init seg))
-         /\ region_at_or_above
-           (classifier (term (last_segment (l ++ sub ++ r))))
-           (classifier (term seg)));
+      segment_extension_order classifier seg
+        (classifier (extension_anchor which (l ++ sub ++ r))) e q;
 
   (* 分類は上移動または固定の二択。 *)
   pmp_only_up_or_fix : forall p, classifier p = RegUp \/ classifier p = RegFix;
-  (* sub の x 範囲を通る非隣接セグメントは一律に動かす。 *)
-  pmp_segment_at_sub_x_uniform : forall seg p,
-    In seg (nonadjacent_sides l r) -> onSegment seg p ->
-    in_sub_x_range sub p -> classifier (init seg) = classifier (term seg);
+
   (* 退避方向は入力側の Plus 三角形との接触から決める。 *)
   pmp_triangle_meeting_moves_up : forall seg p,
     In seg (nonadjacent_sides l r) ->
     in_segment_triangle seg p -> in_sub_triangle Plus sub p ->
     classifier (init seg) = RegUp /\ classifier (term seg) = RegUp;
+    
   (* 外側の延長線が目的三角形に入るとき、その基点を上げる。 *)
-  pmp_head_meeting_moves_up : l <> [] -> forall p,
-    onHead_extend_strict (l ++ sub ++ r) p -> in_sub_triangle Plus sub p ->
-    classifier (init (hd_segment (l ++ sub ++ r))) = RegUp;
-  pmp_last_meeting_moves_up : r <> [] -> forall p,
-    onLast_extend_strict (l ++ sub ++ r) p -> in_sub_triangle Plus sub p ->
-    classifier (term (last_segment (l ++ sub ++ r))) = RegUp
+  pmp_extension_meeting_moves_up : forall which,
+    external_end_nonempty which l r -> forall p,
+    on_strict_extension which (l ++ sub ++ r) p -> in_sub_triangle Plus sub p ->
+    classifier (extension_anchor which (l ++ sub ++ r)) = RegUp
 }.
-
-(* 先頭・末尾の延長線を、基点と strict な半直線で一様に扱う。 *)
-Inductive CurveEnd := HeadEnd | LastEnd.
-
-Definition extension_anchor (which : CurveEnd) (ls : list Segment) : Point :=
-  match which with
-  | HeadEnd => init (hd_segment ls)
-  | LastEnd => term (last_segment ls)
-  end.
-
-Definition on_strict_extension (which : CurveEnd) (ls : list Segment) : Point -> Prop :=
-  match which with
-  | HeadEnd => onHead_extend_strict ls
-  | LastEnd => onLast_extend_strict ls
-  end.
-
-Definition external_end_nonempty (which : CurveEnd) (l r : list Segment) : Prop :=
-  match which with HeadEnd => l <> [] | LastEnd => r <> [] end.
 
 (* PPMM・PM 用：外側の順序を保存し、sub 長方形からは上下へ退避する。 *)
 Record ClassificationSpec
@@ -198,39 +176,16 @@ Record ClassificationSpec
       onSegment seg e ->
       on_strict_extension which (l ++ sub ++ r) q ->
       fst e = fst q ->
-      (snd q < snd e ->
-         region_at_or_above
-           (classifier (init seg))
-           (classifier (extension_anchor which (l ++ sub ++ r)))
-         /\ region_at_or_above
-           (classifier (term seg))
-           (classifier (extension_anchor which (l ++ sub ++ r))))
-      /\
-      (snd e < snd q ->
-         region_at_or_above
-           (classifier (extension_anchor which (l ++ sub ++ r)))
-           (classifier (init seg))
-         /\ region_at_or_above
-           (classifier (extension_anchor which (l ++ sub ++ r)))
-           (classifier (term seg)));
+      segment_extension_order classifier seg
+        (classifier (extension_anchor which (l ++ sub ++ r))) e q;
 
-  (* sub の閉 x 範囲を通る非隣接セグメントは、両端を同じ非固定領域にする。 *)
-  classified_segment_at_sub_x :
+  (* 共通の両端同領域条件に加え、PPMM では Fix を除いて上下へ退避させる。 *)
+  classified_segment_at_sub_x_moves :
     forall seg p,
       In seg (nonadjacent_sides l r) ->
       onSegment seg p ->
       in_sub_x_range sub p ->
-      (classifier (init seg) = RegUp /\ classifier (term seg) = RegUp)
-      \/ (classifier (init seg) = RegDown /\ classifier (term seg) = RegDown);
-
-  (* x 範囲内の端点が sub 長方形の上下にはみ出すなら、その側へ動かす。 *)
-  classified_endpoint_outside_sub_rect :
-    forall seg p,
-      In seg (nonadjacent_sides l r) ->
-      endpoint_of_seg seg p ->
-      in_sub_x_range sub p ->
-      (ry1 (rect_of sub) < snd p -> classifier p = RegUp) /\
-      (snd p < ry0 (rect_of sub) -> classifier p = RegDown);
+      classifier (init seg) <> RegFix;
 
   (* 外側の strict 延長線が sub の閉 x 範囲へ入るなら、その基点を動かす。 *)
   classified_extension_at_sub_x :

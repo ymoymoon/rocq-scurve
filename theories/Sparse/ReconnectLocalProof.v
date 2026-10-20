@@ -1002,11 +1002,14 @@ Proof.
       { unfold in_sub_x_range. now rewrite Hpx. }
       pose proof (Hclear s (nonadjacent_sides_in_whole l sub r s Hs))
         as [[HinitUp HtermUp] [HinitDown HtermDown]].
-      destruct (classified_segment_at_sub_x l sub r Hspec s p Hs Hp Hrange)
-        as [[Hinit Hterm] | [Hinit Hterm]].
-      * left. unfold both_above_of_sub, shift, ReconnectByClassifier.operate_point.
+      pose proof (classified_segment_at_sub_x_uniform l sub r Hspec s p Hs Hp Hrange) as Hsame.
+      pose proof (classified_segment_at_sub_x_moves l sub r Hspec s p Hs Hp Hrange) as Hmoves.
+      destruct (classify l sub r (init s)) eqn:Hinit; [contradiction | |].
+      * assert (Hterm : classify l sub r (term s) = RegUp) by congruence.
+        left. unfold both_above_of_sub, shift, ReconnectByClassifier.operate_point.
         rewrite Hinit, Hterm. simpl. now split.
-      * right; left. unfold both_below_of_sub, shift, ReconnectByClassifier.operate_point.
+      * assert (Hterm : classify l sub r (term s) = RegDown) by congruence.
+        right; left. unfold both_below_of_sub, shift, ReconnectByClassifier.operate_point.
         rewrite Hinit, Hterm. simpl. now split.
 Qed.
 
