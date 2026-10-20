@@ -123,43 +123,42 @@ Proof.
     now apply pmp_common_order. }
   constructor.
   - { constructor.
-    - { constructor.
-      - now apply classify_pmp_sub_fixed.
-      - intros seg Hin. split; intros Hy; apply Horder;
-          apply rt_step; apply order_core_step.
-        + eapply order_on_segment with (seg := seg).
-          * exact Hin.
-          * now left.
-          * now right.
-          * lra.
-        + eapply order_on_segment with (seg := seg).
-          * exact Hin.
-          * now right.
-          * now left.
-          * lra.
-      - intros ph pl Hph Hpl Hx. split; intros Hy; apply Horder;
-          apply rt_step; apply order_end_step.
-        + eapply order_head_last; eauto; lra.
-        + eapply order_last_head; eauto; lra.
-      - eapply head_classification_preserves_init_slope_from_order; [|exact Hembed].
-        intros. now apply Horder.
-      - eapply last_classification_preserves_term_slope_from_order; [|exact Hembed].
-        intros. now apply Horder. }
-    - intros i j s t ps pt u v Hs Ht Hfar Hps Hpt Hu Hv Hx Hy.
-      apply Horder. apply rt_step. apply order_core_step.
-      apply (order_nonadjacent l sub r i j s t ps pt u v); assumption.
-    - intros seg e q Hin He Hq Hx. split; intros Hy; split; apply Horder;
+    - now apply classify_pmp_sub_fixed.
+    - intros seg Hin. split; intros Hy; apply Horder;
+        apply rt_step; apply order_core_step.
+      + eapply order_on_segment with (seg := seg).
+        * exact Hin.
+        * now left.
+        * now right.
+        * lra.
+      + eapply order_on_segment with (seg := seg).
+        * exact Hin.
+        * now right.
+        * now left.
+        * lra.
+    - intros ph pl Hph Hpl Hx. split; intros Hy; apply Horder;
         apply rt_step; apply order_end_step.
-      + eapply order_head_below_segment; eauto; [lra | now left].
-      + eapply order_head_below_segment; eauto; [lra | now right].
-      + eapply order_segment_below_head; eauto; [lra | now left].
-      + eapply order_segment_below_head; eauto; [lra | now right].
-    - intros seg e q Hin He Hq Hx. split; intros Hy; split; apply Horder;
-        apply rt_step; apply order_end_step.
-      + eapply order_last_below_segment; eauto; [lra | now left].
-      + eapply order_last_below_segment; eauto; [lra | now right].
-      + eapply order_segment_below_last; eauto; [lra | now left].
-      + eapply order_segment_below_last; eauto; [lra | now right]. }
+      + eapply order_head_last; eauto; lra.
+      + eapply order_last_head; eauto; lra.
+    - eapply head_classification_preserves_init_slope_from_order; [|exact Hembed].
+      intros. now apply Horder.
+    - eapply last_classification_preserves_term_slope_from_order; [|exact Hembed].
+      intros. now apply Horder. }
+  - intros i j s t ps pt u v Hs Ht Hfar Hps Hpt Hu Hv Hx Hy.
+    apply Horder. apply rt_step. apply order_core_step.
+    apply (order_nonadjacent l sub r i j s t ps pt u v); assumption.
+  - intros seg e q Hin He Hq Hx. split; intros Hy; split; apply Horder;
+      apply rt_step; apply order_end_step.
+    + eapply order_head_below_segment; eauto; [lra | now left].
+    + eapply order_head_below_segment; eauto; [lra | now right].
+    + eapply order_segment_below_head; eauto; [lra | now left].
+    + eapply order_segment_below_head; eauto; [lra | now right].
+  - intros seg e q Hin He Hq Hx. split; intros Hy; split; apply Horder;
+      apply rt_step; apply order_end_step.
+    + eapply order_last_below_segment; eauto; [lra | now left].
+    + eapply order_last_below_segment; eauto; [lra | now right].
+    + eapply order_segment_below_last; eauto; [lra | now left].
+    + eapply order_segment_below_last; eauto; [lra | now right].
   - apply classify_pmp_only_up_or_fix.
   - intros seg p Hin Hon Hx. apply region_at_or_above_antisym;
       eapply pmp_order_classified; try exact Hsafe; apply rt_step;
@@ -214,7 +213,7 @@ Local Notation operate_endpoints_reconnectable_from_spec := (ReconnectLocalByCla
 
 (* 両端を同じ量だけ動かした三角形は、旧三角形へ一律に引き戻せる。 *)
 Lemma uniformly_reconnected_triangle_preimage : forall l sub r h s p g,
-  @ReconnectClassificationSpec l sub r (classifier l sub r) ->
+  @PMPClassificationSpec l sub r (classifier l sub r) ->
   h_large h sub -> In s (l ++ sub ++ r) ->
   classifier l sub r (init s) = g -> classifier l sub r (term s) = g ->
   in_segment_triangle (reconnect_one l sub r h s) p ->
@@ -291,7 +290,7 @@ Qed.
    延長線・本体の上下順序に矛盾させる。 *)
 Lemma pmp_shifted_extension_avoids_triangle : forall l sub r h p q g,
   sub <> [] -> connected sub ->
-  @ReconnectClassificationSpec l sub r (classifier l sub r) -> h_large h sub ->
+  @PMPClassificationSpec l sub r (classifier l sub r) -> h_large h sub ->
   (onHead_extend_strict (l ++ sub ++ r) q \/ onLast_extend_strict (l ++ sub ++ r) q) ->
   (g = RegUp \/ g = RegFix) ->
   (g = RegFix -> ~ in_sub_triangle Plus sub q) ->
@@ -325,7 +324,7 @@ Proof.
       as [q [Hq Hshift]].
     eapply (pmp_shifted_extension_avoids_triangle l sub r h p q
       (classifier l sub r (init (hd_segment (l ++ sub ++ r)))));
-      try eassumption; try exact (pmp_reconnect_spec l sub r Hspec).
+      try eassumption.
     + now left.
     + exact (pmp_only_up_or_fix l sub r Hspec _).
     + intros Hfix Htarget. pose proof (pmp_head_meeting_moves_up l sub r Hspec Hl q Hq Htarget).
@@ -342,7 +341,7 @@ Proof.
       as [q [Hq Hshift]].
     eapply (pmp_shifted_extension_avoids_triangle l sub r h p q
       (classifier l sub r (term (last_segment (l ++ sub ++ r)))));
-      try eassumption; try exact (pmp_reconnect_spec l sub r Hspec).
+      try eassumption.
     + now right.
     + exact (pmp_only_up_or_fix l sub r Hspec _).
     + intros Hfix Htarget. pose proof (pmp_last_meeting_moves_up l sub r Hspec Hr q Hq Htarget).

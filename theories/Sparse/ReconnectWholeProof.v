@@ -4,6 +4,30 @@ Import ListNotations.
 From Stdlib Require Import Lra.
 From Stdlib Require Import Lia.
 
+(* 交わらない閉三角形の上下順序は、同じ x にあるセグメント上の点にも移る。 *)
+Lemma disjoint_triangle_order_has_segment_witnesses : forall s t u v,
+  (forall p, in_segment_triangle s p -> ~ in_segment_triangle t p) ->
+  in_segment_triangle s u -> in_segment_triangle t v ->
+  fst u = fst v -> snd u < snd v ->
+  exists a b,
+    onSegment s a /\ onSegment t b /\ fst a = fst b /\ snd a < snd b.
+Proof.
+  intros s t u v Hdisjoint Hu Hv Hx Hy.
+  destruct (segment_has_point_at_x s (fst u) (proj1 (proj1 Hu)))
+    as [a [Ha Hax]].
+  destruct (segment_has_point_at_x t (fst v) (proj1 (proj1 Hv)))
+    as [b [Hb Hbx]].
+  pose proof (segment_in_endpoint_triangle s a Ha) as Hta.
+  pose proof (segment_in_endpoint_triangle t b Hb) as Htb.
+  assert (HvOutside : ~ in_segment_triangle s v).
+  { intro H. exact (Hdisjoint v H Hv). }
+  pose proof (proj2 (triangle_outside_vertical_order s v u a Hu Hta
+    ltac:(congruence) ltac:(congruence) HvOutside) Hy) as Hav.
+  pose proof (proj1 (triangle_outside_vertical_order t a v b Hv Htb
+    ltac:(congruence) ltac:(congruence) (Hdisjoint a Hta)) Hav) as Hab.
+  exists a, b. repeat split; try assumption. congruence.
+Qed.
+
 Module ReconnectWholeByClassifier.
 Section WithClassifier.
 Variable classify : list Segment -> list Segment -> list Segment -> EndpointClassifier.
@@ -129,121 +153,52 @@ Lemma reconnect_extensions_avoid_sub_rect_from_spec :
     ~ in_rect_or_endpoints_at sub p.
 Proof.
   intros l sub r h p Hne HconnSub Hspec Hh Hsparse Hextend.
-  destruct Hextend as [[Hl Hhead] | [Hr Hlast]].
-  - destruct (reconnect_head_strict_extension_preimage_from_spec
+  assert (Hpreimage : exists which q,
+    external_end_nonempty which l r /\
+    on_strict_extension which (l ++ sub ++ r) q /\
+    p = shift h (classify l sub r (extension_anchor which (l ++ sub ++ r))) q).
+  { destruct Hextend as [[Hl Hhead] | [Hr Hlast]].
+    - destruct (reconnect_head_strict_extension_preimage_from_spec
                 l sub r h p Hne Hsparse Hspec
                 (Rlt_le _ _ (proj1 Hh)) Hhead)
-      as [q [Hq Hshift]].
-    set (g := classify l sub r
-                (init (hd_segment (l ++ sub ++ r)))).
-    eapply (classified_shifted_extension_avoids_sub_rect_from_spec
-              l sub r h p q g Hne HconnSub Hspec Hh).
-    + now left.
-    + intros Hg z [s [Hs Hz]] Hx Hy Hgap. exfalso.
-      assert (Hin : In s (l ++ sub ++ r)).
-      { rewrite !in_app_iff. right; left; exact Hs. }
-      pose proof (proj1
-        (classified_head_segment_crossing_order_outside_gap
-           l sub r
-           Hspec
-           s z q (or_intror (conj Hs Hgap)) Hz Hq ltac:(symmetry; exact Hx)) Hy)
-        as [HinitOrder _].
-      change
-        (classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegUp)
-        in Hg.
-      rewrite Hg in HinitOrder.
-      pose proof (region_at_or_above_RegUp_inv _ HinitOrder) as HinitUp.
-      pose proof (classified_sub_fixed
-                    l sub r
-                    Hspec
-                    (init s)
-                    ltac:(exists s; split; [exact Hs | apply onInit]))
-        as HinitFix.
-      congruence.
-    + intros Hg z [s [Hs Hz]] Hx Hy Hgap. exfalso.
-      assert (Hin : In s (l ++ sub ++ r)).
-      { rewrite !in_app_iff. right; left; exact Hs. }
-      pose proof (proj2
-        (classified_head_segment_crossing_order_outside_gap
-           l sub r
-           Hspec
-           s z q (or_intror (conj Hs Hgap)) Hz Hq ltac:(symmetry; exact Hx)) Hy)
-        as [HinitOrder _].
-      change
-        (classify l sub r (init (hd_segment (l ++ sub ++ r))) = RegDown)
-        in Hg.
-      rewrite Hg in HinitOrder.
-      pose proof (RegDown_at_or_above_inv _ HinitOrder) as HinitDown.
-      pose proof (classified_sub_fixed
-                    l sub r
-                    Hspec
-                    (init s)
-                    ltac:(exists s; split; [exact Hs | apply onInit]))
-        as HinitFix.
-      congruence.
-    + intros Hx.
-      exact (classified_head_extension_at_sub_x
-               l sub r
-               Hspec
-               Hl q Hq Hx).
-    + exact Hshift.
-  - destruct (reconnect_last_strict_extension_preimage_from_spec
+        as [q [Hq Hshift]].
+      exists HeadEnd, q. repeat split; assumption.
+    - destruct (reconnect_last_strict_extension_preimage_from_spec
                 l sub r h p Hne Hsparse Hspec
                 (Rlt_le _ _ (proj1 Hh)) Hlast)
-      as [q [Hq Hshift]].
-    set (g := classify l sub r
-                (term (last_segment (l ++ sub ++ r)))).
-    eapply (classified_shifted_extension_avoids_sub_rect_from_spec
-              l sub r h p q g Hne HconnSub Hspec Hh).
-    + now right.
-    + intros Hg z [s [Hs Hz]] Hx Hy Hgap. exfalso.
-      assert (Hin : In s (l ++ sub ++ r)).
-      { rewrite !in_app_iff. right; left; exact Hs. }
-      pose proof (proj1
-        (classified_last_segment_crossing_order_outside_gap
-           l sub r
-           Hspec
-           s z q (or_intror (conj Hs Hgap)) Hz Hq ltac:(symmetry; exact Hx)) Hy)
-        as [HinitOrder _].
-      change
-        (classify l sub r (term (last_segment (l ++ sub ++ r))) = RegUp)
-        in Hg.
-      rewrite Hg in HinitOrder.
-      pose proof (region_at_or_above_RegUp_inv _ HinitOrder) as HinitUp.
-      pose proof (classified_sub_fixed
-                    l sub r
-                    Hspec
-                    (init s)
-                    ltac:(exists s; split; [exact Hs | apply onInit]))
-        as HinitFix.
-      congruence.
-    + intros Hg z [s [Hs Hz]] Hx Hy Hgap. exfalso.
-      assert (Hin : In s (l ++ sub ++ r)).
-      { rewrite !in_app_iff. right; left; exact Hs. }
-      pose proof (proj2
-        (classified_last_segment_crossing_order_outside_gap
-           l sub r
-           Hspec
-           s z q (or_intror (conj Hs Hgap)) Hz Hq ltac:(symmetry; exact Hx)) Hy)
-        as [HinitOrder _].
-      change
-        (classify l sub r (term (last_segment (l ++ sub ++ r))) = RegDown)
-        in Hg.
-      rewrite Hg in HinitOrder.
-      pose proof (RegDown_at_or_above_inv _ HinitOrder) as HinitDown.
-      pose proof (classified_sub_fixed
-                    l sub r
-                    Hspec
-                    (init s)
-                    ltac:(exists s; split; [exact Hs | apply onInit]))
-        as HinitFix.
-      congruence.
-    + intros Hx.
-      exact (classified_last_extension_at_sub_x
-               l sub r
-               Hspec
-               Hr q Hq Hx).
-    + exact Hshift.
+        as [q [Hq Hshift]].
+      exists LastEnd, q. repeat split; assumption. }
+  destruct Hpreimage as [which [q [Hend [Hq Hshift]]]].
+  set (g := classify l sub r (extension_anchor which (l ++ sub ++ r))).
+  eapply (classified_shifted_extension_avoids_sub_rect_from_spec
+            l sub r h p q g Hne HconnSub Hspec Hh).
+  - destruct which; [now left | now right].
+  - intros Hg z [s [Hs Hz]] Hx Hy Hgap. exfalso.
+    pose proof (proj1
+      (classified_extension_segment_order_outside_gap l sub r Hspec which
+         s z q (or_intror (conj Hs Hgap)) Hz Hq ltac:(symmetry; exact Hx)) Hy)
+      as [HinitOrder _].
+    change (classify l sub r (extension_anchor which (l ++ sub ++ r)) = RegUp)
+      in Hg.
+    rewrite Hg in HinitOrder.
+    pose proof (region_at_or_above_RegUp_inv _ HinitOrder) as HinitUp.
+    pose proof (classified_sub_fixed l sub r Hspec (init s)
+      ltac:(exists s; split; [exact Hs | apply onInit])) as HinitFix.
+    congruence.
+  - intros Hg z [s [Hs Hz]] Hx Hy Hgap. exfalso.
+    pose proof (proj2
+      (classified_extension_segment_order_outside_gap l sub r Hspec which
+         s z q (or_intror (conj Hs Hgap)) Hz Hq ltac:(symmetry; exact Hx)) Hy)
+      as [HinitOrder _].
+    change (classify l sub r (extension_anchor which (l ++ sub ++ r)) = RegDown)
+      in Hg.
+    rewrite Hg in HinitOrder.
+    pose proof (RegDown_at_or_above_inv _ HinitOrder) as HinitDown.
+    pose proof (classified_sub_fixed l sub r Hspec (init s)
+      ltac:(exists s; split; [exact Hs | apply onInit])) as HinitFix.
+    congruence.
+  - intros Hx. exact (classified_extension_at_sub_x l sub r Hspec which Hend q Hq Hx).
+  - exact Hshift.
 Qed.
 
 (* 新しい閉三角形の点を、同じ出現の旧三角形へ引き戻す。 *)
@@ -307,7 +262,7 @@ Qed.
 
 Lemma classified_triangle_delta_order :
   forall l sub r h i j s t u v,
-    @ReconnectClassificationSpec l sub r (classify l sub r) ->
+    @PMPClassificationSpec l sub r (classify l sub r) ->
     0 <= h ->
     nth_error (l ++ sub ++ r) i = Some s ->
     nth_error (l ++ sub ++ r) j = Some t ->
@@ -408,7 +363,7 @@ Qed.
 Lemma reconnect_preserves_triangle_separation_prepared :
   forall ds l sub r h,
     sub <> [] ->
-    @ReconnectClassificationSpec l sub r (classify l sub r) ->
+    @PMPClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
@@ -463,7 +418,7 @@ Qed.
 Lemma reconnect_preserves_triangle_extension_avoidance_prepared :
   forall ds l sub r h,
     sub <> [] ->
-    @ReconnectClassificationSpec l sub r (classify l sub r) ->
+    @PMPClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
@@ -500,7 +455,7 @@ Proof.
     eapply (shifted_point_avoids_reconnected_triangle
       l sub r h (length ls) s s' q p
       (classify l sub r (init (hd_segment (l ++ sub ++ r)))))
-      ; try eassumption; try exact (reconnect_endpoint_spec l sub r Hspec).
+      ; try eassumption; try exact (pmp_endpoint_spec l sub r Hspec).
     intros e He Hx.
     exact (classified_head_segment_crossing_order
       l sub r Hspec s e q Hin He Hq Hx).
@@ -525,7 +480,7 @@ Proof.
     eapply (shifted_point_avoids_reconnected_triangle
       l sub r h (length ls) s s' q p
       (classify l sub r (term (last_segment (l ++ sub ++ r)))))
-      ; try eassumption; try exact (reconnect_endpoint_spec l sub r Hspec).
+      ; try eassumption; try exact (pmp_endpoint_spec l sub r Hspec).
     intros e He Hx.
     exact (classified_last_segment_crossing_order
       l sub r Hspec s e q Hin He Hq Hx).
@@ -535,7 +490,7 @@ Qed.
 Lemma reconnect_preserves_sparse_embedding_from_spec :
   forall ds l sub r h,
     sub <> [] ->
-    @ReconnectClassificationSpec l sub r (classify l sub r) ->
+    @PMPClassificationSpec l sub r (classify l sub r) ->
     h_large h sub ->
     sparse_embedding (l ++ sub ++ r) ->
     embed_listDir ds (l ++ sub ++ r) ->
@@ -966,10 +921,11 @@ Proof.
     + right; right. split; [lia |]. now rewrite nth_error_app2 in H by lia.
 Qed.
 
-(* 外側の三角形対には従来の変位区間の順序を使える。 *)
+(* 元の三角形疎性で比較点を本体へ移し、分類仕様から変位区間の順序を得る。 *)
 Lemma classified_external_triangle_delta_order :
   forall l sub r h i j s t u v,
     @ClassificationSpec l sub r (classify l sub r) ->
+    sparse_embedding (l ++ sub ++ r) ->
     0 <= h ->
     nth_error (l ++ sub ++ r) i = Some s ->
     nth_error (l ++ sub ++ r) j = Some t ->
@@ -982,10 +938,17 @@ Lemma classified_external_triangle_delta_order :
     Rmin (region_delta h (classify l sub r (init t)))
          (region_delta h (classify l sub r (term t))).
 Proof.
-  intros l sub r h i j s t u v Hspec Hh Hs Ht Hfar Hsin Htin Hu Hv Hx Hy.
+  intros l sub r h i j s t u v Hspec Hsparse Hh Hs Ht Hfar Hsin Htin Hu Hv Hx Hy.
+  destruct (nth_error_far_in_nonadjacent_sides
+    (l ++ sub ++ r) i j s t Hs Ht Hfar) as [lo [ro [Hsplit Hin]]].
+  assert (Hdisjoint : forall p,
+    in_segment_triangle s p -> ~ in_segment_triangle t p).
+  { intros p Hsp Htp. exact ((proj2 (Hsparse lo s ro Hsplit)) t p Hin Htp Hsp). }
+  destruct (disjoint_triangle_order_has_segment_witnesses s t u v
+    Hdisjoint Hu Hv Hx Hy) as [a [b [Ha [Hb [Habx Haby]]]]].
   apply Rmax_lub; apply Rmin_glb; apply region_delta_order; try exact Hh;
-    eapply (classified_external_triangle_order l sub r Hspec
-      i j s t _ _ u v); try eassumption; unfold endpoint_of_seg; auto.
+    eapply (classified_external_segment_order l sub r Hspec
+      i j s t _ _ a b); try eassumption; unfold endpoint_of_seg; auto.
 Qed.
 
 (* 外側の二三角形を同じ x へ引き戻し、旧分離と変位区間の順序から交差を排除する。 *)
@@ -1016,12 +979,12 @@ Proof.
     subst v. exact ((proj2 (Hsparse lo s ro Hsplit)) t u Hin Hv Hu). }
   destruct (Rlt_dec (snd u) (snd v)) as [Huv | Huv].
   - pose proof (classified_external_triangle_delta_order l sub r h
-      i j s t u v Hspec (Rlt_le _ _ (proj1 Hh)) Hs Ht Hfar Hsin Htin Hu Hv
+      i j s t u v Hspec Hsparse (Rlt_le _ _ (proj1 Hh)) Hs Ht Hfar Hsin Htin Hu Hv
       ltac:(congruence) Huv) as Horder.
     unfold Rmin, Rmax in *. repeat destruct Rle_dec; lra.
   - assert (Hvu : snd v < snd u) by lra.
     pose proof (classified_external_triangle_delta_order l sub r h
-      j i t s v u Hspec (Rlt_le _ _ (proj1 Hh)) Ht Hs ltac:(lia)
+      j i t s v u Hspec Hsparse (Rlt_le _ _ (proj1 Hh)) Ht Hs ltac:(lia)
       Htin Hsin Hv Hu ltac:(congruence) Hvu) as Horder.
     unfold Rmin, Rmax in *. repeat destruct Rle_dec; lra.
 Qed.
@@ -1254,8 +1217,8 @@ Proof.
         (classify l sub r (init (hd_segment (l ++ sub ++ r)))))
         ; try eassumption; try exact (classification_endpoint_spec l sub r Hspec).
       intros e He Hx.
-      exact (classified_head_segment_crossing_order_outside_gap
-        l sub r Hspec s e q (or_introl Hside) He Hq Hx).
+      exact (classified_extension_segment_order_outside_gap
+        l sub r Hspec HeadEnd s e q (or_introl Hside) He Hq Hx).
     + assert (Hsub : In s sub).
       { repeat rewrite in_app_iff in Hin.
         rewrite in_app_iff in Hside. tauto. }
@@ -1301,8 +1264,8 @@ Proof.
         (classify l sub r (term (last_segment (l ++ sub ++ r)))))
         ; try eassumption; try exact (classification_endpoint_spec l sub r Hspec).
       intros e He Hx.
-      exact (classified_last_segment_crossing_order_outside_gap
-        l sub r Hspec s e q (or_introl Hside) He Hq Hx).
+      exact (classified_extension_segment_order_outside_gap
+        l sub r Hspec LastEnd s e q (or_introl Hside) He Hq Hx).
     + assert (Hsub : In s sub).
       { repeat rewrite in_app_iff in Hin.
         rewrite in_app_iff in Hside. tauto. }
