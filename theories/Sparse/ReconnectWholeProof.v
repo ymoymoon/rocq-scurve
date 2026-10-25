@@ -614,7 +614,7 @@ Proof.
                  (Hrec s (nonadjacent_sides_in_whole l sub r s Hs))).
       exact (operated_nonadjacent_endpoints_separated_from_spec
                l sub r h s Hclear Hspec Hs).
-    + exact Hp.
+    + exact (proj1 Hp).
 Qed.
 
 
