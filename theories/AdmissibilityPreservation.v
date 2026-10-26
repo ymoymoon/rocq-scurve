@@ -7,7 +7,6 @@ Require Import Segment.
 Require Import SegmentsTranslation.
 Require Import ListExt.
 Require Import Sparse.ReconnectWholeProof.
-Require Import Sparse.PMPEmbedding.
 Require Import Stdlib.Logic.ClassicalDescription.
 Import ListNotations.
 From Stdlib Require Import Lra.
@@ -430,13 +429,6 @@ Proof.
 Qed.
 
 (* 接続点での滑らかさを課さず、指定した外側の傾きを持つ連結2セグメントが存在する *)
-Definition reconnect_slope_pair
-	(p q : Point) (d1 d2 : Direction) (slope_p slope_q : R) : Prop :=
-	exists middle slope_left slope_right,
-		in_rect (rect_between p q) middle /\
-		reconnect_slope p middle d1 slope_p slope_left /\
-		reconnect_slope middle q d2 slope_right slope_q.
-
 Axiom reconnect_slope_pair_spec :
   forall p q d1 d2 slope_p slope_q,
     reconnect_slope_pair p q d1 d2 slope_p slope_q <->
@@ -730,8 +722,7 @@ Proof.
   exact (AdmissibleDirs_has_sparse_embedding _ Hadm).
 Qed.
 
-(* 二方向部分列で両側の蓋を避けられる初期埋め込みの選択。
-   全域 sparse 性と prepared 幾何を同じ証人について要求する。 *)
+(* 二方向部分列にも、全域の三角形疎性と canonical な準備条件を要求する。 *)
 Lemma AdmissibleDirs_has_prepared_PM :
   forall ds1 ds2,
     AdmissibleDirs (ds1 ++ [Plus; Minus] ++ ds2) ->
@@ -744,14 +735,22 @@ Lemma AdmissibleDirs_has_prepared_MP :
     exists l sub r, PreparedSparseEmbedding ds1 [Minus; Plus] ds2 l sub r.
 Admitted.
 
-(* PMP の terminal 側の蓋除去と端点傾きを満たす幾何学的な証人を選ぶ。
-   Up/Fix 分類の整合性は、選択後に classify_pmp_sources_safe で別に示す。 *)
+(* PMP の canonical な幾何と、置換時に保つ両端傾きを同じ証人で準備する。 *)
 Lemma sparse_PMP_can_be_prepared : forall ds1 ds2,
   AdmissibleDirs (ds1 ++ [Plus; Minus; Plus] ++ ds2) ->
   (exists ls, embed_listDir (ds1 ++ [Plus; Minus; Plus] ++ ds2) ls /\
     sparse_embedding ls /\ extensions_disjoint ls) ->
-  exists l sub r, PreparedPMPEmbedding ds1 ds2 l sub r.
+  exists l sub r, PreparedSparseEmbedding ds1 [Plus; Minus; Plus] ds2 l sub r.
 Admitted.
+
+(* MPM の canonical な幾何と、Minus 一セグメントへの置換の準備。 *)
+Lemma sparse_MPM_can_be_prepared : forall ds1 ds2,
+  AdmissibleDirs (ds1 ++ [Minus; Plus; Minus] ++ ds2) ->
+  (exists ls, embed_listDir (ds1 ++ [Minus; Plus; Minus] ++ ds2) ls /\
+    sparse_embedding ls /\ extensions_disjoint ls) ->
+  exists l sub r, PreparedSparseEmbedding ds1 [Minus; Plus; Minus] ds2 l sub r.
+Admitted.
+
 
 (* PMP は全域で三角形疎、簡約部分の端点から作る Plus 側の三角形でも疎。
    両端と端点傾きは、単一の Plus セグメントへ接続できるように選ぶ。 *)
@@ -769,35 +768,21 @@ Lemma embed_sparsely_listDir_PMP (ds1 ds2 : list Direction) :
 		/\ sparse_around_triangle Plus l [seg1; seg2; seg3] r.
 Proof.
   intro Hadm.
-  destruct (sparse_PMP_can_be_prepared ds1 ds2 Hadm
-              (AdmissibleDirs_has_sparse_embedding _ Hadm))
-    as [old_l [sub [old_r Hprepared]]].
-  assert (Hembed : exists ds, embed_listDir ds (old_l ++ sub ++ old_r)).
-  { exists (ds1 ++ [Plus; Minus; Plus] ++ ds2).
-    exact (pmp_whole_embed _ _ _ _ _ Hprepared). }
-  assert (Hspec : @PMPClassificationSpec old_l sub old_r
-                   (classify_pmp old_l sub old_r)).
-  { apply classify_pmp_spec; [|exact Hembed].
-    intros p [seed [Hseed Hpath]] Hon.
-    exact (classify_pmp_sources_safe old_l sub old_r
-             (pmp_sub_embed _ _ _ _ _ Hprepared)
-             (pmp_whole_sparse _ _ _ _ _ Hprepared) Hembed
-             (pmp_extensions_disjoint _ _ _ _ _ Hprepared)
-             (pmp_no_terminal_lid _ _ _ _ _ Hprepared)
-             seed p Hseed Hon Hpath). }
-  pose proof (pmp_replacement_slope _ _ _ _ _ Hprepared) as Hslope.
-  pose proof (embedding_listDir_length_consis _ _
-                (pmp_sub_embed _ _ _ _ _ Hprepared)) as Hlen.
+  destruct (embed_sparsely_prepared ds1 [Plus; Minus; Plus] ds2 Hadm
+    (sparse_PMP_can_be_prepared ds1 ds2 Hadm (AdmissibleDirs_has_sparse_embedding _ Hadm))) as [l [sub [r [Hprep [Hopen Haround]]]]].
+  pose proof (prepared_sub_embed _ _ _ _ _ _ Hprep) as Hsub.
+  pose proof (embedding_listDir_length_consis _ _ Hsub) as Hlen.
   destruct sub as [|seg1 [|seg2 [|seg3 rest]]]; simpl in Hlen; try discriminate.
   destruct rest; simpl in Hlen; [|discriminate].
-  destruct (embed_sparsely_PMP_prepared_from_spec classify_pmp
-              ds1 ds2 old_l [seg1; seg2; seg3] old_r Hprepared Hspec)
-    as [l [r [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]].
-  exists l, r, seg1, seg2, seg3.
-  split; [exact Hslope |].
-  split; [exact Hl |]. split; [exact Hsub |]. split; [exact Hr |].
-  split; [exact Hwhole |]. split; [exact Hsparse |].
-  split; assumption.
+  exists l,r,seg1,seg2,seg3.
+  split.
+  - exact (prepared_single_replacement _ _ _ _ _ _ Hprep Plus Minus eq_refl ltac:(discriminate)).
+  - split; [exact (prepared_left_embed _ _ _ _ _ _ Hprep) |].
+    split; [exact Hsub |].
+    split; [exact (prepared_right_embed _ _ _ _ _ _ Hprep) |].
+    split; [exact (prepared_whole_embed _ _ _ _ _ _ Hprep) |].
+    split; [exact (prepared_whole_sparse _ _ _ _ _ _ Hprep) |].
+    split; [exact Hopen |]. now apply sparse_around_implies_triangle.
 Qed.
 
 (* embed_sparsely_listDir_PMP の Minus 側の三角形を使う対称版。 *)
@@ -813,18 +798,24 @@ Lemma embed_sparsely_listDir_MPM (ds1 ds2 : list Direction) :
 		/\ sparse_embedding (l ++ [seg1; seg2; seg3] ++ r)
 		/\ ~ close (l ++ [seg1; seg2; seg3] ++ r)
 		/\ sparse_around_triangle Minus l [seg1; seg2; seg3] r.
-Proof. Admitted.
-
-(* 端点長方形内の PPMM は、両端の傾きを保つ PM の接続点を取れる。
-   割線傾きと端点傾きの関係、および指定傾きのセグメントの存在が必要。 *)
-Lemma ppmm_inside_rect_has_pm_slopes :
-  forall s1 s2 s3 s4,
-    embed_listDir [Plus; Plus; Minus; Minus] [s1; s2; s3; s4] ->
-    sub_strictly_inside_endpoint_rect [s1; s2; s3; s4] ->
-    fst (init s1) < fst (term s4) ->
-    reconnect_slope_pair (init s1) (term s4) Plus Minus
-      (slope_init s1) (slope_term s4).
-Admitted.
+Proof.
+  intro Hadm.
+  destruct (embed_sparsely_prepared ds1 [Minus; Plus; Minus] ds2 Hadm
+    (sparse_MPM_can_be_prepared ds1 ds2 Hadm (AdmissibleDirs_has_sparse_embedding _ Hadm))) as [l [sub [r [Hprep [Hopen Haround]]]]].
+  pose proof (prepared_sub_embed _ _ _ _ _ _ Hprep) as Hsub.
+  pose proof (embedding_listDir_length_consis _ _ Hsub) as Hlen.
+  destruct sub as [|seg1 [|seg2 [|seg3 rest]]]; simpl in Hlen; try discriminate.
+  destruct rest; simpl in Hlen; [|discriminate].
+  exists l,r,seg1,seg2,seg3.
+  split.
+  - exact (prepared_single_replacement _ _ _ _ _ _ Hprep Minus Plus eq_refl ltac:(discriminate)).
+  - split; [exact (prepared_left_embed _ _ _ _ _ _ Hprep) |].
+    split; [exact Hsub |].
+    split; [exact (prepared_right_embed _ _ _ _ _ _ Hprep) |].
+    split; [exact (prepared_whole_embed _ _ _ _ _ _ Hprep) |].
+    split; [exact (prepared_whole_sparse _ _ _ _ _ _ Hprep) |].
+    split; [exact Hopen |]. now apply sparse_around_implies_triangle.
+Qed.
 
 (* PPMM は全域で三角形疎、簡約部分の周りでは閉長方形で疎。 *)
 Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
@@ -842,45 +833,23 @@ Lemma embed_sparsely_listDir_PPMM (ds1 ds2 : list Direction) :
 		/\ sub_contained_in_endpoint_rect [seg1; seg2; seg3; seg4].
 Proof.
   intro Hadm.
-  destruct (AdmissibleDirs_has_prepared_PPMM ds1 ds2 Hadm)
-    as [old_l [sub [old_r Hprepared]]].
-  pose proof
-    (@prepared_geometry ds1 [Plus; Plus; Minus; Minus] ds2
-       old_l sub old_r Hprepared) as Hgeometry.
-  pose proof (prepared_sub_strictly_inside old_l sub old_r Hgeometry)
-    as Hinside.
-  pose proof (prepared_sub_x_order old_l sub old_r Hgeometry) as Hx.
-  pose proof (prepared_sub_contained old_l sub old_r Hgeometry) as Hcontained.
-  destruct (embed_sparsely_if_both_lids_removable
-              ds1 [Plus; Plus; Minus; Minus] ds2
-              old_l sub old_r Hprepared)
-    as [l [r [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]].
+  destruct (embed_sparsely_prepared ds1 [Plus; Plus; Minus; Minus] ds2 Hadm
+    (AdmissibleDirs_has_prepared_PPMM ds1 ds2 Hadm)) as [l [sub [r [Hprep [Hopen Haround]]]]].
+  pose proof (prepared_sub_embed _ _ _ _ _ _ Hprep) as Hsub.
   pose proof (embedding_listDir_length_consis _ _ Hsub) as Hlen.
-  destruct sub as [|seg1 [|seg2 [|seg3 [|seg4 [|seg5 rest]]]]];
-    simpl in Hlen; try lia.
-  exists l, r, seg1, seg2, seg3, seg4.
-  assert (Hslope :
-      reconnect_slope_pair (init seg1) (term seg4) Plus Minus
-        (slope_init seg1) (slope_term seg4)).
-  { eapply ppmm_inside_rect_has_pm_slopes; eauto. }
-  split; [exact Hslope |].
-  split; [exact Hl |].
-  split; [exact Hsub |].
-  split; [exact Hr |].
-  split; [exact Hwhole |].
-  split; [exact Hsparse |].
-  split; [exact Hopen |]. split; [exact Haround | exact Hcontained].
+  destruct sub as [|seg1 [|seg2 [|seg3 [|seg4 rest]]]]; simpl in Hlen; try discriminate.
+  destruct rest; simpl in Hlen; [|discriminate].
+  exists l,r,seg1,seg2,seg3,seg4.
+  split.
+  - exact (prepared_pair_replacement _ _ _ _ _ _ Hprep Plus Minus eq_refl ltac:(discriminate)).
+  - split; [exact (prepared_left_embed _ _ _ _ _ _ Hprep) |].
+    split; [exact Hsub |].
+    split; [exact (prepared_right_embed _ _ _ _ _ _ Hprep) |].
+    split; [exact (prepared_whole_embed _ _ _ _ _ _ Hprep) |].
+    split; [exact (prepared_whole_sparse _ _ _ _ _ _ Hprep) |].
+    split; [exact Hopen |]. split; [exact Haround |].
+    exact (prepared_sub_contained _ _ _ (prepared_geometry _ _ _ _ _ _ Hprep)).
 Qed.
-
-(* 端点長方形内の MMPP についての対称な傾き接続補題。 *)
-Lemma mmpp_inside_rect_has_mp_slopes :
-  forall s1 s2 s3 s4,
-    embed_listDir [Minus; Minus; Plus; Plus] [s1; s2; s3; s4] ->
-    sub_strictly_inside_endpoint_rect [s1; s2; s3; s4] ->
-    fst (init s1) < fst (term s4) ->
-    reconnect_slope_pair (init s1) (term s4) Minus Plus
-      (slope_init s1) (slope_term s4).
-Admitted.
 
 (* embed_sparsely_listDir_PPMM の Minus 版． *)
 Lemma embed_sparsely_listDir_MMPP (ds1 ds2 : list Direction) :
@@ -898,34 +867,22 @@ Lemma embed_sparsely_listDir_MMPP (ds1 ds2 : list Direction) :
 		/\ sub_contained_in_endpoint_rect [seg1; seg2; seg3; seg4].
 Proof.
   intro Hadm.
-  destruct (AdmissibleDirs_has_prepared_MMPP ds1 ds2 Hadm)
-    as [old_l [sub [old_r Hprepared]]].
-  pose proof
-    (@prepared_geometry ds1 [Minus; Minus; Plus; Plus] ds2
-       old_l sub old_r Hprepared) as Hgeometry.
-  pose proof (prepared_sub_strictly_inside old_l sub old_r Hgeometry)
-    as Hinside.
-  pose proof (prepared_sub_x_order old_l sub old_r Hgeometry) as Hx.
-  pose proof (prepared_sub_contained old_l sub old_r Hgeometry) as Hcontained.
-  destruct (embed_sparsely_if_both_lids_removable
-              ds1 [Minus; Minus; Plus; Plus] ds2
-              old_l sub old_r Hprepared)
-    as [l [r [Hl [Hsub [Hr [Hwhole [Hsparse [Hopen Haround]]]]]]]].
+  destruct (embed_sparsely_prepared ds1 [Minus; Minus; Plus; Plus] ds2 Hadm
+    (AdmissibleDirs_has_prepared_MMPP ds1 ds2 Hadm)) as [l [sub [r [Hprep [Hopen Haround]]]]].
+  pose proof (prepared_sub_embed _ _ _ _ _ _ Hprep) as Hsub.
   pose proof (embedding_listDir_length_consis _ _ Hsub) as Hlen.
-  destruct sub as [|seg1 [|seg2 [|seg3 [|seg4 [|seg5 rest]]]]];
-    simpl in Hlen; try lia.
-  exists l, r, seg1, seg2, seg3, seg4.
-  assert (Hslope :
-      reconnect_slope_pair (init seg1) (term seg4) Minus Plus
-        (slope_init seg1) (slope_term seg4)).
-  { eapply mmpp_inside_rect_has_mp_slopes; eauto. }
-  split; [exact Hslope |].
-  split; [exact Hl |].
-  split; [exact Hsub |].
-  split; [exact Hr |].
-  split; [exact Hwhole |].
-  split; [exact Hsparse |].
-  split; [exact Hopen |]. split; [exact Haround | exact Hcontained].
+  destruct sub as [|seg1 [|seg2 [|seg3 [|seg4 rest]]]]; simpl in Hlen; try discriminate.
+  destruct rest; simpl in Hlen; [|discriminate].
+  exists l,r,seg1,seg2,seg3,seg4.
+  split.
+  - exact (prepared_pair_replacement _ _ _ _ _ _ Hprep Minus Plus eq_refl ltac:(discriminate)).
+  - split; [exact (prepared_left_embed _ _ _ _ _ _ Hprep) |].
+    split; [exact Hsub |].
+    split; [exact (prepared_right_embed _ _ _ _ _ _ Hprep) |].
+    split; [exact (prepared_whole_embed _ _ _ _ _ _ Hprep) |].
+    split; [exact (prepared_whole_sparse _ _ _ _ _ _ Hprep) |].
+    split; [exact Hopen |]. split; [exact Haround |].
+    exact (prepared_sub_contained _ _ _ (prepared_geometry _ _ _ _ _ _ Hprep)).
 Qed.
 
 (* Plus セグメントを、元の閉端点三角形内で、端点と端点傾きを保って
@@ -1793,12 +1750,13 @@ Lemma AdmissibleDirs_r2_Plus_inv: forall l r,
   AdmissibleDirs (l ++ [Plus; Minus] ++ r) -> AdmissibleDirs (l ++ [Plus; Plus; Minus; Minus] ++ r).
 Proof.
   intros l r admds.
-  (* 疎な開埋め込みをとる *)
-  destruct (AdmissibleDirs_has_prepared_PM l r admds)
-  as [old_l [ls2 [old_r Hprepared]]].
-  pose proof (embed_sparsely_if_both_lids_removable
-  l [Plus; Minus] r old_l ls2 old_r Hprepared)
-  as [ls1 [ls3 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [_ [Hopen Hsparse]]]]]]]];
+  destruct (embed_sparsely_prepared l [Plus; Minus] r admds
+    (AdmissibleDirs_has_prepared_PM l r admds))
+    as [ls1 [ls2 [ls3 [Hprep [Hopen Hsparse]]]]].
+  pose proof (prepared_left_embed _ _ _ _ _ _ Hprep) as Hls1.
+  pose proof (prepared_sub_embed _ _ _ _ _ _ Hprep) as Hls2.
+  pose proof (prepared_right_embed _ _ _ _ _ _ Hprep) as Hls3.
+  destruct (prepared_whole_embed _ _ _ _ _ _ Hprep) as [sc [Hdir_sc Hembed]].
   simpl in *.
   assert (H: embed_listDir (l ++ [Plus; Minus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
     unfold embed_listDir. exists sc. split; assumption.
@@ -1848,12 +1806,13 @@ Lemma AdmissibleDirs_r2_Minus_inv: forall l r,
   AdmissibleDirs (l ++ [Minus; Plus] ++ r) -> AdmissibleDirs (l ++ [Minus; Minus; Plus; Plus] ++ r).
 Proof.
   intros l r admds.
-  (* 疎な開埋め込みをとる *)
-  destruct (AdmissibleDirs_has_prepared_MP l r admds)
-  as [old_l [ls2 [old_r Hprepared]]].
-  pose proof (embed_sparsely_if_both_lids_removable
-  l [Minus; Plus] r old_l ls2 old_r Hprepared)
-  as [ls1 [ls3 [Hls1 [Hls2 [Hls3 [[sc [Hdir_sc Hembed]] [_ [Hopen Hsparse]]]]]]]];
+  destruct (embed_sparsely_prepared l [Minus; Plus] r admds
+    (AdmissibleDirs_has_prepared_MP l r admds))
+    as [ls1 [ls2 [ls3 [Hprep [Hopen Hsparse]]]]].
+  pose proof (prepared_left_embed _ _ _ _ _ _ Hprep) as Hls1.
+  pose proof (prepared_sub_embed _ _ _ _ _ _ Hprep) as Hls2.
+  pose proof (prepared_right_embed _ _ _ _ _ _ Hprep) as Hls3.
+  destruct (prepared_whole_embed _ _ _ _ _ _ Hprep) as [sc [Hdir_sc Hembed]].
   simpl in *.
   assert (H: embed_listDir (l ++ [Minus; Plus] ++ r) (ls1 ++ ls2 ++ ls3)). { (* scurve ではなく向き列の方が扱いやすい *)
     unfold embed_listDir. exists sc. split; assumption.

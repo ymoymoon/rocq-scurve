@@ -395,6 +395,15 @@ Definition sparse_around_triangle
         in_segment_triangle s p ->
         ~ in_sub_triangle d sub p).
 
+(* 閉長方形を避ければ、その中の端点三角形も避ける。 *)
+Lemma sparse_around_implies_triangle : forall d l sub r,
+  sparse_around l sub r -> sparse_around_triangle d l sub r.
+Proof.
+  intros d l sub r [Hext Htri]. split.
+  - intros p Hp [Hrect Hside]. exact (Hext p Hp Hrect).
+  - intros s p Hs Hp [Hrect Hside]. exact (Htri s p Hs Hp Hrect).
+Qed.
+
 (* ls の各セグメント出現の閉三角形について疎である。
    値が等しいセグメントが複数あっても、リスト中の位置を区別する。 *)
 Definition sparse_embedding (ls : list Segment) : Prop :=

@@ -1,111 +1,27 @@
-Require Export Sparse.ClassifyDefinition.
-Require Import Stdlib.Logic.ClassicalDescription.
-Require Import Stdlib.Lists.List.
+Require Export Sparse.Classify.
 Import ListNotations.
 
-(* 同じ再接続を、用途別の分類器に適用する。 *)
-Module ReconnectByClassifier.
-Section WithClassifier.
-Variable classify : list Segment -> list Segment -> list Segment -> EndpointClassifier.
+(* 端点変位から得られる再接続。元と同じ primitive を要求する。 *)
+Record reconnect_segment (k : EndpointClassifier) (old new : Segment) : Prop := {
+  reconnect_init : init new = move_point k (init old);
+  reconnect_term : term new = move_point k (term old);
+  reconnect_primitive : primitive_segment new = primitive_segment old
+}.
 
-Definition operate_point (l sub r : list Segment) (h : R) (p : Point) : Point :=
-  shift h (classify l sub r p) p.
+Definition reconnect_list (k : EndpointClassifier) :=
+  Forall2 (reconnect_segment k).
 
-(* 分類後の端点から各セグメントを作り直す通常再接続。 *)
-Definition reconnectable_after
-  (l sub r : list Segment) (h : R) (s : Segment) : Prop :=
-  reconnectable
-    (operate_point l sub r h (init s))
-    (operate_point l sub r h (term s))
-    (orn_seg s).
+(* h を引数に持たない再接続関係。先頭・末尾には必要な片側傾きを指定する。 *)
+Record reconnect_split (k : EndpointClassifier) (l sub r l' r' : list Segment) : Prop := {
+  reconnect_left : reconnect_list k l l';
+  reconnect_right : reconnect_list k r r';
+  reconnect_head_slope : l <> [] ->
+    slope_init (hd_segment l') = slope_init (hd_segment l);
+  reconnect_last_slope : r <> [] ->
+    slope_term (last_segment r') = slope_term (last_segment r)
+}.
 
-Definition reconnect_slope_after
-  (l sub r : list Segment) (h : R) (s : Segment) : Prop :=
-  reconnect_slope
-    (operate_point l sub r h (init s))
-    (operate_point l sub r h (term s))
-    (orn_seg s) (slope_init s) (slope_term s).
-
-Definition reconnect_init_slope_after
-  (l sub r : list Segment) (h : R) (s : Segment) : Prop :=
-  reconnect_init_slope
-    (operate_point l sub r h (init s))
-    (operate_point l sub r h (term s))
-    (orn_seg s) (slope_init s).
-
-Definition reconnect_term_slope_after
-  (l sub r : list Segment) (h : R) (s : Segment) : Prop :=
-  reconnect_term_slope
-    (operate_point l sub r h (init s))
-    (operate_point l sub r h (term s))
-    (orn_seg s) (slope_term s).
-
-Definition head_init_slope_after
-  (l sub r : list Segment) (h : R) (s : Segment) : Prop :=
-  l <> [] /\ s = hd_segment l /\ reconnect_init_slope_after l sub r h s.
-
-Definition last_term_slope_after
-  (l sub r : list Segment) (h : R) (s : Segment) : Prop :=
-  r <> [] /\ s = last_segment r /\ reconnect_term_slope_after l sub r h s.
-
-Definition all_reconnectable
-  (l sub r : list Segment) (h : R) (ls : list Segment) : Prop :=
-  forall s, In s ls -> reconnectable_after l sub r h s.
-
-Definition reconnect_one
-  (l sub r : list Segment) (h : R) (s : Segment) : Segment :=
-  match excluded_middle_informative (reconnectable_after l sub r h s) with
-  | left H =>
-      match excluded_middle_informative
-              (reconnect_slope_after l sub r h s) with
-      | left Hs => make_seg_slope
-          (operate_point l sub r h (init s))
-          (operate_point l sub r h (term s))
-          (orn_seg s) (slope_init s) (slope_term s) Hs
-      | right _ =>
-          match excluded_middle_informative
-                  (head_init_slope_after l sub r h s) with
-          | left Hs => make_seg_init_slope
-              (operate_point l sub r h (init s))
-              (operate_point l sub r h (term s))
-              (orn_seg s) (slope_init s) (proj2 (proj2 Hs))
-          | right _ =>
-              match excluded_middle_informative
-                      (last_term_slope_after l sub r h s) with
-              | left Hs => make_seg_term_slope
-                  (operate_point l sub r h (init s))
-                  (operate_point l sub r h (term s))
-                  (orn_seg s) (slope_term s) (proj2 (proj2 Hs))
-              | right _ => make_seg
-                  (operate_point l sub r h (init s))
-                  (operate_point l sub r h (term s))
-                  (orn_seg s) H
-              end
-          end
-      end
-  | right _ => default_segment
-  end.
-
-Definition reconnect_segs
-  (l sub r : list Segment) (h : R) (ls : list Segment) : list Segment :=
-  map (reconnect_one l sub r h) ls.
-
-(* sub を固定し、左右を再接続して曲線全体の列を返す。 *)
-Definition reconnect_whole
-  (l sub r : list Segment) (h : R) : list Segment :=
-  reconnect_segs l sub r h l ++ sub ++ reconnect_segs l sub r h r.
-
-End WithClassifier.
-End ReconnectByClassifier.
-
-(* 既存の PPMM・PM 呼び出し形は保持する。 *)
-Definition reconnectable_after := ReconnectByClassifier.reconnectable_after classify.
-Definition reconnect_slope_after := ReconnectByClassifier.reconnect_slope_after classify.
-Definition reconnect_init_slope_after := ReconnectByClassifier.reconnect_init_slope_after classify.
-Definition reconnect_term_slope_after := ReconnectByClassifier.reconnect_term_slope_after classify.
-Definition head_init_slope_after := ReconnectByClassifier.head_init_slope_after classify.
-Definition last_term_slope_after := ReconnectByClassifier.last_term_slope_after classify.
-Definition all_reconnectable := ReconnectByClassifier.all_reconnectable classify.
-Definition reconnect_one := ReconnectByClassifier.reconnect_one classify.
-Definition reconnect_segs := ReconnectByClassifier.reconnect_segs classify.
-Definition reconnect_whole := ReconnectByClassifier.reconnect_whole classify.
+Definition reconnect_one (k : EndpointClassifier) (seg : Segment)
+    (H : endpoint_displacements_ordered k seg) : Segment :=
+  make_seg (move_point k (init seg)) (move_point k (term seg)) (orn_seg seg)
+    (moved_endpoints_reconnectable k seg H).
