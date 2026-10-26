@@ -401,6 +401,27 @@ Proof.
     unfold Rmin,Rmax in Hy; destruct Rle_dec; simpl; lra.
 Qed.
 
+Lemma last_segment_y_direction : forall sub v h c,
+  sub<>[] -> sub_contained_in_endpoint_rect sub ->
+  embed (v,h,c) (last_segment sub) ->
+  match v with
+  | n => snd (init (hd_segment sub))<snd (term (last_segment sub))
+  | s => snd (term (last_segment sub))<snd (init (hd_segment sub))
+  end.
+Proof.
+  intros sub v h c Hne Hcontained He.
+  pose proof (Hcontained (init (last_segment sub))
+    ltac:(exists (last_segment sub); split; [now apply last_In | apply onInit])) as [_ Hy].
+  change (Rmin (snd (init (hd_segment sub))) (snd (term (last_segment sub)))<=
+      snd (init (last_segment sub))<=
+      Rmax (snd (init (hd_segment sub))) (snd (term (last_segment sub)))) in Hy.
+  destruct v.
+  - pose proof (n_end_relation _ h c He).
+    unfold Rmin,Rmax in Hy; destruct Rle_dec; simpl; lra.
+  - pose proof (s_end_relation _ h c He).
+    unfold Rmin,Rmax in Hy; destruct Rle_dec; simpl; lra.
+Qed.
+
 Lemma adjacent_split_data : forall ds xs ys,
   embed_listDir ds (xs++ys) -> xs<>[] -> ys<>[] ->
   exists p q, embed p (last_segment xs) /\ embed q (hd_segment ys) /\
@@ -418,7 +439,7 @@ Proof.
   exact (embed_scurve_adjacent_data sc _ _ _ _ Hemb Hi Hj).
 Qed.
 
-(* 左境界は、canonical sub の下側（反転版では上側）にしか存在しない。 *)
+(* 先頭の四つの型と dc から、左隣接三角形と端点長方形の接触は共有端点に限る。 *)
 Lemma incoming_boundary_only_touches_sub : forall ds l sub r p,
   PreparedGeometry l sub r -> embed_listDir ds (l++sub++r) -> l<>[] ->
   in_segment_triangle (last_segment l) p -> in_rect_or_endpoints_at sub p ->
@@ -432,32 +453,54 @@ Proof.
   assert (Hhd : hd_segment (sub++r)=hd_segment sub).
   { destruct sub; [contradiction | reflexivity]. }
   rewrite Hhd in Hb,Hj.
-  destruct Hrect as [_ Hy].
+  assert (Hconn : connected sub).
+  { apply (connected_middle l sub r). now apply (embed_listDir_connected ds). }
+  pose proof (connected_x_monotone_endpoints sub Hsub Hconn
+    (prepared_sub_x_monotone _ _ _ Hgeom)) as Hxorder.
+  assert (Hmono : x_monotone_seg (hd_segment sub)).
+  { apply (prepared_sub_x_monotone _ _ _ Hgeom).
+    destruct sub; [contradiction | now left]. }
+  destruct b as [[v hor] c].
+  assert (Hhor : hor=e).
+  { destruct hor; [reflexivity |].
+    pose proof (w_end_relation _ v c Hb).
+    unfold x_monotone_seg,init_x,term_x in Hmono. lra. }
+  subst hor.
+  pose proof (first_segment_y_direction sub v e c Hsub
+    (prepared_sub_contained _ _ _ Hgeom) Hb) as Hyorder.
+  destruct Hrect as [Hx Hy].
+  change (Rmin (fst (init (hd_segment sub))) (fst (term (last_segment sub)))<=fst p<=
+          Rmax (fst (init (hd_segment sub))) (fst (term (last_segment sub)))) in Hx.
   change (Rmin (snd (init (hd_segment sub))) (snd (term (last_segment sub)))<=snd p<=
           Rmax (snd (init (hd_segment sub))) (snd (term (last_segment sub)))) in Hy.
-  destruct (prepared_boundary_axes _ _ _ Hgeom) as [[Hfirst Hlast] | [Hfirst Hlast]].
-  - pose proof (first_segment_y_direction sub n e cx Hsub
-      (prepared_sub_contained _ _ _ Hgeom) Hfirst) as Hyorder.
+  rewrite Rmin_left,Rmax_right in Hx by lra.
+  destruct v.
+  -
     rewrite Rmin_left,Rmax_right in Hy by lra.
-    assert (Hbtype : b=(n,e,cx)) by (eapply embed_unique; eassumption).
-    subst b. destruct (dc_predecessor_north_cx a Hdc) as [hor ->].
-    assert (Hpc : primitive_segment (last_segment l)=(n,hor,cc)).
-    { eapply embed_unique; [apply primitive_segment_embed | exact Ha]. }
-    rewrite <-Hj. eapply triangle_exposed_endpoint; [now right | exact Hp |].
-    left. split; [now rewrite Hpc |]. split.
-    + unfold high_value. rewrite Hpc. simpl. rewrite Hj. lra.
-    + unfold high_value. rewrite Hpc. reflexivity.
-  - pose proof (first_segment_y_direction sub s e cc Hsub
-      (prepared_sub_contained _ _ _ Hgeom) Hfirst) as Hyorder.
+    destruct (dc_predecessor_north_east c a Hdc) as [[hor ->] | [-> | ->]].
+    + assert (Hpc : primitive_segment (last_segment l)=(n,hor,cc)).
+      { eapply embed_unique; [apply primitive_segment_embed | exact Ha]. }
+      rewrite <-Hj. eapply triangle_exposed_endpoint; [now right | exact Hp |].
+      left. split; [now rewrite Hpc |]. split.
+      * unfold high_value. rewrite Hpc. simpl. rewrite Hj. lra.
+      * unfold high_value. rewrite Hpc. reflexivity.
+    + rewrite <-Hj. apply east_triangle_exposed_term; [now left | exact Hp |].
+      unfold term_x. rewrite Hj. lra.
+    + rewrite <-Hj. apply east_triangle_exposed_term; [now right | exact Hp |].
+      unfold term_x. rewrite Hj. lra.
+  -
     rewrite Rmin_right,Rmax_left in Hy by lra.
-    assert (Hbtype : b=(s,e,cc)) by (eapply embed_unique; eassumption).
-    subst b. destruct (dc_predecessor_south_cc a Hdc) as [hor ->].
-    assert (Hpc : primitive_segment (last_segment l)=(s,hor,cx)).
-    { eapply embed_unique; [apply primitive_segment_embed | exact Ha]. }
-    rewrite <-Hj. eapply triangle_exposed_endpoint; [now right | exact Hp |].
-    right. split; [now rewrite Hpc |]. split.
-    + unfold low_value. rewrite Hpc. simpl. rewrite Hj. lra.
-    + unfold low_value. rewrite Hpc. reflexivity.
+    destruct (dc_predecessor_south_east c a Hdc) as [[hor ->] | [-> | ->]].
+    + assert (Hpc : primitive_segment (last_segment l)=(s,hor,cx)).
+      { eapply embed_unique; [apply primitive_segment_embed | exact Ha]. }
+      rewrite <-Hj. eapply triangle_exposed_endpoint; [now right | exact Hp |].
+      right. split; [now rewrite Hpc |]. split.
+      * unfold low_value. rewrite Hpc. simpl. rewrite Hj. lra.
+      * unfold low_value. rewrite Hpc. reflexivity.
+    + rewrite <-Hj. apply east_triangle_exposed_term; [now left | exact Hp |].
+      unfold term_x. rewrite Hj. lra.
+    + rewrite <-Hj. apply east_triangle_exposed_term; [now right | exact Hp |].
+      unfold term_x. rewrite Hj. lra.
 Qed.
 
 Lemma outgoing_boundary_only_touches_sub : forall ds l sub r p,
@@ -477,18 +520,26 @@ Proof.
     apply (embed_listDir_connected ds). now rewrite app_assoc. }
   pose proof (connected_x_monotone_endpoints sub Hsub Hconn
     (prepared_sub_x_monotone _ _ _ Hgeom)) as Hxorder.
+  assert (Hmono : x_monotone_seg (last_segment sub)).
+  { apply (prepared_sub_x_monotone _ _ _ Hgeom). now apply last_In. }
+  destruct a as [[v hor] c].
+  assert (Hhor : hor=e).
+  { destruct hor; [reflexivity |].
+    pose proof (w_end_relation _ v c Ha).
+    unfold x_monotone_seg,init_x,term_x in Hmono. lra. }
+  subst hor.
+  pose proof (last_segment_y_direction sub v e c Hsub
+    (prepared_sub_contained _ _ _ Hgeom) Ha) as Hyorder.
   destruct Hrect as [Hx Hy].
   change (Rmin (fst (init (hd_segment sub))) (fst (term (last_segment sub)))<=fst p<=
           Rmax (fst (init (hd_segment sub))) (fst (term (last_segment sub)))) in Hx.
   change (Rmin (snd (init (hd_segment sub))) (snd (term (last_segment sub)))<=snd p<=
           Rmax (snd (init (hd_segment sub))) (snd (term (last_segment sub)))) in Hy.
   rewrite Rmin_left,Rmax_right in Hx by lra.
-  destruct (prepared_boundary_axes _ _ _ Hgeom) as [[Hfirst [c Hlast]] | [Hfirst [c Hlast]]].
-  - pose proof (first_segment_y_direction sub n e cx Hsub
-      (prepared_sub_contained _ _ _ Hgeom) Hfirst) as Hyorder.
+  destruct v.
+  -
     rewrite Rmin_left,Rmax_right in Hy by lra.
-    assert (Hat : a=(n,e,c)) by (eapply embed_unique; eassumption).
-    subst a. destruct (dc_successor_north_east c b Hdc) as [[hor ->] | [-> | ->]].
+    destruct (dc_successor_north_east c b Hdc) as [[hor ->] | [-> | ->]].
     + assert (Hpc : primitive_segment (hd_segment r)=(n,hor,cx)).
       { eapply embed_unique; [apply primitive_segment_embed | exact Hb]. }
       rewrite Hj. eapply triangle_exposed_endpoint; [now left | exact Hp |].
@@ -499,11 +550,9 @@ Proof.
       unfold init_x. rewrite <-Hj. lra.
     + rewrite Hj. apply east_triangle_exposed_init; [now right | exact Hp |].
       unfold init_x. rewrite <-Hj. lra.
-  - pose proof (first_segment_y_direction sub s e cc Hsub
-      (prepared_sub_contained _ _ _ Hgeom) Hfirst) as Hyorder.
+  -
     rewrite Rmin_right,Rmax_left in Hy by lra.
-    assert (Hat : a=(s,e,c)) by (eapply embed_unique; eassumption).
-    subst a. destruct (dc_successor_south_east c b Hdc) as [[hor ->] | [-> | ->]].
+    destruct (dc_successor_south_east c b Hdc) as [[hor ->] | [-> | ->]].
     + assert (Hpc : primitive_segment (hd_segment r)=(s,hor,cc)).
       { eapply embed_unique; [apply primitive_segment_embed | exact Hb]. }
       rewrite Hj. eapply triangle_exposed_endpoint; [now left | exact Hp |].

@@ -16,12 +16,7 @@ Definition in_sub_x_range (sub : list Segment) (p : Point) : Prop :=
 Record PreparedGeometry (l sub r : list Segment) : Prop := {
   prepared_sub_nonempty : sub <> [];
   prepared_sub_x_monotone : x_monotone_segs sub;
-  prepared_sub_contained : sub_contained_in_endpoint_rect sub;
-  prepared_boundary_axes :
-    (embed (n, e, cx) (hd_segment sub) /\
-      exists c, embed (n, e, c) (last_segment sub)) \/
-    (embed (s, e, cc) (hd_segment sub) /\
-      exists c, embed (s, e, c) (last_segment sub))
+  prepared_sub_contained : sub_contained_in_endpoint_rect sub
 }.
 
 (* 二セグメントへの置換で、内部の接続点を端点長方形の中に取る。 *)
@@ -413,16 +408,18 @@ Proof.
     unfold x_monotone_seg,init_x,term_x in Hnext |- *. rewrite Hjoin. lra.
 Qed.
 
-Lemma dc_predecessor_north_cx : forall p,
-  dc p (n,e,cx) -> exists h, p=(n,h,cc).
+Lemma dc_predecessor_north_east : forall c p,
+  dc p (n,e,c) ->
+  (exists h, p=(n,h,cc)) \/ p=(n,e,cx) \/ p=(s,e,cc).
 Proof.
-  intros [[v h] c] H. destruct v,h,c; inversion H; subst; simpl in *; eauto.
+  intros c [[v h] co] H. destruct c,v,h,co; inversion H; subst; simpl in *; eauto.
 Qed.
 
-Lemma dc_predecessor_south_cc : forall p,
-  dc p (s,e,cc) -> exists h, p=(s,h,cx).
+Lemma dc_predecessor_south_east : forall c p,
+  dc p (s,e,c) ->
+  (exists h, p=(s,h,cx)) \/ p=(n,e,cx) \/ p=(s,e,cc).
 Proof.
-  intros [[v h] c] H. destruct v,h,c; inversion H; subst; simpl in *; eauto.
+  intros c [[v h] co] H. destruct c,v,h,co; inversion H; subst; simpl in *; eauto.
 Qed.
 
 Lemma dc_successor_north_east : forall c p,

@@ -351,3 +351,35 @@ Proof.
       rewrite Hch in Hy. lra. }
   unfold init_x,init_y in *. destruct (init seg). simpl in *. now subst.
 Qed.
+
+(* 北向き cx・南向き cc の東向き三角形は、終点の x では終点だけを含む。 *)
+Lemma east_triangle_exposed_term : forall seg p,
+  (embed (n,e,cx) seg \/ embed (s,e,cc) seg) ->
+  in_segment_triangle seg p -> term_x seg<=fst p -> p=term seg.
+Proof.
+  intros seg [x y] Htype Hp Hright.
+  apply in_triangle_iff_fibre in Hp. destruct Hp as [Hx Hy].
+  assert (Horder : init_x seg<term_x seg).
+  { destruct Htype as [H | H]; eapply e_end_relation; exact H. }
+  unfold segment_x_range in Hx. rewrite Rmin_left,Rmax_right in Hx by lra.
+  simpl in Hright. assert (Hx1 : x=term_x seg) by lra. subst x.
+  assert (H1 : segment_x_parameter seg (term_x seg)=1).
+  { unfold segment_x_parameter. field. lra. }
+  assert (Hch : chord_value (@snd R R) seg (term_x seg)=term_y seg).
+  { unfold chord_value. rewrite H1. unfold term_y. ring. }
+  assert (Hy1 : y=term_y seg).
+  { destruct Htype as [He | He].
+    - assert (Hpc : primitive_segment seg=(n,e,cx)).
+      { eapply embed_unique; [apply primitive_segment_embed | exact He]. }
+      unfold triangle_lower,triangle_upper,lower_value,upper_value,low_value,high_value in Hy.
+      rewrite Hpc in Hy.
+      change (chord_value (@snd R R) seg (term_x seg)<=y<=term_y seg) in Hy.
+      rewrite Hch in Hy. lra.
+    - assert (Hpc : primitive_segment seg=(s,e,cc)).
+      { eapply embed_unique; [apply primitive_segment_embed | exact He]. }
+      unfold triangle_lower,triangle_upper,lower_value,upper_value,low_value,high_value in Hy.
+      rewrite Hpc in Hy.
+      change (term_y seg<=y<=chord_value (@snd R R) seg (term_x seg)) in Hy.
+      rewrite Hch in Hy. lra. }
+  unfold term_x,term_y in *. destruct (term seg). simpl in *. now subst.
+Qed.
